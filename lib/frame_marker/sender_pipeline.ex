@@ -69,7 +69,9 @@ defmodule FrameMarker.SenderPipeline do
 
   defp track_spec(:audio, state) do
     get_child(:boombox)
-    |> via_out(:output, options: [kind: :audio, codec: Membrane.AAC])
+    |> via_out(:output, options: [kind: :audio, codec: Membrane.RawAudio])
+    |> child(:audio_marker, FrameMarker.AudioMarkerFilter)
+    |> child(:audio_encoder, %Membrane.Transcoder{output_stream_format: Membrane.AAC})
     |> maybe_realtimer(:audio, state)
     |> via_in(Membrane.Pad.ref(:audio, 0))
     |> get_child(:rtmp_sink)

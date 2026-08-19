@@ -28,6 +28,7 @@ defmodule FrameMarker.MixProject do
       {:membrane_h264_plugin, "~> 0.9.3"},
       {:membrane_h264_ffmpeg_plugin, "~> 0.32"},
       {:membrane_raw_video_format, "~> 0.4"},
+      {:membrane_raw_audio_format, "~> 0.12"},
       {:membrane_transcoder_plugin, "~> 0.3"},
       {:membrane_aac_format, "~> 0.8"}
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}

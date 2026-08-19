@@ -35,7 +35,9 @@ defmodule FrameMarker do
 
   Options:
     * `:on_frame` - a function called with `{:ok, frame_number}` or
-      `{:error, reason}` for every video frame; defaults to logging.
+      `{:error, reason}` for every video frame; defaults to logging,
+    * `:on_audio_symbol` - a function called with `{:ok, symbol_number}` or
+      `{:error, reason}` for every 30 ms audio symbol; defaults to logging.
 
   Returns the pipeline pid.
   """

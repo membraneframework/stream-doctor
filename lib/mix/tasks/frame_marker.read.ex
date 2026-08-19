@@ -25,7 +25,11 @@ defmodule Mix.Tasks.FrameMarker.Read do
         |> FrameMarker.read_frame_numbers(
           on_frame: fn
             {:ok, frame_number} -> IO.puts("frame #{frame_number}")
-            {:error, reason} -> IO.puts("decode error: #{inspect(reason)}")
+            {:error, reason} -> IO.puts("frame decode error: #{inspect(reason)}")
+          end,
+          on_audio_symbol: fn
+            {:ok, symbol_number} -> IO.puts("audio #{symbol_number}")
+            {:error, reason} -> IO.puts("audio decode error: #{inspect(reason)}")
           end
         )
         |> FrameMarker.await()
