@@ -1,4 +1,4 @@
-defmodule FrameMarker.SenderPipeline do
+defmodule StreamDoctor.SenderPipeline do
   @moduledoc """
   Reads a media file (e.g. MP4), draws the frame-number bar on the video
   and streams the result to an RTMP URL.
@@ -53,7 +53,7 @@ defmodule FrameMarker.SenderPipeline do
   defp track_spec(:video, state) do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :video, codec: Membrane.RawVideo])
-    |> child(:overlay, FrameMarker.OverlayFilter)
+    |> child(:overlay, StreamDoctor.OverlayFilter)
     |> child(:encoder, %Membrane.H264.FFmpeg.Encoder{
       preset: :veryfast,
       tune: :zerolatency,
@@ -70,7 +70,7 @@ defmodule FrameMarker.SenderPipeline do
   defp track_spec(:audio, state) do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :audio, codec: Membrane.RawAudio])
-    |> child(:audio_marker, FrameMarker.AudioMarkerFilter)
+    |> child(:audio_marker, StreamDoctor.AudioMarkerFilter)
     |> child(:audio_encoder, %Membrane.Transcoder{output_stream_format: Membrane.AAC})
     |> maybe_realtimer(:audio, state)
     |> via_in(Membrane.Pad.ref(:audio, 0))

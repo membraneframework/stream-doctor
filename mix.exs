@@ -1,9 +1,9 @@
-defmodule FrameMarker.MixProject do
+defmodule StreamDoctor.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :frame_marker,
+      app: :stream_doctor,
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -15,7 +15,7 @@ defmodule FrameMarker.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {FrameMarker.Application, []}
+      mod: {StreamDoctor.Application, []}
     ]
   end
 

@@ -1,6 +1,6 @@
-defmodule FrameMarker.DetectorSink do
+defmodule StreamDoctor.DetectorSink do
   @moduledoc """
-  Reads the frame-number bar (see `FrameMarker.Bar`) from each raw video frame
+  Reads the frame-number bar (see `StreamDoctor.Bar`) from each raw video frame
   and reports the result via the `on_frame` callback.
   """
 
@@ -8,7 +8,7 @@ defmodule FrameMarker.DetectorSink do
 
   require Membrane.Logger
 
-  alias FrameMarker.Bar
+  alias StreamDoctor.Bar
   alias Membrane.RawVideo
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})

@@ -1,14 +1,14 @@
-defmodule Mix.Tasks.FrameMarker.Read do
+defmodule Mix.Tasks.StreamDoctor.Read do
   @shortdoc "Reads frame numbers from an HLS stream"
 
   @moduledoc """
   Usage:
 
-      mix frame_marker.read HLS_PLAYLIST_URL
+      mix stream_doctor.read HLS_PLAYLIST_URL
 
   Example:
 
-      mix frame_marker.read http://localhost:8888/hls/index.m3u8
+      mix stream_doctor.read http://localhost:8888/hls/index.m3u8
 
   Prints the frame number decoded from each video frame.
   """
@@ -22,7 +22,7 @@ defmodule Mix.Tasks.FrameMarker.Read do
         Mix.Task.run("app.start")
 
         url
-        |> FrameMarker.read_frame_numbers(
+        |> StreamDoctor.read_frame_numbers(
           on_frame: fn
             {:ok, frame_number} -> IO.puts("frame #{frame_number}")
             {:error, reason} -> IO.puts("frame decode error: #{inspect(reason)}")
@@ -32,10 +32,10 @@ defmodule Mix.Tasks.FrameMarker.Read do
             {:error, reason} -> IO.puts("audio decode error: #{inspect(reason)}")
           end
         )
-        |> FrameMarker.await()
+        |> StreamDoctor.await()
 
       _other ->
-        Mix.raise("Usage: mix frame_marker.read HLS_PLAYLIST_URL")
+        Mix.raise("Usage: mix stream_doctor.read HLS_PLAYLIST_URL")
     end
   end
 end

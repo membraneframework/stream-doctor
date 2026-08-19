@@ -1,14 +1,14 @@
-defmodule Mix.Tasks.FrameMarker.Send do
+defmodule Mix.Tasks.StreamDoctor.Send do
   @shortdoc "Streams a file with the frame-number overlay to an RTMP URL"
 
   @moduledoc """
   Usage:
 
-      mix frame_marker.send INPUT_FILE RTMP_URL [--no-realtime]
+      mix stream_doctor.send INPUT_FILE RTMP_URL [--no-realtime]
 
   Example:
 
-      mix frame_marker.send input.mp4 rtmp://localhost:1935/app/stream_key
+      mix stream_doctor.send input.mp4 rtmp://localhost:1935/app/stream_key
   """
 
   use Mix.Task
@@ -22,13 +22,13 @@ defmodule Mix.Tasks.FrameMarker.Send do
         Mix.Task.run("app.start")
 
         input
-        |> FrameMarker.stream_with_overlay(rtmp_url,
+        |> StreamDoctor.stream_with_overlay(rtmp_url,
           realtime?: Keyword.get(opts, :realtime, true)
         )
-        |> FrameMarker.await()
+        |> StreamDoctor.await()
 
       _other ->
-        Mix.raise("Usage: mix frame_marker.send INPUT_FILE RTMP_URL [--no-realtime]")
+        Mix.raise("Usage: mix stream_doctor.send INPUT_FILE RTMP_URL [--no-realtime]")
     end
   end
 end

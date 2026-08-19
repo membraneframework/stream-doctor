@@ -1,4 +1,4 @@
-defmodule FrameMarker.Bar do
+defmodule StreamDoctor.Bar do
   @moduledoc """
   Encoding and decoding of the frame-number bar drawn at the bottom of the video.
 

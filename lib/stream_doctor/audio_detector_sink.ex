@@ -1,6 +1,6 @@
-defmodule FrameMarker.AudioDetectorSink do
+defmodule StreamDoctor.AudioDetectorSink do
   @moduledoc """
-  Reads the audio marker (see `FrameMarker.Tone`) from raw audio and reports
+  Reads the audio marker (see `StreamDoctor.Tone`) from raw audio and reports
   the decoded symbol number (one per 30 ms) via the `on_symbol` callback.
 
   Symbol boundaries in the received stream are not aligned with buffer
@@ -15,7 +15,7 @@ defmodule FrameMarker.AudioDetectorSink do
 
   require Membrane.Logger
 
-  alias FrameMarker.Tone
+  alias StreamDoctor.Tone
   alias Membrane.RawAudio
 
   # Windows examined when scanning for symbol alignment

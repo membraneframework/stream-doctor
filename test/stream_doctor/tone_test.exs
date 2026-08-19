@@ -1,7 +1,7 @@
-defmodule FrameMarker.ToneTest do
+defmodule StreamDoctor.ToneTest do
   use ExUnit.Case, async: true
 
-  alias FrameMarker.Tone
+  alias StreamDoctor.Tone
 
   @sample_rate 44_100
 

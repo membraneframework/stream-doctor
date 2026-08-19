@@ -1,7 +1,7 @@
-defmodule FrameMarker.Tone do
+defmodule StreamDoctor.Tone do
   @moduledoc """
   Encoding and decoding of the audio marker - the audible counterpart of
-  `FrameMarker.Bar`.
+  `StreamDoctor.Bar`.
 
   The audio stream is divided into 30 ms symbols. Symbol number `n` (the
   stream timestamp divided by 30 ms, wrapping at #{Integer.pow(2, 7)}) is

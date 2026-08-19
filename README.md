@@ -1,4 +1,4 @@
-# FrameMarker
+# StreamDoctor
 
 Elixir project based on [Membrane Framework](https://membrane.stream) and
 [Boombox](https://hexdocs.pm/boombox) that:
@@ -27,9 +27,9 @@ reference squares let the reader compute the white/black threshold per frame,
 and the parity bit rejects corrupted reads. Reading averages the central area
 of each square, which makes the code robust to H.264 compression artifacts.
 
-Implementation: `FrameMarker.Bar` (geometry/draw/decode, pure functions on I420
-payloads), `FrameMarker.OverlayFilter` (Membrane filter drawing the bar),
-`FrameMarker.DetectorSink` (Membrane sink reading it back).
+Implementation: `StreamDoctor.Bar` (geometry/draw/decode, pure functions on I420
+payloads), `StreamDoctor.OverlayFilter` (Membrane filter drawing the bar),
+`StreamDoctor.DetectorSink` (Membrane sink reading it back).
 
 ## The audio marker
 
@@ -60,12 +60,12 @@ one where consecutive windows decode with valid parity and consecutive numbers.
 The marker **replaces** the original audio content (content energy at the
 marker frequencies would corrupt detection).
 
-Implementation: `FrameMarker.Tone` (pure encode/generate/decode),
-`FrameMarker.AudioMarkerFilter`, `FrameMarker.AudioDetectorSink`.
+Implementation: `StreamDoctor.Tone` (pure encode/generate/decode),
+`StreamDoctor.AudioMarkerFilter`, `StreamDoctor.AudioDetectorSink`.
 
 ## Pipelines
 
-**Sender** (`FrameMarker.SenderPipeline`):
+**Sender** (`StreamDoctor.SenderPipeline`):
 
 ```
 Boombox.Bin (MP4 → raw video) → OverlayFilter → H264.FFmpeg.Encoder (2s GOP)
@@ -79,7 +79,7 @@ for reading and demuxing; RTMP output goes through `membrane_rtmp_plugin`
 GOP (60 frames) — live-streaming ingests such as Amazon IVS disconnect streams
 with sparse keyframes.
 
-**Receiver** (`FrameMarker.ReceiverPipeline`):
+**Receiver** (`StreamDoctor.ReceiverPipeline`):
 
 ```
 Boombox.Bin ({:hls, url} → raw video) → DetectorSink
@@ -92,13 +92,13 @@ Boombox.Bin (raw audio) → AudioDetectorSink
 mix deps.get
 
 # 1. stream a file with the overlay to RTMP
-mix frame_marker.send input.mp4 rtmp://server:1935/app/stream_key
+mix stream_doctor.send input.mp4 rtmp://server:1935/app/stream_key
 
 # 2. read frame numbers back from HLS
-mix frame_marker.read https://server/path/index.m3u8
+mix stream_doctor.read https://server/path/index.m3u8
 ```
 
-`frame_marker.send` paces the stream to real time (needed for live-streaming
+`stream_doctor.send` paces the stream to real time (needed for live-streaming
 servers); pass `--no-realtime` to push as fast as possible. The reader prints
 `frame N` per video frame (or `decode error: ...`).
 
@@ -109,10 +109,10 @@ so they can be called from a Phoenix controller / Plug handler:
 
 ```elixir
 # fire-and-forget; returns the pipeline pid
-pipeline = FrameMarker.stream_with_overlay("input.mp4", "rtmp://...")
+pipeline = StreamDoctor.stream_with_overlay("input.mp4", "rtmp://...")
 
 pipeline =
-  FrameMarker.read_frame_numbers("https://.../index.m3u8",
+  StreamDoctor.read_frame_numbers("https://.../index.m3u8",
     on_frame: fn
       {:ok, n} -> IO.puts("frame #{n}")
       {:error, reason} -> IO.puts("error: #{inspect(reason)}")
@@ -120,7 +120,7 @@ pipeline =
   )
 
 # optionally block until the pipeline finishes (end of stream)
-FrameMarker.await(pipeline)
+StreamDoctor.await(pipeline)
 ```
 
 Note: `stream_with_overlay/2,3` and `read_frame_numbers/1,2` link the pipeline
@@ -140,11 +140,11 @@ ffmpeg -y -listen 1 -f flv -i rtmp://127.0.0.1:1935/live/test \
   -c copy -f hls -hls_time 2 -hls_list_size 0 /tmp/hls/index.m3u8
 
 # terminal 2: send
-mix frame_marker.send test.mp4 rtmp://127.0.0.1:1935/live/test
+mix stream_doctor.send test.mp4 rtmp://127.0.0.1:1935/live/test
 
 # terminal 3: serve HLS and read it back
 python3 -m http.server 8123 -d /tmp/hls &
-mix frame_marker.read http://127.0.0.1:8123/index.m3u8
+mix stream_doctor.read http://127.0.0.1:8123/index.m3u8
 ```
 
 ## Requirements

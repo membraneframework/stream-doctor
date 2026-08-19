@@ -1,7 +1,7 @@
-defmodule FrameMarker.AudioMarkerFilter do
+defmodule StreamDoctor.AudioMarkerFilter do
   @moduledoc """
   Replaces the audio content with the marker signal encoding the stream
-  position (see `FrameMarker.Tone`), preserving the original timing, sample
+  position (see `StreamDoctor.Tone`), preserving the original timing, sample
   rate and channel layout.
 
   The content is replaced (not mixed over) so that the tone detection is not
@@ -10,7 +10,7 @@ defmodule FrameMarker.AudioMarkerFilter do
 
   use Membrane.Filter
 
-  alias FrameMarker.Tone
+  alias StreamDoctor.Tone
   alias Membrane.RawAudio
 
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})

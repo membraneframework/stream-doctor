@@ -1,4 +1,4 @@
-defmodule FrameMarker do
+defmodule StreamDoctor do
   @moduledoc """
   Overlays a machine-readable frame-number bar on a video and streams it via
   RTMP; reads the bar back from an HLS stream.
@@ -22,7 +22,7 @@ defmodule FrameMarker do
   def stream_with_overlay(input, rtmp_url, opts \\ []) do
     {:ok, _supervisor, pipeline} =
       Membrane.Pipeline.start_link(
-        FrameMarker.SenderPipeline,
+        StreamDoctor.SenderPipeline,
         [input: input, rtmp_url: rtmp_url] ++ opts
       )
 
@@ -44,7 +44,7 @@ defmodule FrameMarker do
   @spec read_frame_numbers(String.t(), keyword()) :: pid()
   def read_frame_numbers(url, opts \\ []) do
     {:ok, _supervisor, pipeline} =
-      Membrane.Pipeline.start_link(FrameMarker.ReceiverPipeline, [url: url] ++ opts)
+      Membrane.Pipeline.start_link(StreamDoctor.ReceiverPipeline, [url: url] ++ opts)
 
     pipeline
   end

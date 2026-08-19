@@ -1,7 +1,7 @@
-defmodule FrameMarker.BarTest do
+defmodule StreamDoctor.BarTest do
   use ExUnit.Case, async: true
 
-  alias FrameMarker.Bar
+  alias StreamDoctor.Bar
 
   @width 640
   @height 360
