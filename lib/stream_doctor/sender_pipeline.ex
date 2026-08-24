@@ -7,7 +7,10 @@ defmodule StreamDoctor.SenderPipeline do
     * `:input` - Boombox input, e.g. a path to an MP4 file,
     * `:rtmp_url` - destination `rtmp://` URL,
     * `:realtime?` - pace the stream to real time (default `true`); set to
-      `false` to push as fast as possible.
+      `false` to push as fast as possible,
+    * `:on_video_frame_sent` - optional callback called with the frame number
+      of every video frame right before it enters the RTMP sink (i.e. at the
+      moment it is sent).
   """
 
   use Membrane.Pipeline
@@ -19,6 +22,7 @@ defmodule StreamDoctor.SenderPipeline do
     state = %{
       rtmp_url: Keyword.fetch!(opts, :rtmp_url),
       realtime?: Keyword.get(opts, :realtime?, true),
+      on_video_frame_sent: Keyword.get(opts, :on_video_frame_sent),
       awaiting_tracks: nil
     }
 
@@ -57,12 +61,18 @@ defmodule StreamDoctor.SenderPipeline do
     |> child(:encoder, %Membrane.H264.FFmpeg.Encoder{
       preset: :veryfast,
       tune: :zerolatency,
-      # Frequent keyframes - live-streaming ingests (e.g. Amazon IVS) drop
-      # streams with sparse keyframes (x264 default GOP is 250 frames)
+      # Safety net only - the actual keyframe cadence is the time-based one
+      # enforced by KeyframeScheduler below; this caps the GOP in frames in
+      # case pts are missing (x264 default GOP is 250 frames, too sparse for
+      # live-streaming ingests such as Amazon IVS)
       gop_size: 60
     })
+    # keyframe every 2 s of stream time regardless of framerate - the interval
+    # advised by live-streaming ingests (e.g. Amazon IVS)
+    |> child(:keyframe_scheduler, StreamDoctor.KeyframeScheduler)
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
     |> maybe_realtimer(:video, state)
+    |> maybe_send_probe(state)
     |> via_in(Membrane.Pad.ref(:video, 0))
     |> get_child(:rtmp_sink)
   end
@@ -81,4 +91,9 @@ defmodule StreamDoctor.SenderPipeline do
     do: child(link, {:realtimer, kind}, Membrane.Realtimer)
 
   defp maybe_realtimer(link, _kind, _state), do: link
+
+  defp maybe_send_probe(link, %{on_video_frame_sent: nil}), do: link
+
+  defp maybe_send_probe(link, state),
+    do: child(link, :send_probe, %StreamDoctor.SendProbe{on_frame: state.on_video_frame_sent})
 end

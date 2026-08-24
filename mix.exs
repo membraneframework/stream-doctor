@@ -23,6 +23,14 @@ defmodule StreamDoctor.MixProject do
   defp deps do
     [
       {:boombox, "~> 0.2.13"},
+      # 0.21 exposes the Source's live_edge_mode?; boombox pins 0.20, hence
+      # the override (we use the Source directly in the receiver)
+      {:membrane_http_adaptive_stream_plugin, "~> 0.21.3", override: true},
+      # membrane_srt_plugin (via boombox) pins 1.3, which locks mpeg_ts to
+      # ~> 2.0, while ex_hls 0.2 (live edge mode) needs mpeg_ts ~> 3.3;
+      # 2.4 is compatible with both, and we don't use SRT input anyway
+      {:membrane_mpeg_ts_plugin, "~> 2.4", override: true},
+      {:membrane_aac_fdk_plugin, "~> 0.18"},
       {:membrane_realtimer_plugin, "~> 0.11.1"},
       {:membrane_rtmp_plugin, "~> 0.29.5"},
       {:membrane_h264_plugin, "~> 0.9.3"},

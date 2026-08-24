@@ -37,7 +37,12 @@ defmodule StreamDoctor do
     * `:on_frame` - a function called with `{:ok, frame_number}` or
       `{:error, reason}` for every video frame; defaults to logging,
     * `:on_audio_symbol` - a function called with `{:ok, symbol_number}` or
-      `{:error, reason}` for every 30 ms audio symbol; defaults to logging.
+      `{:error, reason}` for every 30 ms audio symbol; defaults to logging,
+    * `:realtime?` - pace the decoded stream to real time like a player would,
+      instead of processing each downloaded segment at once (default `false`),
+    * `:live_edge?` - join the stream at the newest available segment instead
+      of the player-like ~2 target durations behind the live edge
+      (default `false`).
 
   Returns the pipeline pid.
   """

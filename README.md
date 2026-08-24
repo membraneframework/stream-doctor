@@ -96,11 +96,34 @@ mix stream_doctor.send input.mp4 rtmp://server:1935/app/stream_key
 
 # 2. read frame numbers back from HLS
 mix stream_doctor.read https://server/path/index.m3u8
+
+# 3. measure end-to-end latency (send + read in one process)
+mix stream_doctor.latency input.mp4 rtmp://server:1935/app/key https://server/path/index.m3u8
 ```
 
 `stream_doctor.send` paces the stream to real time (needed for live-streaming
 servers); pass `--no-realtime` to push as fast as possible. The reader prints
 `frame N` per video frame (or `decode error: ...`).
+
+## Latency measurement
+
+`mix stream_doctor.latency INPUT RTMP_URL HLS_URL` runs the sender and the
+receiver in one BEAM node and prints, for every video frame,
+`frame N: latency X ms` — the time between the frame (identified by its bar
+counter) leaving the sender and being decoded by the receiver.
+
+The send timestamp is captured by `StreamDoctor.SendProbe`, a transparent
+filter placed right before the RTMP sink (after real-time pacing), so encoding
+and pacing delays don't inflate the result; the receive timestamp is captured
+in the `on_frame` callback of `StreamDoctor.DetectorSink`. Both timestamps
+come from the same monotonic clock, so there is no clock-synchronization
+error — the measured latency covers the RTMP ingest, the server's HLS
+packaging, playlist/segment polling and decoding. The receiver is started
+once the HLS playlist exists and lists at least one segment.
+
+From code: `StreamDoctor.Latency.measure(input, rtmp_url, hls_url, opts)` —
+pass `on_latency: fn %{frame: n, latency_ms: ms} -> ... end` to consume the
+measurements programmatically.
 
 ## Using from code (e.g. on an HTTP request)
 
