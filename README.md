@@ -125,6 +125,21 @@ From code: `StreamDoctor.Latency.measure(input, rtmp_url, hls_url, opts)` —
 pass `on_latency: fn %{frame: n, latency_ms: ms} -> ... end` to consume the
 measurements programmatically.
 
+## HTTP server + JS client
+
+`mix stream_doctor.server [--port 4040]` exposes the same measurement over
+HTTP (see `StreamDoctor.Api`): `POST /streamer` starts the sender,
+`POST /viewers` starts a viewer (many can watch at once), `GET /viewers/:id`
+returns its `pure_latency_ms` (rolling minimum = pure server latency) and the
+latest per-frame samples, `GET /status` returns everything, `DELETE` stops.
+
+`latency_client.mjs` wraps these endpoints for JS
+(`startStreamer`/`startViewer`/`getViewer`/`watchLatency`, plus the
+one-call `measureLatency({rtmpUrl, hlsUrl})`). `create_livestream.mjs` uses it
+automatically: after creating the Firework livestream it starts the streamer
+and a viewer through the server and logs the latency (falling back to printing
+the manual `mix stream_doctor.latency` command when the server isn't running).
+
 ## Using from code (e.g. on an HTTP request)
 
 Both entry points are plain functions starting a supervised Membrane pipeline,

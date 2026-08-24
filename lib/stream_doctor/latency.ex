@@ -11,10 +11,9 @@ defmodule StreamDoctor.Latency do
   The receiver joins at the newest listed segment and decodes each segment as
   soon as it is downloaded, so per-frame latencies arrive in per-segment
   batches: the first frame of a segment shows the highest value (it waited a
-  full segment duration to be packaged) and the last one the lowest. That
-  lowest value is the **pure server latency** - how long a just-sent frame
-  takes to become downloadable - and is reported separately as a rolling
-  minimum.
+  full segment duration to be packaged) and the last one the lowest. The
+  first-frame value is reported separately once per segment as the segment
+  latency.
   """
 
   require Logger
@@ -42,7 +41,7 @@ defmodule StreamDoctor.Latency do
 
     collector =
       spawn_link(fn ->
-        collect(%{sent_at: %{}, recent: [], last_summary_t: nil}, on_latency)
+        collect(%{sent_at: %{}, last_recv_t: nil}, on_latency)
       end)
 
     sender =
@@ -73,10 +72,10 @@ defmodule StreamDoctor.Latency do
     %{sender: sender, receiver: receiver}
   end
 
-  # window over which the "pure latency" rolling minimum is taken - long
-  # enough to always contain the freshest frame of at least one segment batch
-  @pure_window_ms 4_000
-  @summary_interval_ms 1_000
+  # a pause in frame arrival longer than this marks the start of a new
+  # segment batch (the unpaced receiver decodes a whole segment back-to-back,
+  # then waits ~a segment duration for the next one)
+  @segment_gap_ms 500
 
   defp collect(state, on_latency) do
     receive do
@@ -93,29 +92,26 @@ defmodule StreamDoctor.Latency do
             latency = t - sent_t
             on_latency.(%{frame: n, latency_ms: latency})
 
-            recent =
-              [{t, latency} | state.recent]
-              |> Enum.filter(fn {recv_t, _latency} -> recv_t > t - @pure_window_ms end)
+            if state.last_recv_t == nil or t - state.last_recv_t > @segment_gap_ms do
+              IO.puts("segment latency (first frame of the segment): #{latency} ms")
+            end
 
-            state = %{state | sent_at: sent_at, recent: recent}
-            collect(maybe_report_pure(state, t), on_latency)
+            collect(%{state | sent_at: sent_at, last_recv_t: t}, on_latency)
         end
     end
   end
 
-  defp maybe_report_pure(%{last_summary_t: last} = state, t)
-       when last != nil and t - last < @summary_interval_ms,
-       do: state
-
-  defp maybe_report_pure(state, t) do
-    pure = state.recent |> Enum.map(fn {_recv_t, latency} -> latency end) |> Enum.min()
-    IO.puts("pure latency (freshest frame of the last segments): #{pure} ms")
-    %{state | last_summary_t: t}
-  end
-
   defp report(%{frame: n, latency_ms: ms}), do: IO.puts("frame #{n}: latency #{ms} ms")
 
-  defp await_hls(url, timeout) do
+  @doc """
+  Blocks until the HLS playlist at `url` is available and contains at least
+  one segment (or is a multivariant playlist), polling once a second.
+
+  Prints progress and a summary of the playlist. Raises on timeout and when
+  the playlist turns out to be a finished VoD recording.
+  """
+  @spec await_hls(String.t(), non_neg_integer()) :: :ok
+  def await_hls(url, timeout) do
     IO.puts("waiting for HLS playlist at #{url}...")
     body = poll_hls(url, now_ms() + timeout)
     IO.puts("HLS playlist ready, starting receiver")
@@ -169,6 +165,12 @@ defmodule StreamDoctor.Latency do
       else
         body
       end
+
+    if body != nil and String.contains?(body, "#EXT-X-ENDLIST") do
+      raise "the playlist at #{url} is a finished VoD recording (#EXT-X-ENDLIST), " <>
+              "not a live stream - latency cannot be measured against it; " <>
+              "use the channel's live playback URL while the stream is running"
+    end
 
     with body when body != nil <- body,
          [_full, target] <- Regex.run(~r/#EXT-X-TARGETDURATION:(\d+)/, body) do

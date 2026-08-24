@@ -31,6 +31,9 @@ defmodule StreamDoctor.MixProject do
       # 2.4 is compatible with both, and we don't use SRT input anyway
       {:membrane_mpeg_ts_plugin, "~> 2.4", override: true},
       {:membrane_aac_fdk_plugin, "~> 0.18"},
+      # HTTP API for spawning streamer/viewers and reading latency
+      {:plug, "~> 1.16"},
+      {:bandit, "~> 1.5"},
       {:membrane_realtimer_plugin, "~> 0.11.1"},
       {:membrane_rtmp_plugin, "~> 0.29.5"},
       {:membrane_h264_plugin, "~> 0.9.3"},
