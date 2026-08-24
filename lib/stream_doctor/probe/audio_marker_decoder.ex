@@ -1,7 +1,8 @@
 defmodule StreamDoctor.Probe.AudioMarkerDecoder do
   @moduledoc """
-  Reads the audio marker (see `StreamDoctor.Probe.Tone`) from raw audio and reports
-  the decoded symbol number (one per 30 ms) via the `on_symbol` callback.
+  Reads the audio marker from raw audio and reports the decoded symbol number
+  (one per 30 ms) to the configured `StreamDoctor.Metric.Collector` (or logs
+  it when none is given).
 
   Symbol boundaries in the received stream are not aligned with buffer
   boundaries (AAC encoder priming and segmenting shift the samples), so the
@@ -15,6 +16,7 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
 
   require Membrane.Logger
 
+  alias StreamDoctor.Metric.Collector
   alias StreamDoctor.Probe.Tone
   alias Membrane.RawAudio
 
@@ -28,15 +30,17 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
 
   def_options(
-    on_symbol: [
-      spec: ({:ok, non_neg_integer(), number() | nil} | {:error, atom()} -> any()) | nil,
+    collector: [
+      spec: pid() | nil,
       default: nil,
       description: """
-      Called with `{:ok, symbol_number, pts_ms}` (`pts_ms` is the symbol's
-      position on the stream timeline in milliseconds - the first buffer's
-      presentation timestamp plus the sample offset - or `nil` when the
-      stream carries no timestamps) or `{:error, reason}` for each 30 ms
-      audio symbol. Defaults to logging the result.
+      `StreamDoctor.Metric.Collector` to report to: an
+      `{:audio_symbol_received, symbol_number, pts_ms, t}` event for each
+      decoded 30 ms symbol (`pts_ms` is the symbol's position on the stream
+      timeline in milliseconds - the first buffer's presentation timestamp
+      plus the sample offset - or `nil` when the stream carries no
+      timestamps) and `{:undecoded, :audio, reason, t}` for each window
+      without a readable marker. With no collector the results are logged.
       """
     ]
   )
@@ -52,7 +56,7 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
   @impl true
   def handle_init(_ctx, opts) do
     state = %{
-      on_symbol: opts.on_symbol || (&log_result/1),
+      collector: opts.collector,
       format: nil,
       buffer: <<>>,
       synced?: false,
@@ -169,19 +173,28 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
       |> binary_part(0, symbol_bytes)
       |> Tone.decode_window(state.format.sample_rate)
 
-    result =
-      case result do
-        {:ok, symbol_number} -> {:ok, symbol_number, symbol_pts_ms(state)}
-        {:error, _reason} = error -> error
-      end
+    case {result, state.collector} do
+      {{:ok, symbol_number}, nil} ->
+        Membrane.Logger.info("Decoded audio symbol: #{symbol_number}")
 
-    state.on_symbol.(result)
+      {{:error, reason}, nil} ->
+        Membrane.Logger.warning("Failed to decode audio symbol: #{inspect(reason)}")
+
+      {{:ok, symbol_number}, collector} ->
+        Collector.event(
+          collector,
+          {:audio_symbol_received, symbol_number, symbol_pts_ms(state), now_ms()}
+        )
+
+      {{:error, reason}, collector} ->
+        Collector.event(collector, {:undecoded, :audio, reason, now_ms()})
+    end
 
     rest_size = byte_size(state.buffer) - symbol_bytes
     state = %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
 
     case result do
-      {:ok, _n, _pts_ms} ->
+      {:ok, _n} ->
         %{state | error_streak: 0}
 
       {:error, _reason} when state.error_streak + 1 >= @max_error_streak ->
@@ -211,9 +224,5 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
     state.anchor_pts_ms + consumed_samples * 1000 / state.format.sample_rate
   end
 
-  defp log_result({:ok, symbol_number, _pts_ms}),
-    do: Membrane.Logger.info("Decoded audio symbol: #{symbol_number}")
-
-  defp log_result({:error, reason}),
-    do: Membrane.Logger.warning("Failed to decode audio symbol: #{inspect(reason)}")
+  defp now_ms(), do: System.monotonic_time(:millisecond)
 end

@@ -1,8 +1,8 @@
 defmodule StreamDoctor.Metric do
   @moduledoc """
   Behaviour for measurement metrics: a metric is a pure fold over a stream of
-  timestamped events, kept as `{module, state}` pairs by the owner (see
-  `StreamDoctor.Server`).
+  timestamped events, kept as `{module, state}` pairs by the session's
+  `StreamDoctor.Metric.Collector` process.
 
   All timestamps (`t`) are `System.monotonic_time(:millisecond)` values
   produced by the event source, so a metric never reads a clock itself and can

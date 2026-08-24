@@ -1,27 +1,31 @@
 defmodule StreamDoctor.Probe.VideoMarkerDecoder do
   @moduledoc """
-  Reads the frame-number bar (see `StreamDoctor.Probe.Bar`) from each raw video frame
-  and reports the result via the `on_frame` callback.
+  Reads the frame-number bar from each raw video frame and reports the result
+  to the configured `StreamDoctor.Metric.Collector` (or logs it when none is
+  given).
   """
 
   use Membrane.Sink
 
   require Membrane.Logger
 
+  alias StreamDoctor.Metric.Collector
   alias StreamDoctor.Probe.Bar
   alias Membrane.RawVideo
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
 
   def_options(
-    on_frame: [
-      spec: ({:ok, non_neg_integer(), number() | nil} | {:error, atom()} -> any()) | nil,
+    collector: [
+      spec: pid() | nil,
       default: nil,
       description: """
-      Called with `{:ok, frame_number, pts_ms}` (`pts_ms` is the buffer's
-      presentation timestamp in milliseconds, `nil` when absent) or
-      `{:error, reason}` for each received video frame. Defaults to logging
-      the result.
+      `StreamDoctor.Metric.Collector` to report to: a
+      `{:video_frame_received, frame_number, pts_ms, t}` event for each
+      decoded frame (`pts_ms` is the buffer's presentation timestamp in
+      milliseconds, `nil` when absent) and `{:undecoded, :video, reason, t}`
+      for each frame without a readable bar. With no collector the results
+      are logged.
       """
     ]
   )
@@ -32,7 +36,7 @@ defmodule StreamDoctor.Probe.VideoMarkerDecoder do
 
   @impl true
   def handle_init(_ctx, opts) do
-    {[], %{on_frame: opts.on_frame || (&log_result/1), geometry: nil}}
+    {[], %{collector: opts.collector, geometry: nil}}
   end
 
   @impl true
@@ -43,22 +47,28 @@ defmodule StreamDoctor.Probe.VideoMarkerDecoder do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    result =
-      case Bar.decode(buffer.payload, state.geometry) do
-        {:ok, frame_number} -> {:ok, frame_number, pts_ms(buffer)}
-        {:error, _reason} = error -> error
-      end
+    case {Bar.decode(buffer.payload, state.geometry), state.collector} do
+      {{:ok, frame_number}, nil} ->
+        Membrane.Logger.info("Decoded frame number: #{frame_number}")
 
-    state.on_frame.(result)
+      {{:error, reason}, nil} ->
+        Membrane.Logger.warning("Failed to decode frame number: #{inspect(reason)}")
+
+      {{:ok, frame_number}, collector} ->
+        Collector.event(
+          collector,
+          {:video_frame_received, frame_number, pts_ms(buffer), now_ms()}
+        )
+
+      {{:error, reason}, collector} ->
+        Collector.event(collector, {:undecoded, :video, reason, now_ms()})
+    end
+
     {[], state}
   end
 
   defp pts_ms(%{pts: nil}), do: nil
   defp pts_ms(%{pts: pts}), do: Membrane.Time.as_milliseconds(pts, :round)
 
-  defp log_result({:ok, frame_number, _pts_ms}),
-    do: Membrane.Logger.info("Decoded frame number: #{frame_number}")
-
-  defp log_result({:error, reason}),
-    do: Membrane.Logger.warning("Failed to decode frame number: #{inspect(reason)}")
+  defp now_ms(), do: System.monotonic_time(:millisecond)
 end

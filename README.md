@@ -106,7 +106,7 @@ the sender and being decoded by a viewer.
 The send timestamp is captured by `StreamDoctor.Probe.SendReporter`, a transparent
 filter placed right before the RTMP sink (after real-time pacing), so encoding
 and pacing delays don't inflate the result; the receive timestamp is captured
-in the `on_frame` callback of `StreamDoctor.Probe.VideoMarkerDecoder`. Both timestamps
+by `StreamDoctor.Probe.VideoMarkerDecoder` as it decodes each frame. Both timestamps
 come from the same monotonic clock, so there is no clock-synchronization
 error — the measured latency covers the RTMP ingest, the server's HLS
 packaging, playlist/segment polling and decoding. A viewer is started
@@ -123,26 +123,42 @@ returns its measurements under `metrics`, `GET /status` returns everything,
 
 Measurements are implemented as composable `StreamDoctor.Metric` modules —
 pure folds over timestamped events (frame sent/received, audio symbol
-received, lifecycle), instantiated per viewer/player and reported under their
-metric name:
+received, lifecycle). Each viewer/player session runs one
+`StreamDoctor.Metric.Collector` process holding its registered metrics; the
+probes report events straight to it (streamer send events are broadcast to
+all collectors), and reports appear under the metric name:
 
 * `latency` (`StreamDoctor.Metric.Latency`) — end-to-end frame latency,
   matched by the bar counter; per-segment batching for viewers, latest-frame
   for players,
 * `ttff` (`StreamDoctor.Metric.TimeToFirstFrame`) — time from viewer request
   to playlist availability / first decoded frame / first audio symbol,
-* `av_drift` (`StreamDoctor.Metric.AvDrift`) — audio/video desync, computed
-  from the video and audio marker counters against the receiver's timestamps.
+* `av_drift` (`StreamDoctor.Metric.AvDrift`) — audio/video desync: the
+  difference between the media positions implied by the latest video and
+  audio marker counters.
 
 Adding a metric = one module implementing the behaviour plus a registry entry
 in `StreamDoctor.Metric`; the server and API need no changes.
 
-`latency_client.mjs` wraps these endpoints for JS
-(`startStreamer`/`startViewer`/`getViewer`/`watchLatency`, plus the
-one-call `measureLatency({rtmpUrl, hlsUrl})`). `create_livestream.mjs` uses it
-automatically: after creating the Firework livestream it starts the streamer
-and a viewer through the server and logs the latency (printing the stream and
-playback URLs when the server isn't running).
+`stream_doctor.mjs` wraps these endpoints in a session-based JS API:
+
+```js
+import * as stream_doc from "./stream_doctor.mjs";
+
+const session = await stream_doc.session();
+const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
+const viewer = await session.watch(hlsUrl);
+await streamer.waitUntilLive(); // frames flowing into the RTMP sink
+// ... let it measure ...
+const metrics = await viewer.stop(); // { latency: {...}, ttff: {...}, av_drift: {...} }
+```
+
+Plus `viewer.metrics()` / `viewer.waitUntilDone({onUpdate})`,
+`streamer.stop()`, and `session.watchPlayer(source, opts)` for screenshot-based
+player latency. `create_livestream.mjs` uses it automatically: after creating
+the Firework livestream it starts the streamer and a viewer through the server
+and logs the latency (printing the stream and playback URLs when the server
+isn't running).
 
 ## Using from code (e.g. on an HTTP request)
 
@@ -153,13 +169,21 @@ called from a Phoenix controller / Plug handler:
 # fire-and-forget; returns the pipeline pid
 pipeline = StreamDoctor.SenderPipeline.start_link("input.mp4", "rtmp://...")
 
+# a collector holding the metrics; the pipeline's probes report to it
+{:ok, collector} =
+  StreamDoctor.Metric.Collector.start_link([
+    {StreamDoctor.Metric.Latency, []},
+    {StreamDoctor.Metric.AvDrift, []}
+  ])
+
 pipeline =
   StreamDoctor.ReceiverPipeline.start_link("https://.../index.m3u8",
-    on_frame: fn
-      {:ok, n, _pts_ms} -> IO.puts("frame #{n}")
-      {:error, reason} -> IO.puts("error: #{inspect(reason)}")
-    end
+    collector: collector
   )
+
+# read the measurements whenever
+StreamDoctor.Metric.Collector.report(collector)
+# => %{latency: %{latency_ms: ..., ...}, av_drift: %{drift_ms: ..., ...}}
 
 # optionally block until the pipeline finishes (end of stream)
 ref = Process.monitor(pipeline)
@@ -168,6 +192,9 @@ receive do
   {:DOWN, ^ref, :process, ^pipeline, _reason} -> :ok
 end
 ```
+
+Without a `:collector`, the receiver just logs each decoded frame number and
+audio symbol.
 
 Note: `SenderPipeline.start_link` and `ReceiverPipeline.start_link` link the pipeline
 to the calling process. For HTTP-triggered runs you'll typically want to start

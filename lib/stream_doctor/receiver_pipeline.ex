@@ -11,8 +11,11 @@ defmodule StreamDoctor.ReceiverPipeline do
 
   Options:
     * `:url` - URL of the HLS playlist (`.m3u8`),
-    * `:on_frame` - optional callback, see `StreamDoctor.Probe.VideoMarkerDecoder`,
-    * `:on_audio_symbol` - optional callback, see `StreamDoctor.Probe.AudioMarkerDecoder`,
+    * `:collector` - optional `StreamDoctor.Metric.Collector` the marker
+      decoders report their events to (see
+      `StreamDoctor.Probe.VideoMarkerDecoder` and
+      `StreamDoctor.Probe.AudioMarkerDecoder`); without it the decoded
+      markers are logged,
     * `:realtime?` - pace the decoded stream to real time like a player would,
       instead of processing each downloaded segment at once (default `false`),
     * `:live_edge?` - join the stream at the newest available segment instead
@@ -38,8 +41,7 @@ defmodule StreamDoctor.ReceiverPipeline do
   @impl true
   def handle_init(_ctx, opts) do
     state = %{
-      on_frame: Keyword.get(opts, :on_frame),
-      on_audio_symbol: Keyword.get(opts, :on_audio_symbol),
+      collector: Keyword.get(opts, :collector),
       realtime?: Keyword.get(opts, :realtime?, false),
       awaiting_tracks: nil
     }
@@ -94,7 +96,9 @@ defmodule StreamDoctor.ReceiverPipeline do
     })
     |> child(:video_decoder, Membrane.H264.FFmpeg.Decoder)
     |> maybe_realtimer(:video, state)
-    |> child(:video_marker_decoder, %StreamDoctor.Probe.VideoMarkerDecoder{on_frame: state.on_frame})
+    |> child(:video_marker_decoder, %StreamDoctor.Probe.VideoMarkerDecoder{
+      collector: state.collector
+    })
   end
 
   defp track_spec({:audio_output, _format}, state) do
@@ -103,7 +107,9 @@ defmodule StreamDoctor.ReceiverPipeline do
     |> child(:audio_parser, %AAC.Parser{out_encapsulation: :ADTS})
     |> child(:audio_decoder, Membrane.AAC.FDK.Decoder)
     |> maybe_realtimer(:audio, state)
-    |> child(:audio_marker_decoder, %StreamDoctor.Probe.AudioMarkerDecoder{on_symbol: state.on_audio_symbol})
+    |> child(:audio_marker_decoder, %StreamDoctor.Probe.AudioMarkerDecoder{
+      collector: state.collector
+    })
   end
 
   defp maybe_realtimer(link, kind, %{realtime?: true}),

@@ -1,7 +1,10 @@
 defmodule StreamDoctor.Probe.SendReporter do
   @moduledoc """
-  Transparent filter reporting the frame number of every buffer passing
-  through via the `on_frame` callback.
+  Transparent filter broadcasting a `:video_frame_sent` event for every buffer
+  passing through to all metric collectors (see
+  `StreamDoctor.Metric.Collector.broadcast_send_event/1`). With no collector
+  subscribed the broadcast is a no-op, so the filter can always sit in the
+  sender pipeline.
 
   Buffers are numbered by order of arrival, starting at 0 and wrapping at
   `StreamDoctor.Probe.Bar.max_frame/0` - the same numbering that
@@ -17,26 +20,23 @@ defmodule StreamDoctor.Probe.SendReporter do
 
   use Membrane.Filter
 
+  alias StreamDoctor.Metric.Collector
   alias StreamDoctor.Probe.Bar
 
   def_input_pad(:input, accepted_format: _any)
   def_output_pad(:output, accepted_format: _any)
 
-  def_options(
-    on_frame: [
-      spec: (non_neg_integer() -> any()),
-      description: "Called with the frame number of every buffer passing through."
-    ]
-  )
-
   @impl true
-  def handle_init(_ctx, opts) do
-    {[], %{on_frame: opts.on_frame, frame_number: 0}}
+  def handle_init(_ctx, _opts) do
+    {[], %{frame_number: 0}}
   end
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    state.on_frame.(state.frame_number)
+    Collector.broadcast_send_event(
+      {:video_frame_sent, state.frame_number, System.monotonic_time(:millisecond)}
+    )
+
     state = %{state | frame_number: rem(state.frame_number + 1, Bar.max_frame())}
     {[buffer: {:output, buffer}], state}
   end

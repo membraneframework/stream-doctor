@@ -7,10 +7,10 @@ defmodule StreamDoctor.SenderPipeline do
     * `:input` - Boombox input, e.g. a path to an MP4 file,
     * `:rtmp_url` - destination `rtmp://` URL,
     * `:realtime?` - pace the stream to real time (default `true`); set to
-      `false` to push as fast as possible,
-    * `:on_video_frame_sent` - optional callback called with the frame number
-      of every video frame right before it enters the RTMP sink (i.e. at the
-      moment it is sent).
+      `false` to push as fast as possible.
+
+  Every video frame's send moment is broadcast to all metric collectors by
+  `StreamDoctor.Probe.SendReporter`, placed right before the RTMP sink.
   """
 
   use Membrane.Pipeline
@@ -35,7 +35,6 @@ defmodule StreamDoctor.SenderPipeline do
     state = %{
       rtmp_url: Keyword.fetch!(opts, :rtmp_url),
       realtime?: Keyword.get(opts, :realtime?, true),
-      on_video_frame_sent: Keyword.get(opts, :on_video_frame_sent),
       awaiting_tracks: nil
     }
 
@@ -85,7 +84,7 @@ defmodule StreamDoctor.SenderPipeline do
     |> child(:keyframe_scheduler, StreamDoctor.KeyframeScheduler)
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
     |> maybe_realtimer(:video, state)
-    |> maybe_send_probe(state)
+    |> child(:send_reporter, StreamDoctor.Probe.SendReporter)
     |> via_in(Membrane.Pad.ref(:video, 0))
     |> get_child(:rtmp_sink)
   end
@@ -104,9 +103,4 @@ defmodule StreamDoctor.SenderPipeline do
     do: child(link, {:realtimer, kind}, Membrane.Realtimer)
 
   defp maybe_realtimer(link, _kind, _state), do: link
-
-  defp maybe_send_probe(link, %{on_video_frame_sent: nil}), do: link
-
-  defp maybe_send_probe(link, state),
-    do: child(link, :send_reporter, %StreamDoctor.Probe.SendReporter{on_frame: state.on_video_frame_sent})
 end

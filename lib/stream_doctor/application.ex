@@ -8,8 +8,9 @@ defmodule StreamDoctor.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Starts a worker by calling: StreamDoctor.Worker.start_link(arg)
-      # {StreamDoctor.Worker, arg}
+      # pub/sub for the streamer's send events - every metric collector
+      # subscribes to them (see StreamDoctor.Metric.Collector)
+      {Registry, keys: :duplicate, name: StreamDoctor.Registry}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

@@ -4,11 +4,11 @@ defmodule StreamDoctor.Server do
   pipeline and any number of viewer pipelines, all running in this BEAM node,
   so a single monotonic clock is shared - no clock synchronization issues.
 
-  All measurement math lives in `StreamDoctor.Metric` implementations; this
-  server only manages pipeline lifecycle and routes timestamped events to the
-  metric instances held by each viewer and player. Streamer send events are
-  fanned out to every viewer's and player's metrics; receive and lifecycle
-  events go to their own viewer/player only.
+  All measurement math lives in `StreamDoctor.Metric` implementations, held
+  by one `StreamDoctor.Metric.Collector` process per viewer/player session;
+  the probes report their events straight to the session's collector (send
+  events are broadcast to all collectors). This server only manages pipeline
+  lifecycle, starts the collectors and pulls their reports for the summaries.
 
   Viewers join at the live edge and run unpaced, so frames arrive in
   per-segment batches; see `StreamDoctor.Metric.Latency` for how that shapes
@@ -26,6 +26,7 @@ defmodule StreamDoctor.Server do
   require Logger
 
   alias StreamDoctor.Metric
+  alias StreamDoctor.Metric.Collector
 
   @hls_timeout 120_000
 
@@ -87,6 +88,8 @@ defmodule StreamDoctor.Server do
     # pipelines are linked to this server; trap exits so a crashing pipeline
     # is recorded as :ended instead of taking the server down
     Process.flag(:trap_exit, true)
+    # for the streamer's frames_sent counter (backing "is it live yet?")
+    :ok = Collector.subscribe_send_events()
     {:ok, %{streamer: nil, viewers: %{}, players: %{}, next_id: 1}}
   end
 
@@ -95,16 +98,18 @@ defmodule StreamDoctor.Server do
     if state.streamer != nil and state.streamer.status == :streaming do
       {:reply, {:error, :already_streaming}, state}
     else
-      server = self()
-
-      pid =
-        StreamDoctor.SenderPipeline.start_link(input, rtmp_url,
-          realtime?: true,
-          on_video_frame_sent: fn n -> GenServer.cast(server, {:frame_sent, n, now_ms()}) end
-        )
+      pid = StreamDoctor.SenderPipeline.start_link(input, rtmp_url, realtime?: true)
 
       Process.monitor(pid)
-      streamer = %{pid: pid, input: input, rtmp_url: rtmp_url, status: :streaming, error: nil}
+
+      streamer = %{
+        pid: pid,
+        input: input,
+        rtmp_url: rtmp_url,
+        status: :streaming,
+        error: nil,
+        frames_sent: 0
+      }
       {:reply, {:ok, streamer_summary(streamer)}, %{state | streamer: streamer}}
     end
   end
@@ -151,16 +156,18 @@ defmodule StreamDoctor.Server do
           end
         end)
 
+        {:ok, collector} = Collector.start_link(metric_specs)
+        Collector.event(collector, {:session_started, now_ms()})
+
         viewer = %{
           id: id,
           hls_url: hls_url,
           pid: nil,
           status: :waiting_for_playlist,
           error: nil,
-          metrics: Metric.init_all(metric_specs)
+          collector: collector
         }
 
-        viewer = notify_metrics(viewer, {:session_started, now_ms()})
         state = %{state | viewers: Map.put(state.viewers, id, viewer), next_id: state.next_id + 1}
         {:reply, {:ok, viewer_summary(viewer)}, state}
     end
@@ -201,24 +208,28 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_call({:player_frame, id, decode_result, t}, _from, state) do
     player =
-      Map.get(state.players, id, %{id: id, metrics: Metric.init_all(@player_metric_specs)})
+      Map.get_lazy(state.players, id, fn ->
+        {:ok, collector} = Collector.start_link(@player_metric_specs)
+        %{id: id, collector: collector}
+      end)
 
-    {player, response} =
+    response =
       case decode_result do
         {:error, reason} ->
-          {notify_metrics(player, {:undecoded, :video, reason, t}),
-           %{decoded: false, reason: reason}}
+          Collector.event(player.collector, {:undecoded, :video, reason, t})
+          %{decoded: false, reason: reason}
 
         {:ok, n} ->
-          player = notify_metrics(player, {:video_frame_received, n, nil, t})
+          report = Collector.event_and_report(player.collector, {:video_frame_received, n, nil, t})
+
           # matched if the metric's newest sample is the frame just recorded
           latency_ms =
-            case Metric.report_all(player.metrics) do
+            case report do
               %{latency: %{latest_samples: [%{frame: ^n, latency_ms: latency} | _rest]}} -> latency
               _report -> nil
             end
 
-          {player, %{decoded: true, frame: n, latency_ms: latency_ms}}
+          %{decoded: true, frame: n, latency_ms: latency_ms}
       end
 
     {:reply, response, put_in(state.players[id], player)}
@@ -233,56 +244,31 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_cast({:frame_sent, n, t}, state) do
-    event = {:video_frame_sent, n, t}
+  def handle_cast({:event, {:video_frame_sent, _n, _t}}, state) do
+    streamer =
+      state.streamer && %{state.streamer | frames_sent: state.streamer.frames_sent + 1}
 
-    state = %{
-      state
-      | viewers: Map.new(state.viewers, fn {id, v} -> {id, notify_metrics(v, event)} end),
-        players: Map.new(state.players, fn {id, p} -> {id, notify_metrics(p, event)} end)
-    }
-
-    {:noreply, state}
+    {:noreply, %{state | streamer: streamer}}
   end
 
   @impl true
-  def handle_cast({:viewer_event, id, event}, state) do
-    case state.viewers[id] do
-      nil -> {:noreply, state}
-      viewer -> {:noreply, put_in(state.viewers[id], notify_metrics(viewer, event))}
-    end
-  end
+  def handle_cast({:event, _event}, state), do: {:noreply, state}
 
   @impl true
   def handle_info({:playlist_ready, id}, state) do
     case state.viewers[id] do
       %{status: :waiting_for_playlist} = viewer ->
-        server = self()
-
         pid =
           StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url,
             # join at the newest segment and run unpaced so the rolling
             # minimum is the pure server latency
             live_edge?: true,
             realtime?: false,
-            on_frame: fn
-              {:ok, n, pts_ms} ->
-                GenServer.cast(server, {:viewer_event, id, {:video_frame_received, n, pts_ms, now_ms()}})
-
-              {:error, reason} ->
-                GenServer.cast(server, {:viewer_event, id, {:undecoded, :video, reason, now_ms()}})
-            end,
-            on_audio_symbol: fn
-              {:ok, m, pts_ms} ->
-                GenServer.cast(server, {:viewer_event, id, {:audio_symbol_received, m, pts_ms, now_ms()}})
-
-              {:error, reason} ->
-                GenServer.cast(server, {:viewer_event, id, {:undecoded, :audio, reason, now_ms()}})
-            end
+            collector: viewer.collector
           )
 
         Process.monitor(pid)
-        viewer = notify_metrics(viewer, {:playlist_ready, now_ms()})
+        Collector.event(viewer.collector, {:playlist_ready, now_ms()})
         {:noreply, put_in(state.viewers[id], %{viewer | pid: pid, status: :receiving})}
 
       _stopped_or_missing ->
@@ -328,10 +314,6 @@ defmodule StreamDoctor.Server do
 
   ## Helpers
 
-  defp notify_metrics(entity, event) do
-    %{entity | metrics: Metric.handle_event_all(entity.metrics, event)}
-  end
-
   # an explicitly stopped pipeline stays :stopped; anything else that goes
   # down (finished input, crash) becomes :ended
   defp mark_down(%{status: :stopped} = entity, _error), do: entity
@@ -346,7 +328,7 @@ defmodule StreamDoctor.Server do
   defp terminate_pipeline(entity), do: %{entity | status: :stopped}
 
   defp streamer_summary(streamer) do
-    Map.take(streamer, [:input, :rtmp_url, :status, :error])
+    Map.take(streamer, [:input, :rtmp_url, :status, :error, :frames_sent])
   end
 
   defp viewer_summary(viewer) do
@@ -355,12 +337,20 @@ defmodule StreamDoctor.Server do
       hls_url: viewer.hls_url,
       status: viewer.status,
       error: viewer.error,
-      metrics: Metric.report_all(viewer.metrics)
+      metrics: safe_report(viewer.collector)
     }
   end
 
   defp player_summary(player) do
-    %{id: player.id, metrics: Metric.report_all(player.metrics)}
+    %{id: player.id, metrics: safe_report(player.collector)}
+  end
+
+  # a collector taken down by a crashing metric shouldn't take the summary
+  # (and this server) with it
+  defp safe_report(collector) do
+    Collector.report(collector)
+  catch
+    :exit, _reason -> %{error: "metrics collector down"}
   end
 
   defp now_ms(), do: System.monotonic_time(:millisecond)

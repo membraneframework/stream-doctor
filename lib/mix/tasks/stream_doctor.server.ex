@@ -7,7 +7,7 @@ defmodule Mix.Tasks.StreamDoctor.Server do
 
       mix stream_doctor.server [--port 4040]
 
-  Meant to be driven by `latency_client.mjs` / `create_livestream.mjs`, or
+  Meant to be driven by `stream_doctor.mjs` / `create_livestream.mjs`, or
   directly:
 
       curl -X POST localhost:4040/streamer \\

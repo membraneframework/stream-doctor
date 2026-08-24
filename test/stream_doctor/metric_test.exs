@@ -105,49 +105,46 @@ defmodule StreamDoctor.MetricTest do
   end
 
   describe "AvDrift" do
-    # 30 fps video (frame n at pts n * 100/3 ms), audio symbol m at m * 30 ms
-    defp video_event(n, offset_ms), do: {:video_frame_received, n, n * 100 / 3 + offset_ms, 0}
-    defp audio_event(m, offset_ms), do: {:audio_symbol_received, m, m * 30 + offset_ms, 0}
-
-    test "in-sync tracks report ~0 drift" do
-      events =
-        Enum.flat_map(1..30, fn i -> [video_event(i, 0), audio_event(i, 0)] end)
-
-      state = run(Metric.AvDrift, [], events)
-      report = Metric.AvDrift.report(state)
-      assert_in_delta report.drift_ms, 0, 1
-      assert_in_delta report.frame_duration_ms, 100 / 3, 0.1
-    end
-
-    test "audio shifted later on the timeline yields negative drift" do
-      events =
-        Enum.flat_map(1..30, fn i -> [video_event(i, 0), audio_event(i, 120)] end)
-
-      state = run(Metric.AvDrift, [], events)
-      assert_in_delta Metric.AvDrift.report(state).drift_ms, -120, 1
-    end
-
-    test "unwraps counters across the wrap point" do
+    # Interleaved decode of a 30 fps stream: frame n covers media up to
+    # n * 100/3 ms, and the audio track (delayed by audio_delay_ms in the
+    # stream) has decoded up to the matching symbol. Counters are emitted
+    # wrapped, as the decoders produce them; audio wraps at 128 within these
+    # ranges.
+    defp av_events(range, audio_delay_ms \\ 0) do
+      max_frame = StreamDoctor.Probe.VideoMarkerDecoder.max_frame()
       max_symbol = StreamDoctor.Probe.AudioMarkerDecoder.max_symbol()
 
-      # the marker counter wraps but the stream pts keeps growing
-      events =
-        Enum.flat_map((max_symbol - 5)..(max_symbol + 5), fn i ->
-          [video_event(i, 0), {:audio_symbol_received, rem(i, max_symbol), i * 30, 0}]
-        end)
+      Enum.flat_map(range, fn i ->
+        m = max(div(round(i * 100 / 3) - audio_delay_ms, 30), 0)
 
-      state = run(Metric.AvDrift, [], events)
-      assert_in_delta Metric.AvDrift.report(state).drift_ms, 0, 1
+        [
+          {:video_frame_received, rem(i, max_frame), nil, 0},
+          {:audio_symbol_received, rem(m, max_symbol), nil, 0}
+        ]
+      end)
     end
 
-    test "ignores events without pts" do
-      state =
-        run(Metric.AvDrift, [], [
-          {:video_frame_received, 1, nil, 0},
-          {:audio_symbol_received, 1, nil, 0}
-        ])
+    test "in-sync tracks report ~0 drift (crossing the audio wrap point)" do
+      # 300 frames = 10 s, audio counter wraps at 3.84 s - unwrap exercised
+      state = run(Metric.AvDrift, [], av_events(1..300))
+      report = Metric.AvDrift.report(state)
+      # one symbol (30 ms) of quantization: video position rounds down to the
+      # last completed symbol
+      assert_in_delta report.drift_ms, 15, 20
+      assert_in_delta report.frame_duration_ms, 100 / 3, 0.5
+    end
 
-      assert Metric.AvDrift.report(state).drift_ms == nil
+    test "delayed audio track yields positive drift (video leads)" do
+      # joins mid-stream, past the point where the audio delay has elapsed
+      state = run(Metric.AvDrift, [], av_events(100..400, 120))
+      assert_in_delta Metric.AvDrift.report(state).drift_ms, 120, 35
+    end
+
+    test "reports nil before enough frames to calibrate the frame duration" do
+      state = run(Metric.AvDrift, [], av_events(1..30))
+      report = Metric.AvDrift.report(state)
+      assert report.drift_ms == nil
+      assert report.frame_duration_ms == nil
     end
   end
 end
