@@ -27,9 +27,10 @@ reference squares let the reader compute the white/black threshold per frame,
 and the parity bit rejects corrupted reads. Reading averages the central area
 of each square, which makes the code robust to H.264 compression artifacts.
 
-Implementation: `StreamDoctor.Bar` (geometry/draw/decode, pure functions on I420
-payloads), `StreamDoctor.OverlayFilter` (Membrane filter drawing the bar),
-`StreamDoctor.DetectorSink` (Membrane sink reading it back).
+Implementation: `StreamDoctor.Probe.VideoMarkerEncoder` (Membrane filter
+drawing the bar), `StreamDoctor.Probe.VideoMarkerDecoder` (Membrane sink
+reading it back); the bar geometry/draw/decode itself lives in the private
+`StreamDoctor.Probe.Bar`.
 
 ## The audio marker
 
@@ -60,17 +61,18 @@ one where consecutive windows decode with valid parity and consecutive numbers.
 The marker **replaces** the original audio content (content energy at the
 marker frequencies would corrupt detection).
 
-Implementation: `StreamDoctor.Tone` (pure encode/generate/decode),
-`StreamDoctor.AudioMarkerFilter`, `StreamDoctor.AudioDetectorSink`.
+Implementation: `StreamDoctor.Probe.AudioMarkerEncoder`,
+`StreamDoctor.Probe.AudioMarkerDecoder`; the tone encode/generate/decode
+itself lives in the private `StreamDoctor.Probe.Tone`.
 
 ## Pipelines
 
 **Sender** (`StreamDoctor.SenderPipeline`):
 
 ```
-Boombox.Bin (MP4 → raw video) → OverlayFilter → H264.FFmpeg.Encoder (2s GOP)
+Boombox.Bin (MP4 → raw video) → VideoMarkerEncoder → H264.FFmpeg.Encoder (2s GOP)
   → H264.Parser (avc1) → Realtimer → RTMP.Sink
-Boombox.Bin (raw audio) → AudioMarkerFilter → Transcoder (AAC) → Realtimer ↗
+Boombox.Bin (raw audio) → AudioMarkerEncoder → Transcoder (AAC) → Realtimer ↗
 ```
 
 The audio marker is added when the input has an audio track. Boombox is used
@@ -82,8 +84,8 @@ with sparse keyframes.
 **Receiver** (`StreamDoctor.ReceiverPipeline`):
 
 ```
-Boombox.Bin ({:hls, url} → raw video) → DetectorSink
-Boombox.Bin (raw audio) → AudioDetectorSink
+Boombox.Bin ({:hls, url} → raw video) → VideoMarkerDecoder
+Boombox.Bin (raw audio) → AudioMarkerDecoder
 ```
 
 ## Running
@@ -91,77 +93,83 @@ Boombox.Bin (raw audio) → AudioDetectorSink
 ```sh
 mix deps.get
 
-# 1. stream a file with the overlay to RTMP
-mix stream_doctor.send input.mp4 rtmp://server:1935/app/stream_key
-
-# 2. read frame numbers back from HLS
-mix stream_doctor.read https://server/path/index.m3u8
-
-# 3. measure end-to-end latency (send + read in one process)
-mix stream_doctor.latency input.mp4 rtmp://server:1935/app/key https://server/path/index.m3u8
+# run the latency-measurement HTTP server
+mix stream_doctor.server [--port 4040]
 ```
-
-`stream_doctor.send` paces the stream to real time (needed for live-streaming
-servers); pass `--no-realtime` to push as fast as possible. The reader prints
-`frame N` per video frame (or `decode error: ...`).
 
 ## Latency measurement
 
-`mix stream_doctor.latency INPUT RTMP_URL HLS_URL` runs the sender and the
-receiver in one BEAM node and prints, for every video frame,
-`frame N: latency X ms` — the time between the frame (identified by its bar
-counter) leaving the sender and being decoded by the receiver.
+The sender and viewers run in one BEAM node; for every video frame the
+latency is the time between the frame (identified by its bar counter) leaving
+the sender and being decoded by a viewer.
 
-The send timestamp is captured by `StreamDoctor.SendProbe`, a transparent
+The send timestamp is captured by `StreamDoctor.Probe.SendReporter`, a transparent
 filter placed right before the RTMP sink (after real-time pacing), so encoding
 and pacing delays don't inflate the result; the receive timestamp is captured
-in the `on_frame` callback of `StreamDoctor.DetectorSink`. Both timestamps
+in the `on_frame` callback of `StreamDoctor.Probe.VideoMarkerDecoder`. Both timestamps
 come from the same monotonic clock, so there is no clock-synchronization
 error — the measured latency covers the RTMP ingest, the server's HLS
-packaging, playlist/segment polling and decoding. The receiver is started
+packaging, playlist/segment polling and decoding. A viewer is started
 once the HLS playlist exists and lists at least one segment.
-
-From code: `StreamDoctor.Latency.measure(input, rtmp_url, hls_url, opts)` —
-pass `on_latency: fn %{frame: n, latency_ms: ms} -> ... end` to consume the
-measurements programmatically.
 
 ## HTTP server + JS client
 
-`mix stream_doctor.server [--port 4040]` exposes the same measurement over
+`mix stream_doctor.server [--port 4040]` exposes the measurements over
 HTTP (see `StreamDoctor.Api`): `POST /streamer` starts the sender,
-`POST /viewers` starts a viewer (many can watch at once), `GET /viewers/:id`
-returns its `pure_latency_ms` (rolling minimum = pure server latency) and the
-latest per-frame samples, `GET /status` returns everything, `DELETE` stops.
+`POST /viewers` starts a viewer (many can watch at once; the optional
+`"metrics"` list selects which metrics it computes), `GET /viewers/:id`
+returns its measurements under `metrics`, `GET /status` returns everything,
+`DELETE` stops.
+
+Measurements are implemented as composable `StreamDoctor.Metric` modules —
+pure folds over timestamped events (frame sent/received, audio symbol
+received, lifecycle), instantiated per viewer/player and reported under their
+metric name:
+
+* `latency` (`StreamDoctor.Metric.Latency`) — end-to-end frame latency,
+  matched by the bar counter; per-segment batching for viewers, latest-frame
+  for players,
+* `ttff` (`StreamDoctor.Metric.TimeToFirstFrame`) — time from viewer request
+  to playlist availability / first decoded frame / first audio symbol,
+* `av_drift` (`StreamDoctor.Metric.AvDrift`) — audio/video desync, computed
+  from the video and audio marker counters against the receiver's timestamps.
+
+Adding a metric = one module implementing the behaviour plus a registry entry
+in `StreamDoctor.Metric`; the server and API need no changes.
 
 `latency_client.mjs` wraps these endpoints for JS
 (`startStreamer`/`startViewer`/`getViewer`/`watchLatency`, plus the
 one-call `measureLatency({rtmpUrl, hlsUrl})`). `create_livestream.mjs` uses it
 automatically: after creating the Firework livestream it starts the streamer
-and a viewer through the server and logs the latency (falling back to printing
-the manual `mix stream_doctor.latency` command when the server isn't running).
+and a viewer through the server and logs the latency (printing the stream and
+playback URLs when the server isn't running).
 
 ## Using from code (e.g. on an HTTP request)
 
-Both entry points are plain functions starting a supervised Membrane pipeline,
-so they can be called from a Phoenix controller / Plug handler:
+Both pipelines expose a `start_link` starting them supervised, so they can be
+called from a Phoenix controller / Plug handler:
 
 ```elixir
 # fire-and-forget; returns the pipeline pid
-pipeline = StreamDoctor.stream_with_overlay("input.mp4", "rtmp://...")
+pipeline = StreamDoctor.SenderPipeline.start_link("input.mp4", "rtmp://...")
 
 pipeline =
-  StreamDoctor.read_frame_numbers("https://.../index.m3u8",
+  StreamDoctor.ReceiverPipeline.start_link("https://.../index.m3u8",
     on_frame: fn
-      {:ok, n} -> IO.puts("frame #{n}")
+      {:ok, n, _pts_ms} -> IO.puts("frame #{n}")
       {:error, reason} -> IO.puts("error: #{inspect(reason)}")
     end
   )
 
 # optionally block until the pipeline finishes (end of stream)
-StreamDoctor.await(pipeline)
+ref = Process.monitor(pipeline)
+
+receive do
+  {:DOWN, ^ref, :process, ^pipeline, _reason} -> :ok
+end
 ```
 
-Note: `stream_with_overlay/2,3` and `read_frame_numbers/1,2` link the pipeline
+Note: `SenderPipeline.start_link` and `ReceiverPipeline.start_link` link the pipeline
 to the calling process. For HTTP-triggered runs you'll typically want to start
 them under your own supervisor instead of the request process — e.g. via a
 `Task.Supervisor` or by calling `Membrane.Pipeline.start/2` — so the pipeline
@@ -177,12 +185,18 @@ mkdir -p /tmp/hls
 ffmpeg -y -listen 1 -f flv -i rtmp://127.0.0.1:1935/live/test \
   -c copy -f hls -hls_time 2 -hls_list_size 0 /tmp/hls/index.m3u8
 
-# terminal 2: send
-mix stream_doctor.send test.mp4 rtmp://127.0.0.1:1935/live/test
+# terminal 2: serve HLS
+python3 -m http.server 8123 -d /tmp/hls
 
-# terminal 3: serve HLS and read it back
-python3 -m http.server 8123 -d /tmp/hls &
-mix stream_doctor.read http://127.0.0.1:8123/index.m3u8
+# terminal 3: run the server and drive it over HTTP
+mix stream_doctor.server
+curl -X POST localhost:4040/streamer \
+  -H 'content-type: application/json' \
+  -d '{"input": "test.mp4", "rtmp_url": "rtmp://127.0.0.1:1935/live/test"}'
+curl -X POST localhost:4040/viewers \
+  -H 'content-type: application/json' \
+  -d '{"hls_url": "http://127.0.0.1:8123/index.m3u8"}'
+curl localhost:4040/viewers/viewer-1
 ```
 
 ## Requirements

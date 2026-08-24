@@ -1,33 +1,34 @@
-defmodule StreamDoctor.Tone do
-  @moduledoc """
-  Encoding and decoding of the audio marker - the audible counterpart of
-  `StreamDoctor.Bar`.
-
-  The audio stream is divided into 30 ms symbols. Symbol number `n` (the
-  stream timestamp divided by 30 ms, wrapping at #{Integer.pow(2, 7)}) is
-  encoded as presence or absence of pure tones:
-
-    * 500 Hz - reference tone, always present (like the reference squares),
-    * 1000..4000 Hz every 500 Hz - 7 data bits of the symbol number, MSB first
-      (tone present = 1),
-    * 4500 Hz - even-parity bit over the data bits.
-
-  All frequencies are multiples of 1/30 ms ≈ 33.3 Hz, so every symbol contains
-  a whole number of cycles of each tone - symbols start and end at zero phase
-  and can be toggled without clicks, and each tone falls into a single DFT bin
-  of a symbol-length window.
-
-  Decoding measures tone powers with the Goertzel algorithm over the inner 2/3
-  of the symbol window (to avoid symbol-boundary transitions). Each tone is
-  compared against its local noise floor - the guard bins 250 Hz below and
-  above it, where nothing is ever emitted - so the decision is a local SNR
-  test, robust to spectral tilt (e.g. high-frequency attenuation introduced by
-  lossy codecs or filtering). A bit counts as present when its power exceeds
-  the louder of its two guard bins several times over and stays above a small
-  fraction of the reference power (a sanity floor against near-silent windows).
-  The always-on reference tone must pass the same local contrast test for the
-  window to count as containing a marker at all.
-  """
+defmodule StreamDoctor.Probe.Tone do
+  # Encoding and decoding of the audio marker - the audible counterpart of
+  # `StreamDoctor.Probe.Bar`. Implementation detail of the audio marker
+  # probes - not part of the public API.
+  #
+  # The audio stream is divided into 30 ms symbols. Symbol number `n` (the
+  # stream timestamp divided by 30 ms, wrapping at 128) is encoded as
+  # presence or absence of pure tones:
+  #
+  #   * 500 Hz - reference tone, always present (like the reference squares),
+  #   * 1000..4000 Hz every 500 Hz - 7 data bits of the symbol number, MSB
+  #     first (tone present = 1),
+  #   * 4500 Hz - even-parity bit over the data bits.
+  #
+  # All frequencies are multiples of 1/30 ms ≈ 33.3 Hz, so every symbol
+  # contains a whole number of cycles of each tone - symbols start and end at
+  # zero phase and can be toggled without clicks, and each tone falls into a
+  # single DFT bin of a symbol-length window.
+  #
+  # Decoding measures tone powers with the Goertzel algorithm over the inner
+  # 2/3 of the symbol window (to avoid symbol-boundary transitions). Each
+  # tone is compared against its local noise floor - the guard bins 250 Hz
+  # below and above it, where nothing is ever emitted - so the decision is a
+  # local SNR test, robust to spectral tilt (e.g. high-frequency attenuation
+  # introduced by lossy codecs or filtering). A bit counts as present when
+  # its power exceeds the louder of its two guard bins several times over and
+  # stays above a small fraction of the reference power (a sanity floor
+  # against near-silent windows). The always-on reference tone must pass the
+  # same local contrast test for the window to count as containing a marker
+  # at all.
+  @moduledoc false
 
   import Bitwise
 

@@ -1,23 +1,22 @@
-defmodule StreamDoctor.LatencyServer do
+defmodule StreamDoctor.Server do
   @moduledoc """
-  Holds latency-measurement state for the HTTP API (`StreamDoctor.Api`): one
-  streamer pipeline and any number of viewer pipelines, all running in this
-  BEAM node, so a single monotonic clock is shared - no clock synchronization
-  issues.
+  Holds measurement state for the HTTP API (`StreamDoctor.Api`): one streamer
+  pipeline and any number of viewer pipelines, all running in this BEAM node,
+  so a single monotonic clock is shared - no clock synchronization issues.
 
-  The streamer reports every video frame it sends; every viewer reports every
-  frame it decodes; a viewer's latency for frame N = receive time - send time.
-  Frame numbers wrap at `StreamDoctor.Bar.max_frame()`, so the send-time map
-  is bounded (a new send overwrites the old slot).
+  All measurement math lives in `StreamDoctor.Metric` implementations; this
+  server only manages pipeline lifecycle and routes timestamped events to the
+  metric instances held by each viewer and player. Streamer send events are
+  fanned out to every viewer's and player's metrics; receive and lifecycle
+  events go to their own viewer/player only.
 
-  Like `StreamDoctor.Latency`, viewers join at the live edge and run unpaced,
-  so frames arrive in per-segment batches; the reported `latency_ms` is the
-  latency of the **first frame of the latest segment** - see that module's
-  docs.
+  Viewers join at the live edge and run unpaced, so frames arrive in
+  per-segment batches; see `StreamDoctor.Metric.Latency` for how that shapes
+  the reported latency.
 
   Besides HLS viewers there are **players**: external players (e.g. the IVS
   player on a web page) whose frames are screenshot by the client and posted
-  to the API, where `StreamDoctor.FrameImage` decodes the frame number. Their
+  to the API, where `StreamDoctor.Probe.ImageMarkerDecoder` decodes the frame number. Their
   latency is `screenshot arrival time - send time` (measured on this node's
   clock; includes the client's capture + upload overhead, typically tens of
   ms), so it is the true "what the player shows right now" latency.
@@ -26,12 +25,11 @@ defmodule StreamDoctor.LatencyServer do
   use GenServer
   require Logger
 
-  # a pause in frame arrival longer than this marks the start of a new
-  # segment batch (an unpaced viewer decodes a whole segment back-to-back,
-  # then waits ~a segment duration for the next one)
-  @segment_gap_ms 500
-  @max_samples 50
+  alias StreamDoctor.Metric
+
   @hls_timeout 120_000
+
+  @player_metric_specs [{Metric.Latency, [mode: :latest]}]
 
   ## Client API
 
@@ -50,8 +48,14 @@ defmodule StreamDoctor.LatencyServer do
   @spec streamer() :: {:ok, map()} | {:error, :not_found}
   def streamer(), do: GenServer.call(__MODULE__, :streamer)
 
-  @spec start_viewer(String.t()) :: {:ok, map()}
-  def start_viewer(hls_url), do: GenServer.call(__MODULE__, {:start_viewer, hls_url})
+  @doc """
+  Starts a viewer with the given metrics (`nil` = all registered, see
+  `StreamDoctor.Metric.resolve/1`).
+  """
+  @spec start_viewer(String.t(), [String.t()] | nil) ::
+          {:ok, map()} | {:error, {:unknown_metric, term()}}
+  def start_viewer(hls_url, metric_names \\ nil),
+    do: GenServer.call(__MODULE__, {:start_viewer, hls_url, metric_names})
 
   @spec stop_viewer(String.t()) :: {:ok, map()} | {:error, :not_found}
   def stop_viewer(id), do: GenServer.call(__MODULE__, {:stop_viewer, id}, 15_000)
@@ -83,7 +87,7 @@ defmodule StreamDoctor.LatencyServer do
     # pipelines are linked to this server; trap exits so a crashing pipeline
     # is recorded as :ended instead of taking the server down
     Process.flag(:trap_exit, true)
-    {:ok, %{streamer: nil, sent_at: %{}, viewers: %{}, players: %{}, next_id: 1}}
+    {:ok, %{streamer: nil, viewers: %{}, players: %{}, next_id: 1}}
   end
 
   @impl true
@@ -94,7 +98,7 @@ defmodule StreamDoctor.LatencyServer do
       server = self()
 
       pid =
-        StreamDoctor.stream_with_overlay(input, rtmp_url,
+        StreamDoctor.SenderPipeline.start_link(input, rtmp_url,
           realtime?: true,
           on_video_frame_sent: fn n -> GenServer.cast(server, {:frame_sent, n, now_ms()}) end
         )
@@ -127,37 +131,39 @@ defmodule StreamDoctor.LatencyServer do
   end
 
   @impl true
-  def handle_call({:start_viewer, hls_url}, _from, state) do
-    id = "viewer-#{state.next_id}"
-    server = self()
+  def handle_call({:start_viewer, hls_url, metric_names}, _from, state) do
+    case Metric.resolve(metric_names) do
+      {:error, _unknown} = error ->
+        {:reply, error, state}
 
-    # wait for the playlist off-band so the API call returns immediately;
-    # the receiver pipeline is started once the playlist is up
-    spawn_link(fn ->
-      try do
-        StreamDoctor.Latency.await_hls(hls_url, @hls_timeout)
-        send(server, {:playlist_ready, id})
-      rescue
-        e -> send(server, {:viewer_failed, id, Exception.message(e)})
-      end
-    end)
+      {:ok, metric_specs} ->
+        id = "viewer-#{state.next_id}"
+        server = self()
 
-    viewer = %{
-      id: id,
-      hls_url: hls_url,
-      pid: nil,
-      status: :waiting_for_playlist,
-      error: nil,
-      last_recv_t: nil,
-      segments_seen: 0,
-      segment_latencies: [],
-      samples: [],
-      frames_matched: 0,
-      frames_unmatched: 0
-    }
+        # wait for the playlist off-band so the API call returns immediately;
+        # the receiver pipeline is started once the playlist is up
+        spawn_link(fn ->
+          try do
+            StreamDoctor.Hls.await_playlist(hls_url, @hls_timeout)
+            send(server, {:playlist_ready, id})
+          rescue
+            e -> send(server, {:viewer_failed, id, Exception.message(e)})
+          end
+        end)
 
-    state = %{state | viewers: Map.put(state.viewers, id, viewer), next_id: state.next_id + 1}
-    {:reply, {:ok, viewer_summary(viewer, now_ms())}, state}
+        viewer = %{
+          id: id,
+          hls_url: hls_url,
+          pid: nil,
+          status: :waiting_for_playlist,
+          error: nil,
+          metrics: Metric.init_all(metric_specs)
+        }
+
+        viewer = notify_metrics(viewer, {:session_started, now_ms()})
+        state = %{state | viewers: Map.put(state.viewers, id, viewer), next_id: state.next_id + 1}
+        {:reply, {:ok, viewer_summary(viewer)}, state}
+    end
   end
 
   @impl true
@@ -169,7 +175,7 @@ defmodule StreamDoctor.LatencyServer do
       viewer ->
         viewer = terminate_pipeline(viewer)
         state = put_in(state.viewers[id], viewer)
-        {:reply, {:ok, viewer_summary(viewer, now_ms())}, state}
+        {:reply, {:ok, viewer_summary(viewer)}, state}
     end
   end
 
@@ -177,17 +183,15 @@ defmodule StreamDoctor.LatencyServer do
   def handle_call({:viewer, id}, _from, state) do
     case state.viewers[id] do
       nil -> {:reply, {:error, :not_found}, state}
-      viewer -> {:reply, {:ok, viewer_summary(viewer, now_ms())}, state}
+      viewer -> {:reply, {:ok, viewer_summary(viewer)}, state}
     end
   end
 
   @impl true
   def handle_call(:status, _from, state) do
-    now = now_ms()
-
     status = %{
       streamer: state.streamer && streamer_summary(state.streamer),
-      viewers: state.viewers |> Map.values() |> Enum.map(&viewer_summary(&1, now)),
+      viewers: state.viewers |> Map.values() |> Enum.map(&viewer_summary/1),
       players: state.players |> Map.values() |> Enum.map(&player_summary/1)
     }
 
@@ -197,39 +201,24 @@ defmodule StreamDoctor.LatencyServer do
   @impl true
   def handle_call({:player_frame, id, decode_result, t}, _from, state) do
     player =
-      Map.get(state.players, id, %{
-        id: id,
-        latency_ms: nil,
-        samples: [],
-        frames_matched: 0,
-        frames_unmatched: 0,
-        frames_undecoded: 0
-      })
+      Map.get(state.players, id, %{id: id, metrics: Metric.init_all(@player_metric_specs)})
 
     {player, response} =
       case decode_result do
         {:error, reason} ->
-          {%{player | frames_undecoded: player.frames_undecoded + 1},
+          {notify_metrics(player, {:undecoded, :video, reason, t}),
            %{decoded: false, reason: reason}}
 
         {:ok, n} ->
-          case state.sent_at[n] do
-            nil ->
-              {%{player | frames_unmatched: player.frames_unmatched + 1},
-               %{decoded: true, frame: n, latency_ms: nil}}
+          player = notify_metrics(player, {:video_frame_received, n, nil, t})
+          # matched if the metric's newest sample is the frame just recorded
+          latency_ms =
+            case Metric.report_all(player.metrics) do
+              %{latency: %{latest_samples: [%{frame: ^n, latency_ms: latency} | _rest]}} -> latency
+              _report -> nil
+            end
 
-            sent_t ->
-              latency = t - sent_t
-
-              player = %{
-                player
-                | latency_ms: latency,
-                  samples: Enum.take([{n, latency} | player.samples], @max_samples),
-                  frames_matched: player.frames_matched + 1
-              }
-
-              {player, %{decoded: true, frame: n, latency_ms: latency}}
-          end
+          {player, %{decoded: true, frame: n, latency_ms: latency_ms}}
       end
 
     {:reply, response, put_in(state.players[id], player)}
@@ -245,40 +234,22 @@ defmodule StreamDoctor.LatencyServer do
 
   @impl true
   def handle_cast({:frame_sent, n, t}, state) do
-    {:noreply, put_in(state.sent_at[n], t)}
+    event = {:video_frame_sent, n, t}
+
+    state = %{
+      state
+      | viewers: Map.new(state.viewers, fn {id, v} -> {id, notify_metrics(v, event)} end),
+        players: Map.new(state.players, fn {id, p} -> {id, notify_metrics(p, event)} end)
+    }
+
+    {:noreply, state}
   end
 
   @impl true
-  def handle_cast({:frame_received, id, n, t}, state) do
-    case {state.viewers[id], state.sent_at[n]} do
-      {nil, _sent_t} ->
-        {:noreply, state}
-
-      {viewer, nil} ->
-        {:noreply,
-         put_in(state.viewers[id], %{viewer | frames_unmatched: viewer.frames_unmatched + 1})}
-
-      {viewer, sent_t} ->
-        latency = t - sent_t
-
-        first_of_segment? =
-          viewer.last_recv_t == nil or t - viewer.last_recv_t > @segment_gap_ms
-
-        segment_latencies =
-          if first_of_segment?,
-            do: Enum.take([latency | viewer.segment_latencies], @max_samples),
-            else: viewer.segment_latencies
-
-        viewer = %{
-          viewer
-          | last_recv_t: t,
-            segments_seen: viewer.segments_seen + if(first_of_segment?, do: 1, else: 0),
-            segment_latencies: segment_latencies,
-            samples: Enum.take([{n, latency} | viewer.samples], @max_samples),
-            frames_matched: viewer.frames_matched + 1
-        }
-
-        {:noreply, put_in(state.viewers[id], viewer)}
+  def handle_cast({:viewer_event, id, event}, state) do
+    case state.viewers[id] do
+      nil -> {:noreply, state}
+      viewer -> {:noreply, put_in(state.viewers[id], notify_metrics(viewer, event))}
     end
   end
 
@@ -289,20 +260,29 @@ defmodule StreamDoctor.LatencyServer do
         server = self()
 
         pid =
-          StreamDoctor.read_frame_numbers(viewer.hls_url,
-            # same rationale as in StreamDoctor.Latency: join at the newest
-            # segment and run unpaced so the rolling minimum is the pure
-            # server latency
+          StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url,
+            # join at the newest segment and run unpaced so the rolling
+            # minimum is the pure server latency
             live_edge?: true,
             realtime?: false,
             on_frame: fn
-              {:ok, n} -> GenServer.cast(server, {:frame_received, id, n, now_ms()})
-              {:error, _reason} -> :ok
+              {:ok, n, pts_ms} ->
+                GenServer.cast(server, {:viewer_event, id, {:video_frame_received, n, pts_ms, now_ms()}})
+
+              {:error, reason} ->
+                GenServer.cast(server, {:viewer_event, id, {:undecoded, :video, reason, now_ms()}})
             end,
-            on_audio_symbol: fn _result -> :ok end
+            on_audio_symbol: fn
+              {:ok, m, pts_ms} ->
+                GenServer.cast(server, {:viewer_event, id, {:audio_symbol_received, m, pts_ms, now_ms()}})
+
+              {:error, reason} ->
+                GenServer.cast(server, {:viewer_event, id, {:undecoded, :audio, reason, now_ms()}})
+            end
           )
 
         Process.monitor(pid)
+        viewer = notify_metrics(viewer, {:playlist_ready, now_ms()})
         {:noreply, put_in(state.viewers[id], %{viewer | pid: pid, status: :receiving})}
 
       _stopped_or_missing ->
@@ -348,6 +328,10 @@ defmodule StreamDoctor.LatencyServer do
 
   ## Helpers
 
+  defp notify_metrics(entity, event) do
+    %{entity | metrics: Metric.handle_event_all(entity.metrics, event)}
+  end
+
   # an explicitly stopped pipeline stays :stopped; anything else that goes
   # down (finished input, crash) becomes :ended
   defp mark_down(%{status: :stopped} = entity, _error), do: entity
@@ -365,38 +349,18 @@ defmodule StreamDoctor.LatencyServer do
     Map.take(streamer, [:input, :rtmp_url, :status, :error])
   end
 
-  defp viewer_summary(viewer, _now) do
+  defp viewer_summary(viewer) do
     %{
       id: viewer.id,
       hls_url: viewer.hls_url,
       status: viewer.status,
       error: viewer.error,
-      frames_matched: viewer.frames_matched,
-      frames_unmatched: viewer.frames_unmatched,
-      # latency of the first frame of the latest segment
-      latency_ms: List.first(viewer.segment_latencies),
-      segments_seen: viewer.segments_seen,
-      segment_latencies: viewer.segment_latencies,
-      latest_samples:
-        viewer.samples
-        |> Enum.take(10)
-        |> Enum.map(fn {n, latency} -> %{frame: n, latency_ms: latency} end)
+      metrics: Metric.report_all(viewer.metrics)
     }
   end
 
   defp player_summary(player) do
-    %{
-      id: player.id,
-      # latency of the most recent successfully decoded + matched screenshot
-      latency_ms: player.latency_ms,
-      frames_matched: player.frames_matched,
-      frames_unmatched: player.frames_unmatched,
-      frames_undecoded: player.frames_undecoded,
-      latest_samples:
-        player.samples
-        |> Enum.take(10)
-        |> Enum.map(fn {n, latency} -> %{frame: n, latency_ms: latency} end)
-    }
+    %{id: player.id, metrics: Metric.report_all(player.metrics)}
   end
 
   defp now_ms(), do: System.monotonic_time(:millisecond)

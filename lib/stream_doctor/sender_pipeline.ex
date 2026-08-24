@@ -17,6 +17,19 @@ defmodule StreamDoctor.SenderPipeline do
 
   require Membrane.Pad
 
+  @doc """
+  Starts the pipeline (linked to the calling process) streaming `input` with
+  the markers to `rtmp_url`; `opts` are the module options minus `:input` and
+  `:rtmp_url`. Returns the pipeline pid.
+  """
+  @spec start_link(term(), String.t(), keyword()) :: pid()
+  def start_link(input, rtmp_url, opts \\ []) do
+    {:ok, _supervisor, pipeline} =
+      Membrane.Pipeline.start_link(__MODULE__, [input: input, rtmp_url: rtmp_url] ++ opts)
+
+    pipeline
+  end
+
   @impl true
   def handle_init(_ctx, opts) do
     state = %{
@@ -57,7 +70,7 @@ defmodule StreamDoctor.SenderPipeline do
   defp track_spec(:video, state) do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :video, codec: Membrane.RawVideo])
-    |> child(:overlay, StreamDoctor.OverlayFilter)
+    |> child(:video_marker_encoder, StreamDoctor.Probe.VideoMarkerEncoder)
     |> child(:encoder, %Membrane.H264.FFmpeg.Encoder{
       preset: :veryfast,
       tune: :zerolatency,
@@ -80,7 +93,7 @@ defmodule StreamDoctor.SenderPipeline do
   defp track_spec(:audio, state) do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :audio, codec: Membrane.RawAudio])
-    |> child(:audio_marker, StreamDoctor.AudioMarkerFilter)
+    |> child(:audio_marker_encoder, StreamDoctor.Probe.AudioMarkerEncoder)
     |> child(:audio_encoder, %Membrane.Transcoder{output_stream_format: Membrane.AAC})
     |> maybe_realtimer(:audio, state)
     |> via_in(Membrane.Pad.ref(:audio, 0))
@@ -95,5 +108,5 @@ defmodule StreamDoctor.SenderPipeline do
   defp maybe_send_probe(link, %{on_video_frame_sent: nil}), do: link
 
   defp maybe_send_probe(link, state),
-    do: child(link, :send_probe, %StreamDoctor.SendProbe{on_frame: state.on_video_frame_sent})
+    do: child(link, :send_reporter, %StreamDoctor.Probe.SendReporter{on_frame: state.on_video_frame_sent})
 end

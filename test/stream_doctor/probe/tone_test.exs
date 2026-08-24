@@ -1,7 +1,7 @@
-defmodule StreamDoctor.ToneTest do
+defmodule StreamDoctor.Probe.ToneTest do
   use ExUnit.Case, async: true
 
-  alias StreamDoctor.Tone
+  alias StreamDoctor.Probe.Tone
 
   @sample_rate 44_100
 

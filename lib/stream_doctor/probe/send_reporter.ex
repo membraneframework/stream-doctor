@@ -1,11 +1,11 @@
-defmodule StreamDoctor.SendProbe do
+defmodule StreamDoctor.Probe.SendReporter do
   @moduledoc """
   Transparent filter reporting the frame number of every buffer passing
   through via the `on_frame` callback.
 
   Buffers are numbered by order of arrival, starting at 0 and wrapping at
-  `StreamDoctor.Bar.max_frame/0` - the same numbering that
-  `StreamDoctor.OverlayFilter` draws on the frames. Placed right before the
+  `StreamDoctor.Probe.Bar.max_frame/0` - the same numbering that
+  `StreamDoctor.Probe.VideoMarkerEncoder` draws on the frames. Placed right before the
   RTMP sink (after the realtimer), it captures the moment a frame is actually
   sent out.
 
@@ -17,7 +17,7 @@ defmodule StreamDoctor.SendProbe do
 
   use Membrane.Filter
 
-  alias StreamDoctor.Bar
+  alias StreamDoctor.Probe.Bar
 
   def_input_pad(:input, accepted_format: _any)
   def_output_pad(:output, accepted_format: _any)

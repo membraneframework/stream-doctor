@@ -29,7 +29,7 @@ defmodule Mix.Tasks.StreamDoctor.Server do
     Mix.Task.run("app.start")
     Logger.configure(level: :info)
 
-    {:ok, _latency_server} = StreamDoctor.LatencyServer.start_link()
+    {:ok, _server} = StreamDoctor.Server.start_link()
     {:ok, _bandit} = Bandit.start_link(plug: StreamDoctor.Api, port: port)
 
     IO.puts("stream_doctor latency server listening on http://localhost:#{port}")

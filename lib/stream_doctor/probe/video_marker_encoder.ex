@@ -1,14 +1,14 @@
-defmodule StreamDoctor.OverlayFilter do
+defmodule StreamDoctor.Probe.VideoMarkerEncoder do
   @moduledoc """
-  Draws the frame-number bar (see `StreamDoctor.Bar`) on each raw video frame.
+  Draws the frame-number bar (see `StreamDoctor.Probe.Bar`) on each raw video frame.
 
   Frames are numbered by their order of arrival, starting at 0 and wrapping
-  at `StreamDoctor.Bar.max_frame/0`.
+  at `StreamDoctor.Probe.Bar.max_frame/0`.
   """
 
   use Membrane.Filter
 
-  alias StreamDoctor.Bar
+  alias StreamDoctor.Probe.Bar
   alias Membrane.RawVideo
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})

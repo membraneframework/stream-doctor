@@ -1,6 +1,6 @@
-defmodule StreamDoctor.FrameImage do
+defmodule StreamDoctor.Probe.ImageMarkerDecoder do
   @moduledoc """
-  Decodes the frame-number bar (see `StreamDoctor.Bar`) from a PNG screenshot
+  Decodes the frame-number bar (see `StreamDoctor.Probe.Bar`) from a PNG screenshot
   of the played video, e.g. captured from a player's `<video>` element.
 
   The bar geometry is proportional to the frame size, so a screenshot scaled
@@ -9,7 +9,7 @@ defmodule StreamDoctor.FrameImage do
   the bottom).
   """
 
-  alias StreamDoctor.Bar
+  alias StreamDoctor.Probe.Bar
 
   @spec decode_frame_number(binary()) ::
           {:ok, non_neg_integer()}

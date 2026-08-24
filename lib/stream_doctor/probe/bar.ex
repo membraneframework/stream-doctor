@@ -1,20 +1,21 @@
-defmodule StreamDoctor.Bar do
-  @moduledoc """
-  Encoding and decoding of the frame-number bar drawn at the bottom of the video.
-
-  The bar is a black strip spanning the whole width of the frame. It contains
-  #{2 + 14 + 1} squares, left to right:
-
-    * square 0 — always white (reference for "1"/white level),
-    * square 1 — always black (reference for "0"/black level),
-    * squares 2..15 — 14 data bits of the frame number, MSB first
-      (white = 1, black = 0), so frame numbers wrap at #{Integer.pow(2, 14)},
-    * square 16 — even-parity bit over the 14 data bits.
-
-  The geometry is derived deterministically from the frame resolution, so the
-  reader reconstructs it from the received stream format without any side channel.
-  Operates on raw video in I420 pixel format.
-  """
+defmodule StreamDoctor.Probe.Bar do
+  # Encoding and decoding of the frame-number bar drawn at the bottom of the
+  # video. Implementation detail of the video marker probes - not part of the
+  # public API.
+  #
+  # The bar is a black strip spanning the whole width of the frame. It
+  # contains 17 squares, left to right:
+  #
+  #   * square 0 - always white (reference for "1"/white level),
+  #   * square 1 - always black (reference for "0"/black level),
+  #   * squares 2..15 - 14 data bits of the frame number, MSB first
+  #     (white = 1, black = 0), so frame numbers wrap at 16384,
+  #   * square 16 - even-parity bit over the 14 data bits.
+  #
+  # The geometry is derived deterministically from the frame resolution, so
+  # the reader reconstructs it from the received stream format without any
+  # side channel. Operates on raw video in I420 pixel format.
+  @moduledoc false
 
   import Bitwise
 

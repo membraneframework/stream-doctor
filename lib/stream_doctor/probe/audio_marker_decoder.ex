@@ -1,6 +1,6 @@
-defmodule StreamDoctor.AudioDetectorSink do
+defmodule StreamDoctor.Probe.AudioMarkerDecoder do
   @moduledoc """
-  Reads the audio marker (see `StreamDoctor.Tone`) from raw audio and reports
+  Reads the audio marker (see `StreamDoctor.Probe.Tone`) from raw audio and reports
   the decoded symbol number (one per 30 ms) via the `on_symbol` callback.
 
   Symbol boundaries in the received stream are not aligned with buffer
@@ -15,7 +15,7 @@ defmodule StreamDoctor.AudioDetectorSink do
 
   require Membrane.Logger
 
-  alias StreamDoctor.Tone
+  alias StreamDoctor.Probe.Tone
   alias Membrane.RawAudio
 
   # Windows examined when scanning for symbol alignment
@@ -29,14 +29,25 @@ defmodule StreamDoctor.AudioDetectorSink do
 
   def_options(
     on_symbol: [
-      spec: ({:ok, non_neg_integer()} | {:error, atom()} -> any()) | nil,
+      spec: ({:ok, non_neg_integer(), number() | nil} | {:error, atom()} -> any()) | nil,
       default: nil,
       description: """
-      Called with `{:ok, symbol_number}` or `{:error, reason}` for each 30 ms
+      Called with `{:ok, symbol_number, pts_ms}` (`pts_ms` is the symbol's
+      position on the stream timeline in milliseconds - the first buffer's
+      presentation timestamp plus the sample offset - or `nil` when the
+      stream carries no timestamps) or `{:error, reason}` for each 30 ms
       audio symbol. Defaults to logging the result.
       """
     ]
   )
+
+  @doc "Number of distinct symbol numbers; the marker's symbol counter wraps at this value."
+  @spec max_symbol() :: pos_integer()
+  defdelegate max_symbol(), to: Tone
+
+  @doc "Duration of one audio symbol in milliseconds."
+  @spec symbol_ms() :: pos_integer()
+  defdelegate symbol_ms(), to: Tone
 
   @impl true
   def handle_init(_ctx, opts) do
@@ -45,7 +56,11 @@ defmodule StreamDoctor.AudioDetectorSink do
       format: nil,
       buffer: <<>>,
       synced?: false,
-      error_streak: 0
+      error_streak: 0,
+      # pts of the first buffer + count of mono samples appended since, so a
+      # symbol's pts can be derived from its sample offset in the stream
+      anchor_pts_ms: nil,
+      appended_samples: 0
     }
 
     {[], state}
@@ -53,14 +68,37 @@ defmodule StreamDoctor.AudioDetectorSink do
 
   @impl true
   def handle_stream_format(:input, stream_format, _ctx, state) do
-    {[], %{state | format: stream_format, buffer: <<>>, synced?: false}}
+    state = %{
+      state
+      | format: stream_format,
+        buffer: <<>>,
+        synced?: false,
+        anchor_pts_ms: nil,
+        appended_samples: 0
+    }
+
+    {[], state}
   end
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
     mono = downmix_to_floats(buffer.payload, state.format.channels)
-    state = process(%{state | buffer: state.buffer <> mono})
-    {[], state}
+
+    anchor_pts_ms =
+      cond do
+        state.anchor_pts_ms != nil -> state.anchor_pts_ms
+        state.appended_samples == 0 and buffer.pts != nil -> Membrane.Time.as_milliseconds(buffer.pts, :round)
+        true -> nil
+      end
+
+    state = %{
+      state
+      | buffer: state.buffer <> mono,
+        anchor_pts_ms: anchor_pts_ms,
+        appended_samples: state.appended_samples + div(byte_size(mono), 8)
+    }
+
+    {[], process(state)}
   end
 
   defp process(state) do
@@ -131,13 +169,19 @@ defmodule StreamDoctor.AudioDetectorSink do
       |> binary_part(0, symbol_bytes)
       |> Tone.decode_window(state.format.sample_rate)
 
+    result =
+      case result do
+        {:ok, symbol_number} -> {:ok, symbol_number, symbol_pts_ms(state)}
+        {:error, _reason} = error -> error
+      end
+
     state.on_symbol.(result)
 
     rest_size = byte_size(state.buffer) - symbol_bytes
     state = %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
 
     case result do
-      {:ok, _n} ->
+      {:ok, _n, _pts_ms} ->
         %{state | error_streak: 0}
 
       {:error, _reason} when state.error_streak + 1 >= @max_error_streak ->
@@ -158,7 +202,16 @@ defmodule StreamDoctor.AudioDetectorSink do
     end
   end
 
-  defp log_result({:ok, symbol_number}),
+  # pts of the front of `state.buffer` (= the symbol about to be decoded):
+  # anchor pts + the offset of already-consumed samples
+  defp symbol_pts_ms(%{anchor_pts_ms: nil}), do: nil
+
+  defp symbol_pts_ms(state) do
+    consumed_samples = state.appended_samples - div(byte_size(state.buffer), 8)
+    state.anchor_pts_ms + consumed_samples * 1000 / state.format.sample_rate
+  end
+
+  defp log_result({:ok, symbol_number, _pts_ms}),
     do: Membrane.Logger.info("Decoded audio symbol: #{symbol_number}")
 
   defp log_result({:error, reason}),

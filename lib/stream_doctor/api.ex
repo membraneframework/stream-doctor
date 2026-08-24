@@ -7,10 +7,14 @@ defmodule StreamDoctor.Api do
     * `POST /streamer` - body `{"input": "test.mp4", "rtmp_url": "rtmps://..."}`;
       starts the streamer pipeline (one at a time),
     * `GET /streamer` / `DELETE /streamer` - status / stop,
-    * `POST /viewers` - body `{"hls_url": "https://....m3u8"}`; waits for the
-      playlist in the background and starts a viewer pipeline; returns its `id`,
-    * `GET /viewers/:id` - viewer status incl. `pure_latency_ms` (rolling
-      minimum, see `StreamDoctor.LatencyServer`) and `latest_samples`,
+    * `POST /viewers` - body `{"hls_url": "https://....m3u8"}` with optional
+      `"metrics": ["latency", "ttff", "av_drift"]` (default: all); waits for
+      the playlist in the background and starts a viewer pipeline; returns its
+      `id`,
+    * `GET /viewers/:id` - viewer status; measurements are under `metrics`,
+      keyed by metric name (see `StreamDoctor.Metric`), e.g.
+      `metrics.latency.latency_ms`, `metrics.ttff.time_to_first_frame_ms`,
+      `metrics.av_drift.drift_ms`,
     * `DELETE /viewers/:id` - stop the viewer,
     * `POST /players/:id/frames` - body: a PNG screenshot of the played video
       (content-type `image/png`); decodes the frame number from the bar and
@@ -18,14 +22,14 @@ defmodule StreamDoctor.Api do
       null when the frame's send time is unknown) or
       `{"decoded": false, "reason": "..."}`. The player entry is created on
       first use,
-    * `GET /players/:id` - player status incl. `latency_ms` of the latest
-      decoded screenshot,
+    * `GET /players/:id` - player status; `metrics.latency.latency_ms` is the
+      latency of the latest decoded screenshot,
     * `GET /status` - streamer + all viewers + all players.
   """
 
   use Plug.Router
 
-  alias StreamDoctor.LatencyServer
+  alias StreamDoctor.Server
 
   plug(:match)
 
@@ -41,7 +45,7 @@ defmodule StreamDoctor.Api do
   post "/streamer" do
     case conn.body_params do
       %{"input" => input, "rtmp_url" => rtmp_url} ->
-        case LatencyServer.start_streamer(input, rtmp_url) do
+        case Server.start_streamer(input, rtmp_url) do
           {:ok, streamer} ->
             send_json(conn, 201, streamer)
 
@@ -55,14 +59,14 @@ defmodule StreamDoctor.Api do
   end
 
   get "/streamer" do
-    case LatencyServer.streamer() do
+    case Server.streamer() do
       {:ok, streamer} -> send_json(conn, 200, streamer)
       {:error, :not_found} -> send_json(conn, 404, %{error: "no streamer started"})
     end
   end
 
   delete "/streamer" do
-    case LatencyServer.stop_streamer() do
+    case Server.stop_streamer() do
       {:ok, streamer} -> send_json(conn, 200, streamer)
       {:error, :not_found} -> send_json(conn, 404, %{error: "no streamer started"})
     end
@@ -70,9 +74,15 @@ defmodule StreamDoctor.Api do
 
   post "/viewers" do
     case conn.body_params do
-      %{"hls_url" => hls_url} ->
-        {:ok, viewer} = LatencyServer.start_viewer(hls_url)
-        send_json(conn, 201, viewer)
+      %{"hls_url" => hls_url} = params ->
+        case Server.start_viewer(hls_url, params["metrics"]) do
+          {:ok, viewer} ->
+            send_json(conn, 201, viewer)
+
+          {:error, {:unknown_metric, name}} ->
+            known = StreamDoctor.Metric.names() |> Enum.join(", ")
+            send_json(conn, 400, %{error: "unknown metric #{inspect(name)} (known: #{known})"})
+        end
 
       _params ->
         send_json(conn, 400, %{error: ~s(expected body {"hls_url": "..."})})
@@ -80,14 +90,14 @@ defmodule StreamDoctor.Api do
   end
 
   get "/viewers/:id" do
-    case LatencyServer.viewer(id) do
+    case Server.viewer(id) do
       {:ok, viewer} -> send_json(conn, 200, viewer)
       {:error, :not_found} -> send_json(conn, 404, %{error: "no viewer #{id}"})
     end
   end
 
   delete "/viewers/:id" do
-    case LatencyServer.stop_viewer(id) do
+    case Server.stop_viewer(id) do
       {:ok, viewer} -> send_json(conn, 200, viewer)
       {:error, :not_found} -> send_json(conn, 404, %{error: "no viewer #{id}"})
     end
@@ -100,8 +110,8 @@ defmodule StreamDoctor.Api do
 
     case Plug.Conn.read_body(conn, length: 20_000_000) do
       {:ok, png, conn} ->
-        result = StreamDoctor.FrameImage.decode_frame_number(png)
-        send_json(conn, 200, LatencyServer.record_player_frame(id, result, t))
+        result = StreamDoctor.Probe.ImageMarkerDecoder.decode_frame_number(png)
+        send_json(conn, 200, Server.record_player_frame(id, result, t))
 
       {_more_or_error, _partial, conn} ->
         send_json(conn, 413, %{error: "screenshot too large"})
@@ -109,14 +119,14 @@ defmodule StreamDoctor.Api do
   end
 
   get "/players/:id" do
-    case LatencyServer.player(id) do
+    case Server.player(id) do
       {:ok, player} -> send_json(conn, 200, player)
       {:error, :not_found} -> send_json(conn, 404, %{error: "no player #{id}"})
     end
   end
 
   get "/status" do
-    send_json(conn, 200, LatencyServer.status())
+    send_json(conn, 200, Server.status())
   end
 
   match _ do
