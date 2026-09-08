@@ -1,5 +1,5 @@
-defmodule StreamDoctor.Hls do
-  @moduledoc "Waits for an HLS playlist to show up before starting a receiver."
+defmodule StreamDoctor.Server.Hls do
+  @moduledoc false
 
   alias ExM3U8.{MediaPlaylist, MultivariantPlaylist}
   alias ExM3U8.Tags.{Segment, Stream}

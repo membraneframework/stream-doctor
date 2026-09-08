@@ -93,7 +93,7 @@ defmodule StreamDoctor.Server do
 
     spawn_link(fn ->
       try do
-        StreamDoctor.Hls.await_playlist(hls_url, @hls_timeout)
+        __MODULE__.Hls.await_playlist(hls_url, @hls_timeout)
         send(server, {:playlist_ready, id})
       rescue
         e -> send(server, {:viewer_failed, id, Exception.message(e)})
