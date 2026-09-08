@@ -5,7 +5,7 @@ defmodule StreamDoctor.Server do
   require Logger
 
   alias StreamDoctor.Metric
-  alias StreamDoctor.Metric.Collector
+  alias StreamDoctor.Collector
 
   @hls_timeout 120_000
   @metric_specs [{Metric.AvDrift, []}]

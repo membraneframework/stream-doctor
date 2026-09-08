@@ -35,7 +35,7 @@ every 2 s because IVS drops you otherwise.
 ## Metrics
 
 `StreamDoctor.Metric` modules, folds over events, one
-`StreamDoctor.Metric.Collector` per viewer. Just one for now:
+`StreamDoctor.Collector` per viewer. Just one for now:
 
 * `av_drift` - audio pts offset minus video pts offset, i.e. what a player
   syncing by timestamps would show. Positive = audio late.

@@ -5,7 +5,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   require Membrane.Logger
 
-  alias StreamDoctor.Metric.Collector
+  alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Audio.Tone
   alias Membrane.RawAudio
 

@@ -1,8 +1,8 @@
-defmodule StreamDoctor.Metric.CollectorTest do
+defmodule StreamDoctor.CollectorTest do
   use ExUnit.Case, async: true
 
   alias StreamDoctor.Metric
-  alias StreamDoctor.Metric.Collector
+  alias StreamDoctor.Collector
 
   test "folds reported events and serves reports" do
     {:ok, collector} = Collector.start_link([{Metric.AvDrift, []}])

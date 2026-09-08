@@ -5,7 +5,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
 
   require Membrane.Logger
 
-  alias StreamDoctor.Metric.Collector
+  alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Video.Bar
   alias Membrane.RawVideo
 
