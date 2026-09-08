@@ -105,7 +105,8 @@ the sender and being decoded by a viewer.
 
 The send timestamp is captured by `StreamDoctor.Probe.SendReporter`, a transparent
 filter placed right before the RTMP sink (after real-time pacing), so encoding
-and pacing delays don't inflate the result; the receive timestamp is captured
+and pacing delays don't inflate the result (a second instance on the audio
+track reports the send time of every audio buffer, for `av_drift`); the receive timestamp is captured
 by `StreamDoctor.Probe.VideoMarkerDecoder` as it decodes each frame. Both timestamps
 come from the same monotonic clock, so there is no clock-synchronization
 error — the measured latency covers the RTMP ingest, the server's HLS
@@ -133,9 +134,12 @@ all collectors), and reports appear under the metric name:
   for players,
 * `ttff` (`StreamDoctor.Metric.TimeToFirstFrame`) — time from viewer request
   to playlist availability / first decoded frame / first audio symbol,
-* `av_drift` (`StreamDoctor.Metric.AvDrift`) — audio/video desync: the
-  difference between the media positions implied by the latest video and
-  audio marker counters.
+* `av_drift` (`StreamDoctor.Metric.AvDrift`) — audio/video desync as a
+  timestamp-syncing player presents it: on the receiver each track yields a
+  stable `pts - media position` offset (media position = marker counter ×
+  frame/symbol duration); the drift is the audio offset minus the video
+  offset. Arrival times are not used - the decoders hand the tracks over in
+  bursts of different shape, which would swamp any arrival-based comparison.
 
 Adding a metric = one module implementing the behaviour plus a registry entry
 in `StreamDoctor.Metric`; the server and API need no changes.
@@ -224,6 +228,18 @@ curl -X POST localhost:4040/viewers \
   -H 'content-type: application/json' \
   -d '{"hls_url": "http://127.0.0.1:8123/index.m3u8"}'
 curl localhost:4040/viewers/viewer-1
+```
+
+## Example: A/V drift against local ffmpeg
+
+`examples/av_drift.mjs` automates the local end-to-end test for the `av_drift`
+metric: it starts `mix stream_doctor.server`, serves the HLS output, and runs
+two ffmpeg RTMP -> HLS scenarios - `-c copy` (expected drift ~0 ms) and
+`-af adelay=200|200` (audio content delayed 200 ms, expected ~+200 ms) -
+printing the measured drift for each:
+
+```sh
+node examples/av_drift.mjs [--file test.mp4] [--measure-s 30]
 ```
 
 ## Requirements

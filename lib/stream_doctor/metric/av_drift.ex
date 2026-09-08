@@ -1,81 +1,115 @@
 defmodule StreamDoctor.Metric.AvDrift do
   @moduledoc """
-  Audio/video desynchronization, computed from the marker counters alone.
+  Audio/video desynchronization as a timestamp-syncing player would present
+  it: how far the audio content is shifted against the video content at equal
+  presentation timestamps.
 
-  Both counters encode the sender's media position: video frame `n` was at
+  Both markers encode the sender's media position: video frame `n` is at
   `n * frame_duration`, audio symbol `m` at
   `m * #{StreamDoctor.Probe.AudioMarkerDecoder.symbol_ms()} ms`, and both
-  start at 0 together. Whenever either counter advances, the drift is the
-  difference of the media positions the two tracks have reached:
+  tracks start at 0 together. On the receiver every decoded frame/symbol also
+  carries the stream's presentation timestamp, so each track yields a stable
+  offset `pts - media position` (constant while the tracks are aligned; the
+  common part is the stream's timestamp origin). The drift is the difference
+  of the two:
 
-      drift_ms = n * frame_duration - m * symbol_ms
+      drift_ms = (audio pts - m * symbol_ms) - (video pts - n * frame_duration)
 
-  Positive drift = the decoded video is further into the media than the
-  decoded audio (video leads).
+  Positive drift = the audio content is later than the video content of the
+  same timestamp (video leads / audio lags).
 
-  The counters wrap (`StreamDoctor.Probe.VideoMarkerDecoder.max_frame()`,
-  `StreamDoctor.Probe.AudioMarkerDecoder.max_symbol()`) and are unwrapped by
-  continuity. The video frame duration is not carried by the marker; it is
-  calibrated from the counters themselves - over the same receive window both
-  tracks cover the same media time span, so
-  `frame_duration = symbol_ms * Δm / Δn` - once at least
-  #{60} video frames have been observed. Until then `drift_ms` is `nil`.
+  Wall-clock arrival is deliberately not used: the two decoders hand over
+  their tracks in bursts of different shape (the H264 decoder holds the tail
+  of every segment until the next one, the audio decoder buffers while
+  synchronizing to the marker), which would dominate any arrival-based
+  comparison. A player syncs by timestamps, so timestamps are what counts.
 
-  A single comparison is noisy: the two decoders are at slightly different
-  stream positions at any instant (segment-batched, concurrent decoding), so
-  the reported `drift_ms` is the median of the recent samples.
+  The frame duration is the timestamp step between consecutively numbered
+  received frames. The audio counter wraps (`max_symbol * symbol_ms` =
+  3.84 s) and is unwrapped by continuity; the initial ambiguity is resolved
+  against the video offset, so drift is resolved correctly up to ±half a
+  cycle (±1.92 s). `drift_ms` is the median of the recent samples (one per
+  audio symbol); `nil` until both tracks have been decoded.
   """
 
   @behaviour StreamDoctor.Metric
 
-  alias StreamDoctor.Probe.{AudioMarkerDecoder, VideoMarkerDecoder}
+  alias StreamDoctor.Probe.AudioMarkerDecoder
 
   @max_samples 50
-  # video frames needed before the frame duration (and thus drift) is reported
-  @calibration_frames 60
 
   @impl true
   def name(), do: :av_drift
 
   @impl true
   def init(_opts) do
-    %{video: nil, video_first: nil, audio: nil, audio_first: nil, samples: []}
+    %{
+      # last received video frame: {number, pts_ms}
+      video: nil,
+      frame_duration: nil,
+      # pts - media position of the video track
+      video_offset: nil,
+      # unwrapped number of the last received audio symbol
+      audio: nil,
+      samples: []
+    }
   end
 
   @impl true
-  def handle_event({:video_frame_received, n, _pts_ms, _t}, state) do
-    n = unwrap(n, state.video, VideoMarkerDecoder.max_frame())
+  def handle_event({:video_frame_received, _n, nil, _t}, state), do: state
 
-    %{state | video: n, video_first: state.video_first || n}
-    |> compute()
+  def handle_event({:video_frame_received, n, pts_ms, _t}, state) do
+    frame_duration =
+      case state.video do
+        {last_n, last_pts} when n == last_n + 1 and pts_ms > last_pts -> pts_ms - last_pts
+        _other -> state.frame_duration
+      end
+
+    video_offset = frame_duration && pts_ms - n * frame_duration
+
+    %{state | video: {n, pts_ms}, frame_duration: frame_duration, video_offset: video_offset}
   end
 
-  def handle_event({:audio_symbol_received, m, _pts_ms, _t}, state) do
-    m = unwrap(m, state.audio, AudioMarkerDecoder.max_symbol())
+  def handle_event({:audio_symbol_received, _m, nil, _t}, state), do: state
 
-    %{state | audio: m, audio_first: state.audio_first || m}
-    |> compute()
+  def handle_event({:audio_symbol_received, m, pts_ms, _t}, state) do
+    case state.video_offset do
+      nil ->
+        state
+
+      video_offset ->
+        m = unwrap(m, pts_ms, state.audio, video_offset)
+        drift = pts_ms - m * AudioMarkerDecoder.symbol_ms() - video_offset
+        samples = Enum.take([round(drift) | state.samples], @max_samples)
+        %{state | audio: m, samples: samples}
+    end
   end
 
   def handle_event(_event, state), do: state
 
   @impl true
   def report(state) do
-    frame_duration = frame_duration(state)
-
     %{
       drift_ms: median(state.samples),
-      frame_duration_ms: frame_duration && Float.round(frame_duration, 2),
+      frame_duration_ms: state.frame_duration && Float.round(state.frame_duration / 1, 2),
       latest_samples: Enum.take(state.samples, 10)
     }
   end
 
-  # Unwraps a counter that wraps at `max` by picking the value closest to the
-  # previous (unwrapped) one.
-  defp unwrap(n, nil, _max), do: n
+  # First symbol: the cycle is picked so that the audio offset lands closest
+  # to the video offset (|drift| < half a cycle). Later ones: closest to the
+  # previous unwrapped number.
+  defp unwrap(m, pts_ms, nil, video_offset) do
+    cycle_ms = AudioMarkerDecoder.max_symbol() * AudioMarkerDecoder.symbol_ms()
+    # media position the symbol should have for zero drift
+    target_ms = pts_ms - video_offset
+    k = round((target_ms - m * AudioMarkerDecoder.symbol_ms()) / cycle_ms)
+    m + k * AudioMarkerDecoder.max_symbol()
+  end
 
-  defp unwrap(n, last, max) do
-    candidate = div(last, max) * max + n
+  defp unwrap(m, _pts_ms, last, _video_offset) do
+    max = AudioMarkerDecoder.max_symbol()
+    candidate = div(last, max) * max + m
 
     cond do
       candidate < last - div(max, 2) -> candidate + max
@@ -83,24 +117,6 @@ defmodule StreamDoctor.Metric.AvDrift do
       true -> candidate
     end
   end
-
-  defp compute(state) do
-    case frame_duration(state) do
-      nil ->
-        state
-
-      frame_duration ->
-        drift = state.video * frame_duration - state.audio * AudioMarkerDecoder.symbol_ms()
-        %{state | samples: Enum.take([round(drift) | state.samples], @max_samples)}
-    end
-  end
-
-  defp frame_duration(%{video: n, video_first: n0, audio: m, audio_first: m0})
-       when n != nil and m != nil and n - n0 >= @calibration_frames and m > m0 do
-    AudioMarkerDecoder.symbol_ms() * (m - m0) / (n - n0)
-  end
-
-  defp frame_duration(_state), do: nil
 
   defp median([]), do: nil
 

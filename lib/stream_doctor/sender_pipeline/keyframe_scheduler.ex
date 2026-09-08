@@ -1,17 +1,17 @@
-defmodule StreamDoctor.KeyframeScheduler do
-  @moduledoc """
-  Enforces a time-based keyframe interval, independent of the input framerate.
+defmodule StreamDoctor.SenderPipeline.KeyframeScheduler do
+  @moduledoc false
 
-  Placed right after the H264 encoder, it watches the pts of passing buffers
-  and sends `Membrane.KeyframeRequestEvent` upstream (to the encoder) whenever
-  `interval` of stream time has elapsed since the previous request. The
-  encoder then encodes the next frame as a keyframe.
-
-  The encoder's frame-count based `gop_size` cannot express "2 s" - the same
-  frame count means different durations at different framerates (60 frames is
-  2 s at 30 fps but 2.4 s at 25 fps). Scheduling by pts sidesteps that and
-  also handles variable framerate.
-  """
+  # Enforces a time-based keyframe interval, independent of the input framerate.
+  #
+  # Placed right after the H264 encoder, it watches the pts of passing buffers
+  # and sends `Membrane.KeyframeRequestEvent` upstream (to the encoder) whenever
+  # `interval` of stream time has elapsed since the previous request. The
+  # encoder then encodes the next frame as a keyframe.
+  #
+  # The encoder's frame-count based `gop_size` cannot express "2 s" - the same
+  # frame count means different durations at different framerates (60 frames is
+  # 2 s at 30 fps but 2.4 s at 25 fps). Scheduling by pts sidesteps that and
+  # also handles variable framerate.
 
   use Membrane.Filter
 

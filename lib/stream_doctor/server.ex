@@ -31,6 +31,8 @@ defmodule StreamDoctor.Server do
   @hls_timeout 120_000
 
   @player_metric_specs [{Metric.Latency, [mode: :latest]}]
+  # audio send history kept for seeding (AAC frames are ~21 ms: ~40 s)
+  @recent_audio_sends 2000
 
   ## Client API
 
@@ -88,9 +90,10 @@ defmodule StreamDoctor.Server do
     # pipelines are linked to this server; trap exits so a crashing pipeline
     # is recorded as :ended instead of taking the server down
     Process.flag(:trap_exit, true)
-    # for the streamer's frames_sent counter (backing "is it live yet?")
+    # for the streamer's frames_sent counter (backing "is it live yet?") and
+    # the recent-sends history seeded into late-created collectors
     :ok = Collector.subscribe_send_events()
-    {:ok, %{streamer: nil, viewers: %{}, players: %{}, next_id: 1}}
+    {:ok, %{streamer: nil, viewers: %{}, players: %{}, next_id: 1, recent_sends: empty_sends()}}
   end
 
   @impl true
@@ -110,7 +113,10 @@ defmodule StreamDoctor.Server do
         error: nil,
         frames_sent: 0
       }
-      {:reply, {:ok, streamer_summary(streamer)}, %{state | streamer: streamer}}
+
+      # a new stream restarts the frame numbering - drop the old history
+      {:reply, {:ok, streamer_summary(streamer)},
+       %{state | streamer: streamer, recent_sends: empty_sends()}}
     end
   end
 
@@ -158,6 +164,7 @@ defmodule StreamDoctor.Server do
 
         {:ok, collector} = Collector.start_link(metric_specs)
         Collector.event(collector, {:session_started, now_ms()})
+        seed_sends(collector, state.recent_sends)
 
         viewer = %{
           id: id,
@@ -210,6 +217,7 @@ defmodule StreamDoctor.Server do
     player =
       Map.get_lazy(state.players, id, fn ->
         {:ok, collector} = Collector.start_link(@player_metric_specs)
+        seed_sends(collector, state.recent_sends)
         %{id: id, collector: collector}
       end)
 
@@ -220,13 +228,17 @@ defmodule StreamDoctor.Server do
           %{decoded: false, reason: reason}
 
         {:ok, n} ->
-          report = Collector.event_and_report(player.collector, {:video_frame_received, n, nil, t})
+          report =
+            Collector.event_and_report(player.collector, {:video_frame_received, n, nil, t})
 
           # matched if the metric's newest sample is the frame just recorded
           latency_ms =
             case report do
-              %{latency: %{latest_samples: [%{frame: ^n, latency_ms: latency} | _rest]}} -> latency
-              _report -> nil
+              %{latency: %{latest_samples: [%{frame: ^n, latency_ms: latency} | _rest]}} ->
+                latency
+
+              _report ->
+                nil
             end
 
           %{decoded: true, frame: n, latency_ms: latency_ms}
@@ -244,11 +256,19 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_cast({:event, {:video_frame_sent, _n, _t}}, state) do
+  def handle_cast({:event, {:video_frame_sent, n, t}}, state) do
     streamer =
       state.streamer && %{state.streamer | frames_sent: state.streamer.frames_sent + 1}
 
-    {:noreply, %{state | streamer: streamer}}
+    # bounded: frame numbers wrap, so a new send overwrites the old slot
+    recent_sends = %{state.recent_sends | video: Map.put(state.recent_sends.video, n, t)}
+    {:noreply, %{state | streamer: streamer, recent_sends: recent_sends}}
+  end
+
+  @impl true
+  def handle_cast({:event, {:audio_sent, media_ms, t}}, state) do
+    audio = Enum.take([{media_ms, t} | state.recent_sends.audio], @recent_audio_sends)
+    {:noreply, %{state | recent_sends: %{state.recent_sends | audio: audio}}}
   end
 
   @impl true
@@ -313,6 +333,23 @@ defmodule StreamDoctor.Server do
   end
 
   ## Helpers
+
+  # Replays the send history into a freshly created collector: sessions start
+  # after the streamer, and what they display/decode was sent up to their full
+  # latency earlier - without the history those frames would never match a
+  # send time.
+  defp seed_sends(collector, recent_sends) do
+    video = Enum.map(recent_sends.video, fn {n, t} -> {t, {:video_frame_sent, n, t}} end)
+    audio = Enum.map(recent_sends.audio, fn {m, t} -> {t, {:audio_sent, m, t}} end)
+
+    (video ++ audio)
+    |> Enum.sort_by(fn {t, _event} -> t end)
+    |> Enum.each(fn {_t, event} -> Collector.event(collector, event) end)
+  end
+
+  # video: frame number => send time (bounded by the counter wrap); audio:
+  # most recent {media_ms, send time} first
+  defp empty_sends(), do: %{video: %{}, audio: []}
 
   # an explicitly stopped pipeline stays :stopped; anything else that goes
   # down (finished input, crash) becomes :ended

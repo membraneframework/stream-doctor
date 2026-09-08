@@ -9,8 +9,9 @@ defmodule StreamDoctor.SenderPipeline do
     * `:realtime?` - pace the stream to real time (default `true`); set to
       `false` to push as fast as possible.
 
-  Every video frame's send moment is broadcast to all metric collectors by
-  `StreamDoctor.Probe.SendReporter`, placed right before the RTMP sink.
+  The send moment of every video frame and audio buffer is broadcast to all
+  metric collectors by `StreamDoctor.Probe.SendReporter` probes placed right
+  before the RTMP sink.
   """
 
   use Membrane.Pipeline
@@ -81,10 +82,10 @@ defmodule StreamDoctor.SenderPipeline do
     })
     # keyframe every 2 s of stream time regardless of framerate - the interval
     # advised by live-streaming ingests (e.g. Amazon IVS)
-    |> child(:keyframe_scheduler, StreamDoctor.KeyframeScheduler)
+    |> child(:keyframe_scheduler, __MODULE__.KeyframeScheduler)
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
     |> maybe_realtimer(:video, state)
-    |> child(:send_reporter, StreamDoctor.Probe.SendReporter)
+    |> child(:video_send_reporter, %StreamDoctor.Probe.SendReporter{kind: :video})
     |> via_in(Membrane.Pad.ref(:video, 0))
     |> get_child(:rtmp_sink)
   end
@@ -95,6 +96,7 @@ defmodule StreamDoctor.SenderPipeline do
     |> child(:audio_marker_encoder, StreamDoctor.Probe.AudioMarkerEncoder)
     |> child(:audio_encoder, %Membrane.Transcoder{output_stream_format: Membrane.AAC})
     |> maybe_realtimer(:audio, state)
+    |> child(:audio_send_reporter, %StreamDoctor.Probe.SendReporter{kind: :audio})
     |> via_in(Membrane.Pad.ref(:audio, 0))
     |> get_child(:rtmp_sink)
   end

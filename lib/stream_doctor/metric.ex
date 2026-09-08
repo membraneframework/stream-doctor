@@ -22,6 +22,7 @@ defmodule StreamDoctor.Metric do
           {:session_started, t :: integer()}
           | {:playlist_ready, t :: integer()}
           | {:video_frame_sent, frame :: non_neg_integer(), t :: integer()}
+          | {:audio_sent, media_ms :: non_neg_integer(), t :: integer()}
           | {:video_frame_received, frame :: non_neg_integer(), pts_ms :: number() | nil,
              t :: integer()}
           | {:audio_symbol_received, symbol :: non_neg_integer(), pts_ms :: number() | nil,
