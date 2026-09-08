@@ -1,14 +1,9 @@
-defmodule StreamDoctor.Probe.VideoMarkerEncoder do
-  @moduledoc """
-  Draws the frame-number bar (see `StreamDoctor.Probe.Bar`) on each raw video frame.
-
-  Frames are numbered by their order of arrival, starting at 0 and wrapping
-  at `StreamDoctor.Probe.Bar.max_frame/0`.
-  """
+defmodule StreamDoctor.Probe.Video.MarkerEncoder do
+  @moduledoc "Draws the bar on each frame. Counts from 0, wraps at `StreamDoctor.Probe.Video.Bar.max_frame/0`."
 
   use Membrane.Filter
 
-  alias StreamDoctor.Probe.Bar
+  alias StreamDoctor.Probe.Video.Bar
   alias Membrane.RawVideo
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})

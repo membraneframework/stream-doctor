@@ -1,21 +1,9 @@
-defmodule StreamDoctor.Probe.Bar do
-  # Encoding and decoding of the frame-number bar drawn at the bottom of the
-  # video. Implementation detail of the video marker probes - not part of the
-  # public API.
-  #
-  # The bar is a black strip spanning the whole width of the frame. It
-  # contains 17 squares, left to right:
-  #
-  #   * square 0 - always white (reference for "1"/white level),
-  #   * square 1 - always black (reference for "0"/black level),
-  #   * squares 2..15 - 14 data bits of the frame number, MSB first
-  #     (white = 1, black = 0), so frame numbers wrap at 16384,
-  #   * square 16 - even-parity bit over the 14 data bits.
-  #
-  # The geometry is derived deterministically from the frame resolution, so
-  # the reader reconstructs it from the received stream format without any
-  # side channel. Operates on raw video in I420 pixel format.
+defmodule StreamDoctor.Probe.Video.Bar do
   @moduledoc false
+
+  # The bar: black strip at the bottom, 17 squares. 0 = white ref, 1 = black
+  # ref, 2..15 = 14 bits of frame number MSB first, 16 = parity. Geometry
+  # comes from the resolution. I420 only.
 
   import Bitwise
 
@@ -27,7 +15,6 @@ defmodule StreamDoctor.Probe.Bar do
   @black 16
   @neutral_chroma 128
 
-  # Minimal luma spread between the two reference squares required to accept the bar
   @min_contrast 32
 
   @type geometry :: %{
@@ -40,15 +27,10 @@ defmodule StreamDoctor.Probe.Bar do
           xs: [non_neg_integer()]
         }
 
-  @doc "Number of distinct frame numbers; frame counter wraps at this value."
   @spec max_frame() :: pos_integer()
   def max_frame(), do: @max_frame
 
-  @doc """
-  Computes the bar geometry for the given resolution.
-
-  All coordinates are even so the bar aligns with 4:2:0 chroma subsampling.
-  """
+  @doc "Even coordinates, for 4:2:0."
   @spec geometry(pos_integer(), pos_integer()) :: geometry()
   def geometry(width, height) do
     square = width |> div(24) |> max(8) |> even()
@@ -75,9 +57,6 @@ defmodule StreamDoctor.Probe.Bar do
     }
   end
 
-  @doc """
-  Draws the bar with the given frame number onto an I420 payload.
-  """
   @spec draw(binary(), geometry(), non_neg_integer()) :: binary()
   def draw(payload, %{width: width, height: height} = geometry, frame_number) do
     y_size = width * height
@@ -111,13 +90,6 @@ defmodule StreamDoctor.Probe.Bar do
     y <> u <> v
   end
 
-  @doc """
-  Reads the frame number back from an I420 payload.
-
-  Returns `{:ok, frame_number}`, `{:error, :markers_not_found}` when the two
-  reference squares don't show enough contrast (no bar in the frame), or
-  `{:error, :parity_mismatch}` when the parity bit doesn't match the data bits.
-  """
   @spec decode(binary(), geometry()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}
   def decode(payload, %{width: width, height: height} = geometry) do
@@ -160,8 +132,6 @@ defmodule StreamDoctor.Probe.Bar do
     end)
   end
 
-  # Averages luma over the central part of a square, skipping a quarter-side
-  # margin on each edge to stay clear of compression artifacts at the borders.
   defp square_luma_average(y_plane, geometry, x) do
     margin = div(geometry.square, 4)
     x0 = x + margin

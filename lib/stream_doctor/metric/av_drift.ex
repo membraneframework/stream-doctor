@@ -1,40 +1,18 @@
 defmodule StreamDoctor.Metric.AvDrift do
   @moduledoc """
-  Audio/video desynchronization as a timestamp-syncing player would present
-  it: how far the audio content is shifted against the video content at equal
-  presentation timestamps.
-
-  Both markers encode the sender's media position: video frame `n` is at
-  `n * frame_duration`, audio symbol `m` at
-  `m * #{StreamDoctor.Probe.AudioMarkerDecoder.symbol_ms()} ms`, and both
-  tracks start at 0 together. On the receiver every decoded frame/symbol also
-  carries the stream's presentation timestamp, so each track yields a stable
-  offset `pts - media position` (constant while the tracks are aligned; the
-  common part is the stream's timestamp origin). The drift is the difference
-  of the two:
+  A/V desync the way a pts-syncing player would see it:
 
       drift_ms = (audio pts - m * symbol_ms) - (video pts - n * frame_duration)
 
-  Positive drift = the audio content is later than the video content of the
-  same timestamp (video leads / audio lags).
-
-  Wall-clock arrival is deliberately not used: the two decoders hand over
-  their tracks in bursts of different shape (the H264 decoder holds the tail
-  of every segment until the next one, the audio decoder buffers while
-  synchronizing to the marker), which would dominate any arrival-based
-  comparison. A player syncs by timestamps, so timestamps are what counts.
-
-  The frame duration is the timestamp step between consecutively numbered
-  received frames. The audio counter wraps (`max_symbol * symbol_ms` =
-  3.84 s) and is unwrapped by continuity; the initial ambiguity is resolved
-  against the video offset, so drift is resolved correctly up to ±half a
-  cycle (±1.92 s). `drift_ms` is the median of the recent samples (one per
-  audio symbol); `nil` until both tracks have been decoded.
+  Positive = audio content later than video. Arrival times are useless here
+  (decoders burst differently), so only timestamps are used. Audio symbols
+  wrap every 3.84 s, unwrapped against the video offset, so it's good up to
+  ±1.92 s. Reported value is a median.
   """
 
   @behaviour StreamDoctor.Metric
 
-  alias StreamDoctor.Probe.AudioMarkerDecoder
+  alias StreamDoctor.Probe.Audio.MarkerDecoder, as: AudioMarkerDecoder
 
   @max_samples 50
 
@@ -44,12 +22,9 @@ defmodule StreamDoctor.Metric.AvDrift do
   @impl true
   def init(_opts) do
     %{
-      # last received video frame: {number, pts_ms}
       video: nil,
       frame_duration: nil,
-      # pts - media position of the video track
       video_offset: nil,
-      # unwrapped number of the last received audio symbol
       audio: nil,
       samples: []
     }
@@ -96,12 +71,8 @@ defmodule StreamDoctor.Metric.AvDrift do
     }
   end
 
-  # First symbol: the cycle is picked so that the audio offset lands closest
-  # to the video offset (|drift| < half a cycle). Later ones: closest to the
-  # previous unwrapped number.
   defp unwrap(m, pts_ms, nil, video_offset) do
     cycle_ms = AudioMarkerDecoder.max_symbol() * AudioMarkerDecoder.symbol_ms()
-    # media position the symbol should have for zero drift
     target_ms = pts_ms - video_offset
     k = round((target_ms - m * AudioMarkerDecoder.symbol_ms()) / cycle_ms)
     m + k * AudioMarkerDecoder.max_symbol()

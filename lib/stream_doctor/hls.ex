@@ -1,20 +1,10 @@
 defmodule StreamDoctor.Hls do
-  @moduledoc """
-  HLS playlist helpers: waits for a live playlist to become available before
-  a receiver is started (`Membrane.HTTPAdaptiveStream.Source` has no retry
-  option and crashes when the playlist is not there yet).
-  """
+  @moduledoc "Waits for an HLS playlist to show up before starting a receiver."
 
   alias ExM3U8.{MediaPlaylist, MultivariantPlaylist}
   alias ExM3U8.Tags.{Segment, Stream}
 
-  @doc """
-  Blocks until the HLS playlist at `url` is available and contains at least
-  one segment (or is a multivariant playlist), polling once a second.
-
-  Prints progress and a summary of the playlist. Raises on timeout and when
-  the playlist turns out to be a finished VoD recording.
-  """
+  @doc "Polls `url` until it has segments (or variants). Raises on timeout / VoD."
   @spec await_playlist(String.t(), non_neg_integer()) :: :ok
   def await_playlist(url, timeout) do
     IO.puts("waiting for HLS playlist at #{url}...")
@@ -24,10 +14,6 @@ defmodule StreamDoctor.Hls do
   end
 
   defp poll_hls(url, deadline) do
-    # ready when it has segments, or is a multivariant playlist pointing at
-    # media playlists; a playlist without either would make the receiver
-    # terminate at once. A playlist that doesn't parse yet (e.g. still being
-    # written, missing #EXT-X-TARGETDURATION) counts as not ready.
     case fetch_playlist(url) do
       {:ok, %MultivariantPlaylist{} = playlist} -> playlist
       {:ok, %MediaPlaylist{} = playlist} when playlist.timeline != [] -> playlist
@@ -60,9 +46,7 @@ defmodule StreamDoctor.Hls do
     end
   end
 
-  # `ExM3U8.deserialize_playlist/2` can't be used here: it tries the
-  # multivariant parser first, which skips unknown lines and so happily turns
-  # a media playlist into a multivariant one with no items.
+  # not deserialize_playlist/2: it happily parses a media playlist as an empty multivariant one
   defp parse_playlist(body) do
     with {:ok, %MultivariantPlaylist{items: items}} when items != [] <-
            ExM3U8.deserialize_multivariant_playlist(body),
@@ -77,11 +61,6 @@ defmodule StreamDoctor.Hls do
     end
   end
 
-  # Prints the media playlist's target duration and the resulting expected
-  # baseline latency, so the measured numbers can be sanity-checked: the HLS
-  # reader (like regular HLS players) joins ~2 target durations behind the
-  # live edge, and the newest listed segment is on average half a target
-  # duration old.
   defp describe_playlist(url, %MultivariantPlaylist{} = playlist) do
     with media_url when media_url != nil <- first_variant_url(url, playlist),
          {:ok, %MediaPlaylist{} = media} <- fetch_playlist(media_url) do

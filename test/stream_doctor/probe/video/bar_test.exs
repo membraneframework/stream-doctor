@@ -1,7 +1,7 @@
 defmodule StreamDoctor.Probe.BarTest do
   use ExUnit.Case, async: true
 
-  alias StreamDoctor.Probe.Bar
+  alias StreamDoctor.Probe.Video.Bar
 
   @width 640
   @height 360

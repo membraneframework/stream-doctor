@@ -5,29 +5,11 @@ defmodule StreamDoctor.Metric.CollectorTest do
   alias StreamDoctor.Metric.Collector
 
   test "folds reported events and serves reports" do
-    {:ok, collector} = Collector.start_link([{Metric.Latency, [mode: :latest]}])
+    {:ok, collector} = Collector.start_link([{Metric.AvDrift, []}])
 
-    Collector.event(collector, {:video_frame_sent, 1, 100})
-    Collector.event(collector, {:video_frame_received, 1, nil, 500})
+    for i <- 0..2, do: Collector.event(collector, {:video_frame_received, i, i * 40, 0})
+    Collector.event(collector, {:audio_symbol_received, 1, 30, 0})
 
-    assert %{latency: %{latency_ms: 400, frames_matched: 1}} = Collector.report(collector)
-  end
-
-  test "event_and_report returns the updated report in one step" do
-    {:ok, collector} = Collector.start_link([{Metric.Latency, [mode: :latest]}])
-
-    Collector.event(collector, {:video_frame_sent, 7, 1000})
-
-    assert %{latency: %{latency_ms: 250}} =
-             Collector.event_and_report(collector, {:video_frame_received, 7, nil, 1250})
-  end
-
-  test "receives broadcast send events" do
-    {:ok, collector} = Collector.start_link([{Metric.Latency, [mode: :latest]}])
-
-    Collector.broadcast_send_event({:video_frame_sent, 3, 2000})
-
-    assert %{latency: %{latency_ms: 500}} =
-             Collector.event_and_report(collector, {:video_frame_received, 3, nil, 2500})
+    assert %{av_drift: %{drift_ms: 0}} = Collector.report(collector)
   end
 end

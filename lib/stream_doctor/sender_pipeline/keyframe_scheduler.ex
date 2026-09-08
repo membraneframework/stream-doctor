@@ -1,17 +1,7 @@
 defmodule StreamDoctor.SenderPipeline.KeyframeScheduler do
   @moduledoc false
 
-  # Enforces a time-based keyframe interval, independent of the input framerate.
-  #
-  # Placed right after the H264 encoder, it watches the pts of passing buffers
-  # and sends `Membrane.KeyframeRequestEvent` upstream (to the encoder) whenever
-  # `interval` of stream time has elapsed since the previous request. The
-  # encoder then encodes the next frame as a keyframe.
-  #
-  # The encoder's frame-count based `gop_size` cannot express "2 s" - the same
-  # frame count means different durations at different framerates (60 frames is
-  # 2 s at 30 fps but 2.4 s at 25 fps). Scheduling by pts sidesteps that and
-  # also handles variable framerate.
+  # keyframe every `interval` of pts, whatever the framerate (gop_size can't do that)
 
   use Membrane.Filter
 
@@ -22,7 +12,7 @@ defmodule StreamDoctor.SenderPipeline.KeyframeScheduler do
     interval: [
       spec: Membrane.Time.t(),
       default: Membrane.Time.seconds(2),
-      description: "Stream time between requested keyframes."
+      description: "pts between keyframes"
     ]
   )
 
@@ -33,8 +23,6 @@ defmodule StreamDoctor.SenderPipeline.KeyframeScheduler do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    # the first frame is a keyframe already, so the first request is due one
-    # interval after it
     next_request_pts = state.next_request_pts || buffer.pts + state.interval
 
     if buffer.pts >= next_request_pts do

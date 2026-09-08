@@ -1,22 +1,10 @@
 defmodule Mix.Tasks.StreamDoctor.Server do
-  @shortdoc "Runs the HTTP server for spawning streamer/viewers and reading latency"
+  @shortdoc "Runs the HTTP server for spawning a streamer/viewers and reading A/V drift"
 
   @moduledoc """
-  Runs the latency-measurement HTTP server (see `StreamDoctor.Api` for the
-  endpoints).
-
       mix stream_doctor.server [--port 4040]
 
-  Meant to be driven by `stream_doctor.mjs` / `create_livestream.mjs`, or
-  directly:
-
-      curl -X POST localhost:4040/streamer \\
-        -H 'content-type: application/json' \\
-        -d '{"input": "test.mp4", "rtmp_url": "rtmps://..."}'
-      curl -X POST localhost:4040/viewers \\
-        -H 'content-type: application/json' \\
-        -d '{"hls_url": "https://....m3u8"}'
-      curl localhost:4040/viewers/viewer-1
+  Endpoints in `StreamDoctor.Api`. Driven by `stream_doctor.mjs`.
   """
 
   use Mix.Task
@@ -32,7 +20,7 @@ defmodule Mix.Tasks.StreamDoctor.Server do
     {:ok, _server} = StreamDoctor.Server.start_link()
     {:ok, _bandit} = Bandit.start_link(plug: StreamDoctor.Api, port: port)
 
-    IO.puts("stream_doctor latency server listening on http://localhost:#{port}")
+    IO.puts("stream_doctor server listening on http://localhost:#{port}")
     Process.sleep(:infinity)
   end
 end

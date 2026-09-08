@@ -1,16 +1,9 @@
-defmodule StreamDoctor.Probe.AudioMarkerEncoder do
-  @moduledoc """
-  Replaces the audio content with the marker signal encoding the stream
-  position (see `StreamDoctor.Probe.Tone`), preserving the original timing, sample
-  rate and channel layout.
-
-  The content is replaced (not mixed over) so that the tone detection is not
-  disturbed by content energy at the marker frequencies.
-  """
+defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
+  @moduledoc "Replaces audio with the marker tones (see `StreamDoctor.Probe.Audio.Tone`). Replaces, not mixes, so content can't confuse the decoder."
 
   use Membrane.Filter
 
-  alias StreamDoctor.Probe.Tone
+  alias StreamDoctor.Probe.Audio.Tone
   alias Membrane.RawAudio
 
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})

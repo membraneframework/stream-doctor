@@ -1,16 +1,12 @@
-defmodule StreamDoctor.Probe.VideoMarkerDecoder do
-  @moduledoc """
-  Reads the frame-number bar from each raw video frame and reports the result
-  to the configured `StreamDoctor.Metric.Collector` (or logs it when none is
-  given).
-  """
+defmodule StreamDoctor.Probe.Video.MarkerDecoder do
+  @moduledoc "Reads the bar off each frame, reports to a collector (or logs)."
 
   use Membrane.Sink
 
   require Membrane.Logger
 
   alias StreamDoctor.Metric.Collector
-  alias StreamDoctor.Probe.Bar
+  alias StreamDoctor.Probe.Video.Bar
   alias Membrane.RawVideo
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
@@ -19,18 +15,10 @@ defmodule StreamDoctor.Probe.VideoMarkerDecoder do
     collector: [
       spec: pid() | nil,
       default: nil,
-      description: """
-      `StreamDoctor.Metric.Collector` to report to: a
-      `{:video_frame_received, frame_number, pts_ms, t}` event for each
-      decoded frame (`pts_ms` is the buffer's presentation timestamp in
-      milliseconds, `nil` when absent) and `{:undecoded, :video, reason, t}`
-      for each frame without a readable bar. With no collector the results
-      are logged.
-      """
+      description: "gets `{:video_frame_received, n, pts_ms, t}`; nil = log"
     ]
   )
 
-  @doc "Number of distinct frame numbers; the marker's frame counter wraps at this value."
   @spec max_frame() :: pos_integer()
   defdelegate max_frame(), to: Bar
 
@@ -60,8 +48,8 @@ defmodule StreamDoctor.Probe.VideoMarkerDecoder do
           {:video_frame_received, frame_number, pts_ms(buffer), now_ms()}
         )
 
-      {{:error, reason}, collector} ->
-        Collector.event(collector, {:undecoded, :video, reason, now_ms()})
+      {{:error, reason}, _collector} ->
+        Membrane.Logger.debug("Failed to decode frame number: #{inspect(reason)}")
     end
 
     {[], state}

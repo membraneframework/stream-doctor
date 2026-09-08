@@ -106,7 +106,7 @@ async function runScenario(session, scenario, hlsDir) {
     await streamer.waitUntilLive();
     log("streamer", "live");
 
-    viewer = await session.watch(HLS_URL, { metrics: ["latency", "av_drift"] });
+    viewer = await session.watch(HLS_URL);
     log("viewer", `${viewer.id} started, waiting for the first drift sample...`);
 
     await waitFor(
@@ -121,10 +121,7 @@ async function runScenario(session, scenario, hlsDir) {
       await sleep(2000);
       await assertAlive(ffmpeg, streamer, viewer);
       metrics = await viewer.metrics();
-      log(
-        "viewer",
-        `drift ${fmt(metrics.av_drift.drift_ms)} ms, latency ${fmt(metrics.latency?.latency_ms)} ms`
-      );
+      log("viewer", `drift ${fmt(metrics.av_drift.drift_ms)} ms`);
     }
 
     const final = await viewer.stop();
@@ -148,7 +145,6 @@ function summarize(scenario, metrics) {
     expected: scenario.expectedDriftMs,
     drift_ms: drift.drift_ms,
     median_recent_ms: median,
-    latency_ms: metrics.latency?.latency_ms ?? null,
     tolerance,
     ok,
   };
@@ -159,8 +155,7 @@ function printSummary(results) {
   for (const r of results) {
     console.log(
       `${r.ok ? "PASS" : "FAIL"}  ${r.name}: drift ${fmt(r.drift_ms)} ms ` +
-        `(expected ${r.expected} ±${r.tolerance}; median of recent ${fmt(r.median_recent_ms)} ms, ` +
-        `latency ${fmt(r.latency_ms)} ms)`
+        `(expected ${r.expected} ±${r.tolerance}; median of recent ${fmt(r.median_recent_ms)} ms)`
     );
   }
 }

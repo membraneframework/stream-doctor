@@ -1,30 +1,16 @@
-defmodule StreamDoctor.Probe.AudioMarkerDecoder do
-  @moduledoc """
-  Reads the audio marker from raw audio and reports the decoded symbol number
-  (one per 30 ms) to the configured `StreamDoctor.Metric.Collector` (or logs
-  it when none is given).
-
-  Symbol boundaries in the received stream are not aligned with buffer
-  boundaries (AAC encoder priming and segmenting shift the samples), so the
-  sink first synchronizes: it scans candidate offsets within one symbol length
-  and picks the one where several consecutive windows decode with valid parity
-  and consecutive symbol numbers. It resynchronizes after a run of decode
-  errors.
-  """
+defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
+  @moduledoc "Reads audio symbols, reports them to a collector (or logs). Self-syncs to symbol boundaries since AAC shifts them."
 
   use Membrane.Sink
 
   require Membrane.Logger
 
   alias StreamDoctor.Metric.Collector
-  alias StreamDoctor.Probe.Tone
+  alias StreamDoctor.Probe.Audio.Tone
   alias Membrane.RawAudio
 
-  # Windows examined when scanning for symbol alignment
   @scan_symbols 6
-  # Minimal alignment score (parity hit = 1 point, consecutive numbers = 2 points)
   @scan_min_score 10
-  # Consecutive decode errors triggering resynchronization
   @max_error_streak 8
 
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
@@ -33,23 +19,13 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
     collector: [
       spec: pid() | nil,
       default: nil,
-      description: """
-      `StreamDoctor.Metric.Collector` to report to: an
-      `{:audio_symbol_received, symbol_number, pts_ms, t}` event for each
-      decoded 30 ms symbol (`pts_ms` is the symbol's position on the stream
-      timeline in milliseconds - the first buffer's presentation timestamp
-      plus the sample offset - or `nil` when the stream carries no
-      timestamps) and `{:undecoded, :audio, reason, t}` for each window
-      without a readable marker. With no collector the results are logged.
-      """
+      description: "gets `{:audio_symbol_received, m, pts_ms, t}`; nil = log"
     ]
   )
 
-  @doc "Number of distinct symbol numbers; the marker's symbol counter wraps at this value."
   @spec max_symbol() :: pos_integer()
   defdelegate max_symbol(), to: Tone
 
-  @doc "Duration of one audio symbol in milliseconds."
   @spec symbol_ms() :: pos_integer()
   defdelegate symbol_ms(), to: Tone
 
@@ -61,8 +37,6 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
       buffer: <<>>,
       synced?: false,
       error_streak: 0,
-      # pts of the first buffer + count of mono samples appended since, so a
-      # symbol's pts can be derived from its sample offset in the stream
       anchor_pts_ms: nil,
       appended_samples: 0
     }
@@ -90,9 +64,14 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
 
     anchor_pts_ms =
       cond do
-        state.anchor_pts_ms != nil -> state.anchor_pts_ms
-        state.appended_samples == 0 and buffer.pts != nil -> Membrane.Time.as_milliseconds(buffer.pts, :round)
-        true -> nil
+        state.anchor_pts_ms != nil ->
+          state.anchor_pts_ms
+
+        state.appended_samples == 0 and buffer.pts != nil ->
+          Membrane.Time.as_milliseconds(buffer.pts, :round)
+
+        true ->
+          nil
       end
 
     state = %{
@@ -138,7 +117,6 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
       rest_size = byte_size(state.buffer) - best_offset * 8
       %{state | buffer: binary_part(state.buffer, best_offset * 8, rest_size), synced?: true}
     else
-      # No alignment in this stretch - slide one symbol and try with more data
       rest_size = byte_size(state.buffer) - symbol_bytes
       %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
     end
@@ -186,8 +164,8 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
           {:audio_symbol_received, symbol_number, symbol_pts_ms(state), now_ms()}
         )
 
-      {{:error, reason}, collector} ->
-        Collector.event(collector, {:undecoded, :audio, reason, now_ms()})
+      {{:error, reason}, _collector} ->
+        Membrane.Logger.debug("Failed to decode audio symbol: #{inspect(reason)}")
     end
 
     rest_size = byte_size(state.buffer) - symbol_bytes
@@ -206,7 +184,6 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
     end
   end
 
-  # Takes the first channel of interleaved s16le frames as 64-bit floats
   defp downmix_to_floats(payload, channels) do
     skip = (channels - 1) * 2
 
@@ -215,8 +192,6 @@ defmodule StreamDoctor.Probe.AudioMarkerDecoder do
     end
   end
 
-  # pts of the front of `state.buffer` (= the symbol about to be decoded):
-  # anchor pts + the offset of already-consumed samples
   defp symbol_pts_ms(%{anchor_pts_ms: nil}), do: nil
 
   defp symbol_pts_ms(state) do
