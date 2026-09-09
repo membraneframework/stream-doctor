@@ -34,6 +34,7 @@ defmodule StreamDoctor.SenderPipeline do
   def handle_child_notification({:new_tracks, tracks}, :boombox, _ctx, state) do
     spec =
       [
+        child(:rebase, __MODULE__.Rebase),
         child(:rtmp_sink, %Membrane.RTMP.Sink{
           rtmp_url: state.rtmp_url,
           tracks: tracks,
@@ -61,6 +62,9 @@ defmodule StreamDoctor.SenderPipeline do
   defp track_spec(:video, state) do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :video, codec: Membrane.RawVideo])
+    |> via_in(Membrane.Pad.ref(:input, :video))
+    |> get_child(:rebase)
+    |> via_out(Membrane.Pad.ref(:output, :video))
     |> child(:video_marker_encoder, StreamDoctor.Probe.Video.MarkerEncoder)
     |> child(:encoder, %Membrane.H264.FFmpeg.Encoder{
       preset: :veryfast,
@@ -79,7 +83,13 @@ defmodule StreamDoctor.SenderPipeline do
   defp track_spec(:audio, state) do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :audio, codec: Membrane.RawAudio])
-    |> child(:audio_marker_encoder, StreamDoctor.Probe.Audio.MarkerEncoder)
+    |> via_in(Membrane.Pad.ref(:input, :audio))
+    |> get_child(:rebase)
+    |> via_out(Membrane.Pad.ref(:output, :audio))
+    |> child(:audio_marker_encoder, %StreamDoctor.Probe.Audio.MarkerEncoder{
+      # FDK AAC-LC priming; RTMP has no way to signal it, so it's pre-compensated
+      encoder_delay_samples: 2048
+    })
     |> child(:audio_encoder, %Membrane.Transcoder{output_stream_format: Membrane.AAC})
     |> maybe_realtimer(:audio, state)
     |> via_in(Membrane.Pad.ref(:audio, 0))

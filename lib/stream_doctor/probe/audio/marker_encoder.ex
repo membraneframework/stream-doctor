@@ -1,5 +1,5 @@
 defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
-  @moduledoc "Replaces audio with the marker tones (see `StreamDoctor.Probe.Audio.Tone`). Replaces, not mixes, so content can't confuse the decoder."
+  @moduledoc "Replaces audio with the marker tones (see `StreamDoctor.Probe.Audio.Tone`). Symbol m covers source time m * 30 ms, whatever pts the audio starts at. Replaces, not mixes, so content can't confuse the decoder."
 
   use Membrane.Filter
 
@@ -9,9 +9,19 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
   def_output_pad(:output, accepted_format: %RawAudio{sample_format: :s16le})
 
+  def_options(
+    encoder_delay_samples: [
+      spec: non_neg_integer(),
+      default: 0,
+      description:
+        "How many samples later than its pts the downstream encoder puts out content. " <>
+          "Symbols are generated that far ahead so they land on their nominal pts."
+    ]
+  )
+
   @impl true
-  def handle_init(_ctx, _opts) do
-    {[], %{position: 0, format: nil, cache: %{}}}
+  def handle_init(_ctx, opts) do
+    {[], %{position: nil, lead: opts.encoder_delay_samples, format: nil, cache: %{}}}
   end
 
   @impl true
@@ -24,10 +34,13 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
     %{sample_rate: sample_rate, channels: channels} = state.format
     frames = div(byte_size(buffer.payload), 2 * channels)
 
-    {iodata, state} = marker_frames(state.position, frames, sample_rate, channels, state, [])
+    position =
+      state.position || round(buffer.pts * sample_rate / Membrane.Time.second()) + state.lead
+
+    {iodata, state} = marker_frames(position, frames, sample_rate, channels, state, [])
     buffer = %{buffer | payload: IO.iodata_to_binary(iodata)}
 
-    {[buffer: {:output, buffer}], %{state | position: state.position + frames}}
+    {[buffer: {:output, buffer}], %{state | position: position + frames}}
   end
 
   defp marker_frames(_position, 0, _sample_rate, _channels, state, acc),
@@ -35,8 +48,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
 
   defp marker_frames(position, frames, sample_rate, channels, state, acc) do
     symbol_length = Tone.symbol_length(sample_rate)
-    symbol_number = rem(div(position, symbol_length), Tone.max_symbol())
-    offset = rem(position, symbol_length)
+    symbol_number = Integer.mod(Integer.floor_div(position, symbol_length), Tone.max_symbol())
+    offset = Integer.mod(position, symbol_length)
     span = min(frames, symbol_length - offset)
 
     {mono_symbol, state} = cached_symbol(symbol_number, sample_rate, state)

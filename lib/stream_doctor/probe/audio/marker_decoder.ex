@@ -19,7 +19,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     collector: [
       spec: pid() | nil,
       default: nil,
-      description: "gets `{:audio_symbol_received, m, pts_ms, t}`; nil = log"
+      description: "gets `{:audio_symbol_received, m, pts, t}`; nil = log"
     ]
   )
 
@@ -37,7 +37,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       buffer: <<>>,
       synced?: false,
       error_streak: 0,
-      anchor_pts_ms: nil,
+      anchor_pts: nil,
       appended_samples: 0
     }
 
@@ -51,7 +51,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       | format: stream_format,
         buffer: <<>>,
         synced?: false,
-        anchor_pts_ms: nil,
+        anchor_pts: nil,
         appended_samples: 0
     }
 
@@ -62,22 +62,17 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   def handle_buffer(:input, buffer, _ctx, state) do
     mono = downmix_to_floats(buffer.payload, state.format.channels)
 
-    anchor_pts_ms =
+    anchor_pts =
       cond do
-        state.anchor_pts_ms != nil ->
-          state.anchor_pts_ms
-
-        state.appended_samples == 0 and buffer.pts != nil ->
-          Membrane.Time.as_milliseconds(buffer.pts, :round)
-
-        true ->
-          nil
+        state.anchor_pts != nil -> state.anchor_pts
+        state.appended_samples == 0 -> buffer.pts
+        true -> nil
       end
 
     state = %{
       state
       | buffer: state.buffer <> mono,
-        anchor_pts_ms: anchor_pts_ms,
+        anchor_pts: anchor_pts,
         appended_samples: state.appended_samples + div(byte_size(mono), 8)
     }
 
@@ -104,10 +99,13 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     symbol_length = Tone.symbol_length(sample_rate)
     step = max(div(symbol_length, 16), 1)
 
-    {best_offset, best_score} =
-      0..(symbol_length - 1)//step
-      |> Enum.map(fn offset -> {offset, alignment_score(state.buffer, offset, sample_rate)} end)
-      |> Enum.max_by(fn {_offset, score} -> score end)
+    scores =
+      Enum.map(0..(symbol_length - 1)//step, fn offset ->
+        {offset, alignment_score(state.buffer, offset, sample_rate)}
+      end)
+
+    best_score = scores |> Enum.map(fn {_offset, score} -> score end) |> Enum.max()
+    best_offset = plateau_center(scores, best_score)
 
     if best_score >= @scan_min_score do
       Membrane.Logger.debug(
@@ -120,6 +118,23 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       rest_size = byte_size(state.buffer) - symbol_bytes
       %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
     end
+  end
+
+  # Decoding tolerates a few ms of misalignment, so the top score spans a
+  # plateau (possibly straddling the wrap) and the boundary is its middle.
+  defp plateau_center(scores, best_score) do
+    best? = fn {_offset, score} -> score == best_score end
+    rotation = Enum.find_index(scores, &(not best?.(&1))) || 0
+    {head, tail} = Enum.split(scores, rotation)
+
+    {offset, _score} =
+      (tail ++ head)
+      |> Enum.chunk_by(best?)
+      |> Enum.filter(&best?.(hd(&1)))
+      |> Enum.max_by(&length/1)
+      |> then(&Enum.at(&1, div(length(&1), 2)))
+
+    offset
   end
 
   defp alignment_score(buffer, offset, sample_rate) do
@@ -161,7 +176,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       {{:ok, symbol_number}, collector} ->
         Collector.event(
           collector,
-          {:audio_symbol_received, symbol_number, symbol_pts_ms(state), now_ms()}
+          {:audio_symbol_received, symbol_number, symbol_pts(state), now_ms()}
         )
 
       {{:error, reason}, _collector} ->
@@ -192,11 +207,11 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
-  defp symbol_pts_ms(%{anchor_pts_ms: nil}), do: nil
+  defp symbol_pts(%{anchor_pts: nil}), do: nil
 
-  defp symbol_pts_ms(state) do
+  defp symbol_pts(state) do
     consumed_samples = state.appended_samples - div(byte_size(state.buffer), 8)
-    state.anchor_pts_ms + consumed_samples * 1000 / state.format.sample_rate
+    state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
 
   defp now_ms(), do: System.monotonic_time(:millisecond)

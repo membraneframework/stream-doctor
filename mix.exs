@@ -37,7 +37,10 @@ defmodule StreamDoctor.MixProject do
       {:membrane_http_adaptive_stream_plugin, "~> 0.21.3", override: true},
       # srt plugin vs ex_hls mpeg_ts conflict, 2.4 works for both
       {:membrane_mpeg_ts_plugin, "~> 2.4", override: true},
-      {:membrane_aac_fdk_plugin, "~> 0.18"},
+      {:membrane_aac_fdk_plugin,
+       github: "membraneframework/membrane_aac_fdk_plugin",
+       branch: "fix_decoder_output_timestamps",
+       override: true},
       {:ex_m3u8, "~> 0.15"},
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.5"},

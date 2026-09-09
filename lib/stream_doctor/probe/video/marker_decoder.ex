@@ -15,7 +15,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
     collector: [
       spec: pid() | nil,
       default: nil,
-      description: "gets `{:video_frame_received, n, pts_ms, t}`; nil = log"
+      description: "gets `{:video_frame_received, n, pts, t}`; nil = log"
     ]
   )
 
@@ -45,7 +45,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
       {{:ok, frame_number}, collector} ->
         Collector.event(
           collector,
-          {:video_frame_received, frame_number, pts_ms(buffer), now_ms()}
+          {:video_frame_received, frame_number, buffer.pts, now_ms()}
         )
 
       {{:error, reason}, _collector} ->
@@ -54,9 +54,6 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
 
     {[], state}
   end
-
-  defp pts_ms(%{pts: nil}), do: nil
-  defp pts_ms(%{pts: pts}), do: Membrane.Time.as_milliseconds(pts, :round)
 
   defp now_ms(), do: System.monotonic_time(:millisecond)
 end
