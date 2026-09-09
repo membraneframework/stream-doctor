@@ -202,7 +202,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   defp downmix_to_floats(payload, channels) do
     skip = (channels - 1) * 2
 
-    for <<sample::16-signed-little, _rest::binary-size(skip) <- payload>>, into: <<>> do
+    for <<sample::16-signed-little, _rest::binary-size(^skip) <- payload>>, into: <<>> do
       <<sample * 1.0::float-64-little>>
     end
   end
