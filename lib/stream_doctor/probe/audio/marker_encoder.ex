@@ -9,19 +9,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
   def_output_pad(:output, accepted_format: %RawAudio{sample_format: :s16le})
 
-  def_options(
-    encoder_delay_samples: [
-      spec: non_neg_integer(),
-      default: 0,
-      description:
-        "How many samples later than its pts the downstream encoder puts out content. " <>
-          "Symbols are generated that far ahead so they land on their nominal pts."
-    ]
-  )
-
   @impl true
-  def handle_init(_ctx, opts) do
-    {[], %{position: nil, lead: opts.encoder_delay_samples, format: nil, cache: %{}}}
+  def handle_init(_ctx, _opts) do
+    {[], %{position: nil, format: nil, cache: %{}}}
   end
 
   @impl true
@@ -34,8 +24,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
     %{sample_rate: sample_rate, channels: channels} = state.format
     frames = div(byte_size(buffer.payload), 2 * channels)
 
-    position =
-      state.position || round(buffer.pts * sample_rate / Membrane.Time.second()) + state.lead
+    position = state.position || round(buffer.pts * sample_rate / Membrane.Time.second())
 
     {iodata, state} = marker_frames(position, frames, sample_rate, channels, state, [])
     buffer = %{buffer | payload: IO.iodata_to_binary(iodata)}
