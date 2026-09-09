@@ -34,7 +34,11 @@ defmodule StreamDoctor.SenderPipeline do
   def handle_child_notification({:new_tracks, tracks}, :boombox, _ctx, state) do
     spec =
       [
-        child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: state.rtmp_url, tracks: tracks})
+        child(:rtmp_sink, %Membrane.RTMP.Sink{
+          rtmp_url: state.rtmp_url,
+          tracks: tracks,
+          max_attempts: 10
+        })
       ] ++ Enum.map(tracks, &track_spec(&1, state))
 
     {[spec: spec], %{state | awaiting_tracks: MapSet.new(tracks)}}

@@ -20,14 +20,14 @@ streamer and any number of viewers can be driven from a script.
 
 ## Try it
 
-You need Elixir, ffmpeg, python3 and node on your PATH, and a media file with
-an audio track (`test.mp4` by default).
+You need Elixir, Zig 0.16.0, ffmpeg, python3 and node on your PATH, and a media
+file with an audio track (`test.mp4` by default).
 
 ```sh
 mix deps.get
-mix stream_doctor.server          # terminal 1: the HTTP API on :4040
-examples/working_infra.sh         # terminal 2: the infrastructure under test
-node examples/av_drift.mjs        # terminal 3: the check
+MIX_ENV=prod mix release          # once: builds burrito_out/stream_doctor_macos_arm
+examples/working_infra.sh         # terminal 1: the infrastructure under test
+node examples/av_drift.mjs        # terminal 2: the check
 ```
 
 "Infra" stands in for whatever streaming platform you want to examine. The
@@ -37,13 +37,15 @@ repackaging the stream to HLS, served by a Python static server on port 8123.
 close to zero. `buggy_infra.sh` delays the audio content by 200 ms on the way,
 which the check should catch. Run the same check against both and compare.
 
-The check publishes the file, starts a viewer, waits for the first drift
-sample, keeps sampling for a while and finally prints PASS or FAIL. Options:
+The check spawns the binary (or talks to a server already listening on port
+4040), publishes the file, starts a viewer, waits for the first drift sample,
+keeps sampling for a while and finally prints PASS or FAIL. Options:
 
 * `--file test.mp4` - the file to stream,
 * `--measure-s 30` - how long to keep sampling after the first drift value,
 * `--expect 0` - the drift you expect, in ms,
-* `--tolerance 40` - how far from that is still a PASS, in ms.
+* `--tolerance 40` - how far from that is still a PASS, in ms,
+* `--binary burrito_out/stream_doctor_macos_arm` - which binary to run.
 
 ## API
 
@@ -58,11 +60,11 @@ The server speaks JSON:
 * `GET /status` returns all of the above at once.
 
 The drift is reported under `metrics.av_drift.drift_ms` of a viewer, together
-with the recent samples it was computed from. `stream_doctor.mjs` wraps the
+with the recent samples it was computed from. `js/stream_doctor.mjs` wraps the
 endpoints for scripts:
 
 ```js
-import * as stream_doc from "./stream_doctor.mjs";
+import * as stream_doc from "./js/stream_doctor.mjs";
 
 const session = await stream_doc.session();
 const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
@@ -71,3 +73,15 @@ await streamer.waitUntilLive();
 // ... let it measure ...
 const metrics = await viewer.stop();
 ```
+
+## Standalone binary
+
+`mix release` wraps the app with [Burrito](https://github.com/burrito-elixir/burrito)
+into a single executable for the current machine, which is what the check
+runs. Start it by hand with `PORT=4040 burrito_out/stream_doctor_macos_arm`.
+
+It needs Zig 0.16.0 on the PATH and, for now, macOS: a release step
+(`rel/slim.exs`) rewrites the NIFs' load paths so that every plugin shares one
+copy of the precompiled FFmpeg bundle instead of getting its own, which is
+what brings the binary down to about 50 MB. The binary unpacks itself into
+`~/Library/Application Support/.burrito` on the first run.

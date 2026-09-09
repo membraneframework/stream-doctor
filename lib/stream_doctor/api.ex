@@ -1,6 +1,6 @@
 defmodule StreamDoctor.Api do
   @moduledoc """
-  JSON API, see `mix stream_doctor.server`.
+  JSON API, listens on `PORT` (default 4040).
 
     * `POST/GET/DELETE /streamer` - `{"input", "rtmp_url"}`
     * `POST /viewers` - `{"hls_url"}`; `GET/DELETE /viewers/:id`

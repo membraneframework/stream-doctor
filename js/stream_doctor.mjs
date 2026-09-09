@@ -1,18 +1,11 @@
-// JS client for the stream_doctor measurement server.
+// JS client for the stream_doctor server (see README for the API).
 //
-// Start the server first:
-//   mix run --no-halt   (PORT=4040 by default)
-//
-// Usage:
-//   import * as stream_doc from "./stream_doctor.mjs";
-//
-//   const session = await stream_doc.session();
+//   const session = await stream_doc.session();          // server on :4040
 //   const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
-//   const viewer = await session.watch(hlsUrl);
 //   await streamer.waitUntilLive();
-//   // ... let it measure ...
-//   const metrics = await viewer.stop();
-//   // metrics: { av_drift: { drift_ms, ... } }
+//   const viewer = await session.watch(hlsUrl);
+//   const { av_drift } = await viewer.metrics();          // any time
+//   await viewer.stop(); await streamer.stop();
 
 const DEFAULT_SERVER = "http://localhost:4040";
 
@@ -38,7 +31,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const TERMINAL_STATUSES = ["ended", "failed", "stopped"];
 
-// Opens a session against a running server (verifies it is reachable).
 export async function session({ server = DEFAULT_SERVER } = {}) {
   await api("GET", "/status", null, server);
   return new Session(server);
@@ -49,15 +41,11 @@ class Session {
     this.server = server;
   }
 
-  // Starts streaming `file` (a path on the server's machine) with the markers
-  // to `rtmpUrl`. Returns a Streamer immediately; await streamer.waitUntilLive()
-  // for the moment frames actually flow into the RTMP sink.
   publish(rtmpUrl, { file = "test.mp4" } = {}) {
     const ready = api("POST", "/streamer", { input: file, rtmp_url: rtmpUrl }, this.server);
     return new Streamer(this.server, ready);
   }
 
-  // Starts a viewer of the HLS playlist.
   async watch(hlsUrl) {
     const { id } = await api("POST", "/viewers", { hls_url: hlsUrl }, this.server);
     return new Viewer(this.server, id);
@@ -71,18 +59,14 @@ class Session {
 class Streamer {
   constructor(server, ready) {
     this.server = server;
-    // surfaces the POST /streamer error on the awaited methods below instead
-    // of as an unhandled rejection
     this.ready = ready;
-    ready.catch(() => {});
+    ready.catch(() => {}); // reported by the awaiting methods instead
   }
 
   status() {
     return this.ready.then(() => api("GET", "/streamer", null, this.server));
   }
 
-  // Resolves once the streamer reports frames flowing into the RTMP sink
-  // (frames_sent > 0), i.e. the RTMP handshake succeeded and media is live.
   async waitUntilLive({ timeoutMs = 60_000, intervalMs = 250 } = {}) {
     await this.ready;
     const deadline = Date.now() + timeoutMs;
@@ -115,14 +99,11 @@ class Viewer {
     return api("GET", `/viewers/${this.id}`, null, this.server);
   }
 
-  // Current measurements: { av_drift: {...} }.
   async metrics() {
     const { metrics } = await this.status();
     return metrics;
   }
 
-  // Polls until the viewer reaches a terminal status, calling onUpdate with
-  // the full viewer state on every poll. Resolves with the final viewer state.
   async waitUntilDone({ intervalMs = 1000, onUpdate } = {}) {
     for (;;) {
       const viewer = await this.status();
@@ -132,7 +113,6 @@ class Viewer {
     }
   }
 
-  // Stops the viewer and resolves with its final metrics.
   async stop() {
     const { metrics } = await api("DELETE", `/viewers/${this.id}`, null, this.server);
     return metrics;
