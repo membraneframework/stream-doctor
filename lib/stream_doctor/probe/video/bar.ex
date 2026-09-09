@@ -62,7 +62,7 @@ defmodule StreamDoctor.Probe.Video.Bar do
     y_size = width * height
     chroma_size = div(y_size, 4)
 
-    <<y::binary-size(y_size), u::binary-size(chroma_size), v::binary-size(chroma_size)>> =
+    <<y::binary-size(^y_size), u::binary-size(^chroma_size), v::binary-size(^chroma_size)>> =
       payload
 
     bits = encode(frame_number)

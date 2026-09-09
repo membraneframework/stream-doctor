@@ -2,7 +2,6 @@ defmodule StreamDoctor.Server do
   @moduledoc "State for the HTTP API: one streamer, some viewers. Metrics live in collectors."
 
   use GenServer
-  require Logger
 
   alias StreamDoctor.Metric
   alias StreamDoctor.Collector
