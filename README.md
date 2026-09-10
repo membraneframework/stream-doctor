@@ -17,8 +17,7 @@ checks before a release.
 > [issue #1](https://github.com/membraneframework-labs/stream_doctor/issues/1).
 > Feedback on it is welcome.
 
-Built on the [Membrane Framework](https://membrane.stream) and
-[Boombox](https://hexdocs.pm/boombox).
+Built on the [Membrane Framework](https://membrane.stream).
 
 ## The idea
 
@@ -47,7 +46,7 @@ it receives, it can measure exactly what the pipeline did to the stream.
 
 ## Try it
 
-Requires Elixir, Zig 0.16.0, ffmpeg, python3, Node 24+ and macOS.
+Requires Elixir, Zig 0.16.0, ffmpeg, python3, Node 24+ and macOS with homebrew.
 
 ```sh
 mix deps.get
