@@ -20,14 +20,15 @@ streamer and any number of viewers can be driven from a script.
 
 ## Try it
 
-You need Elixir, Zig 0.16.0, ffmpeg, python3 and node on your PATH, and a media
-file with an audio track (`test.mp4` by default).
+You need Elixir, Zig 0.16.0, ffmpeg, python3 and Node 24 or newer on your PATH,
+and a media file with an audio track (`test.mp4` by default). The scripts are
+TypeScript, run directly by Node, so there is no build step.
 
 ```sh
 mix deps.get
 MIX_ENV=prod mix release          # once: builds burrito_out/stream_doctor_macos_arm
 examples/working_infra.sh         # terminal 1: the infrastructure under test
-node examples/av_drift.mjs        # terminal 2: the check
+node examples/av_drift.ts         # terminal 2: the check
 ```
 
 "Infra" stands in for whatever streaming platform you want to examine. The
@@ -43,7 +44,7 @@ The check spawns the binary (or talks to a server already listening on port
 The file to stream is the only argument, `test.mp4` by default:
 
 ```sh
-node examples/av_drift.mjs boombox.mp4
+node examples/av_drift.ts boombox.mp4
 ```
 
 ## API
@@ -59,11 +60,11 @@ The server speaks JSON:
 * `GET /status` returns all of the above at once.
 
 The drift is reported under `metrics.av_drift.drift_ms` of a viewer, together
-with the recent samples it was computed from. `js/stream_doctor.mjs` wraps the
-endpoints for scripts:
+with the recent samples it was computed from. `client/stream_doctor.ts` wraps
+the endpoints for scripts and exports the types of the responses:
 
-```js
-import * as stream_doc from "./js/stream_doctor.mjs";
+```ts
+import * as stream_doc from "./client/stream_doctor.ts";
 
 const session = await stream_doc.session();
 const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
@@ -72,6 +73,9 @@ await streamer.waitUntilLive();
 // ... let it measure ...
 const metrics = await viewer.stop();
 ```
+
+`npm ci` installs the linters and `npm run lint` and `npm test` run them, the
+same as CI does.
 
 ## Standalone binary
 
