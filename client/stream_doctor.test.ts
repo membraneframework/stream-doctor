@@ -1,15 +1,16 @@
 import { test, after, before } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
+import http, { type IncomingMessage } from "node:http";
+import type { AddressInfo } from "node:net";
 
-import { session } from "./stream_doctor.mjs";
+import { session } from "./stream_doctor.ts";
 
 // A stand-in for the Elixir server: the streamer goes live on the third poll.
 let streamerPolls = 0;
-const viewers = new Map();
-let requests = [];
+const viewers = new Map<string, object>();
+let requests: { method?: string; path?: string; body: unknown }[] = [];
 
-const routes = {
+const routes: Record<string, (body: any) => object> = {
   "GET /status": () => ({ streamer: null, viewers: [] }),
   "POST /streamer": () => {
     streamerPolls = 0;
@@ -29,17 +30,18 @@ const routes = {
 
 const server = http.createServer((req, res) => {
   let body = "";
+  const { method, url } = req as IncomingMessage & { url: string };
   req.on("data", (chunk) => (body += chunk));
   req.on("end", () => {
     const json = body ? JSON.parse(body) : null;
-    requests.push({ method: req.method, path: req.url, body: json });
-    const viewer = req.url.match(/^\/viewers\/(\w+)$/);
-    let payload;
-    if (viewer && req.method === "GET") payload = viewers.get(viewer[1]);
-    else if (viewer && req.method === "DELETE") {
+    requests.push({ method, path: url, body: json });
+    const viewer = url.match(/^\/viewers\/(\w+)$/);
+    let payload: object | undefined;
+    if (viewer && method === "GET") payload = viewers.get(viewer[1]);
+    else if (viewer && method === "DELETE") {
       payload = viewers.get(viewer[1]);
       viewers.delete(viewer[1]);
-    } else payload = routes[`${req.method} ${req.url}`]?.(json);
+    } else payload = routes[`${method} ${url}`]?.(json);
     if (!payload) {
       res.writeHead(404).end("no such route");
       return;
@@ -48,10 +50,10 @@ const server = http.createServer((req, res) => {
   });
 });
 
-let url;
+let url: string;
 before(async () => {
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  url = `http://127.0.0.1:${server.address().port}`;
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 after(() => {
   server.closeAllConnections();
@@ -102,7 +104,7 @@ test("watch creates a viewer whose metrics and stop go through the API", async (
   const s = await session({ server: url });
   const viewer = await s.watch("http://cdn/index.m3u8");
   assert.equal(viewer.id, "v1");
-  assert.deepEqual(await viewer.metrics(), { av_drift: { drift_ms: 12 } });
+  assert.deepEqual(await viewer.metrics(), { av_drift: { drift_ms: 12 } } as object);
   const done = await viewer.waitUntilDone({ intervalMs: 1 });
   assert.equal(done.hls_url, "http://cdn/index.m3u8");
   assert.deepEqual(await viewer.stop(), { av_drift: { drift_ms: 12 } });
