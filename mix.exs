@@ -39,7 +39,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_mpeg_ts_plugin, "~> 2.4", override: true},
       {:membrane_aac_fdk_plugin,
        github: "membraneframework/membrane_aac_fdk_plugin",
-       branch: "fix_decoder_output_timestamps",
+       branch: "add_compensate_delay_encoder_flag",
        override: true},
       {:ex_m3u8, "~> 0.15"},
       {:plug, "~> 1.16"},

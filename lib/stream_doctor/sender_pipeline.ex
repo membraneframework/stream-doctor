@@ -82,7 +82,7 @@ defmodule StreamDoctor.SenderPipeline do
     get_child(:boombox)
     |> via_out(:output, options: [kind: :audio, codec: Membrane.RawAudio])
     |> child(:audio_marker_encoder, StreamDoctor.Probe.Audio.MarkerEncoder)
-    |> child(:audio_encoder, %Membrane.Transcoder{output_stream_format: Membrane.AAC})
+    |> child(:audio_encoder, %Membrane.AAC.FDK.Encoder{compensate_delay: true})
     |> maybe_realtimer(:audio, state)
     |> via_in(Membrane.Pad.ref(:audio, 0))
     |> get_child(:rtmp_sink)

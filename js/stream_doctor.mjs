@@ -6,6 +6,12 @@
 //   const viewer = await session.watch(hlsUrl);
 //   const { av_drift } = await viewer.metrics();          // any time
 //   await viewer.stop(); await streamer.stop();
+//
+// Pass `binary` to session() to spawn the burrito build when no server is
+// listening; session.close() then stops it.
+
+import { spawn } from "node:child_process";
+import fs from "node:fs";
 
 const DEFAULT_SERVER = "http://localhost:4040";
 
@@ -31,14 +37,38 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const TERMINAL_STATUSES = ["ended", "failed", "stopped"];
 
-export async function session({ server = DEFAULT_SERVER } = {}) {
-  await api("GET", "/status", null, server);
-  return new Session(server);
+export async function session({ server = DEFAULT_SERVER, binary, cwd } = {}) {
+  try {
+    await api("GET", "/status", null, server);
+    return new Session(server, null);
+  } catch (e) {
+    if (!binary) throw e;
+  }
+  return new Session(server, await spawnServer(binary, cwd, server));
+}
+
+async function spawnServer(binary, cwd, server) {
+  if (!fs.existsSync(binary)) {
+    throw new Error(`${binary} not found, build it with: MIX_ENV=prod mix release`);
+  }
+  console.log(`starting ${binary} (first run unpacks, be patient)`);
+  // own process group: the burrito launcher doesn't take the BEAM down with it
+  const child = spawn(binary, [], { cwd, stdio: ["ignore", "inherit", "inherit"], detached: true });
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline; ) {
+    if (child.exitCode !== null) throw new Error(`server exited with ${child.exitCode}`);
+    await sleep(1000);
+    try {
+      await api("GET", "/status", null, server);
+      return child;
+    } catch {}
+  }
+  throw new Error("server didn't come up in 2 minutes");
 }
 
 class Session {
-  constructor(server) {
+  constructor(server, child) {
     this.server = server;
+    this.child = child;
   }
 
   publish(rtmpUrl, { file = "test.mp4" } = {}) {
@@ -53,6 +83,16 @@ class Session {
 
   status() {
     return api("GET", "/status", null, this.server);
+  }
+
+  close() {
+    const child = this.child;
+    if (!child || child.exitCode !== null) return Promise.resolve();
+    return new Promise((resolve) => {
+      setTimeout(() => process.kill(-child.pid, "SIGKILL"), 5000).unref();
+      child.once("exit", resolve);
+      process.kill(-child.pid, "SIGTERM");
+    });
   }
 }
 
