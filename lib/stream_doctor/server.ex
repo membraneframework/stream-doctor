@@ -3,8 +3,9 @@ defmodule StreamDoctor.Server do
 
   use GenServer
 
-  alias StreamDoctor.Metric
   alias StreamDoctor.Collector
+  alias StreamDoctor.Metric
+  alias StreamDoctor.Probe.SendReporter
 
   @hls_timeout 120_000
   @metric_specs [{Metric.AvDrift, []}]
@@ -19,10 +20,10 @@ defmodule StreamDoctor.Server do
   end
 
   @spec stop_streamer() :: {:ok, map()} | {:error, :not_found}
-  def stop_streamer(), do: GenServer.call(__MODULE__, :stop_streamer, 15_000)
+  def stop_streamer, do: GenServer.call(__MODULE__, :stop_streamer, 15_000)
 
   @spec streamer() :: {:ok, map()} | {:error, :not_found}
-  def streamer(), do: GenServer.call(__MODULE__, :streamer)
+  def streamer, do: GenServer.call(__MODULE__, :streamer)
 
   @spec start_viewer(String.t()) :: {:ok, map()}
   def start_viewer(hls_url), do: GenServer.call(__MODULE__, {:start_viewer, hls_url})
@@ -34,12 +35,12 @@ defmodule StreamDoctor.Server do
   def viewer(id), do: GenServer.call(__MODULE__, {:viewer, id})
 
   @spec status() :: map()
-  def status(), do: GenServer.call(__MODULE__, :status)
+  def status, do: GenServer.call(__MODULE__, :status)
 
   @impl true
   def init(_opts) do
     Process.flag(:trap_exit, true)
-    :ok = StreamDoctor.Probe.SendReporter.subscribe()
+    :ok = SendReporter.subscribe()
     {:ok, %{streamer: nil, viewers: %{}, next_id: 1}}
   end
 

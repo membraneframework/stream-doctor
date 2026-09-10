@@ -6,7 +6,7 @@ defmodule StreamDoctor.Probe.BarTest do
   @width 640
   @height 360
 
-  defp grey_frame() do
+  defp grey_frame do
     y = :binary.copy(<<128>>, @width * @height)
     chroma = :binary.copy(<<128>>, div(@width * @height, 4))
     y <> chroma <> chroma

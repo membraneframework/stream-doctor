@@ -3,8 +3,8 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
 
   use Membrane.Filter
 
-  alias StreamDoctor.Probe.Video.Bar
   alias Membrane.RawVideo
+  alias StreamDoctor.Probe.Video.Bar
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
   def_output_pad(:output, accepted_format: %RawVideo{pixel_format: :I420})
