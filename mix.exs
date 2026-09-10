@@ -1,4 +1,4 @@
-Code.require_file("rel/slim.exs")
+Code.require_file("rel/symlinks.exs")
 
 defmodule StreamDoctor.MixProject do
   use Mix.Project
@@ -25,19 +25,37 @@ defmodule StreamDoctor.MixProject do
   defp releases do
     [
       stream_doctor: [
-        steps: [:assemble, &StreamDoctor.Rel.Slim.run/1, &Burrito.wrap/1],
-        burrito: [targets: [macos_arm: [os: :darwin, cpu: :aarch64]]]
+        steps: [:assemble, &StreamDoctor.Rel.Symlinks.run/1, &Burrito.wrap/1],
+        burrito: [
+          targets: [macos_arm: [os: :darwin, cpu: :aarch64] ++ custom_erts()],
+          # recreates the symlinks rel/symlinks.exs recorded, on every launch
+          plugin: "rel/burrito_plugin/plugin.zig"
+        ]
       ]
     ]
   end
 
+  # Burrito downloads a prebuilt ERTS matching the OTP that runs `mix release`
+  # (../shell.nix pins one that Beam Machine serves). When none exists for the
+  # host's OTP, run rel/pack_host_erts.sh once; its tarball is used instead,
+  # but only if it matches the running OTP. Host == target only.
+  defp custom_erts do
+    otp =
+      Path.join([:code.root_dir(), "releases", :erlang.system_info(:otp_release), "OTP_VERSION"])
+
+    with {:ok, version} <- File.read(otp),
+         [path | _] <- Path.wildcard("_build/custom_erts/otp-#{String.trim(version)}-*.tar.gz") do
+      [custom_erts: Path.expand(path)]
+    else
+      _ -> []
+    end
+  end
+
   defp deps do
     [
-      {:boombox, "~> 0.2.13"},
-      # need live_edge_mode?, boombox pins 0.20
-      {:membrane_http_adaptive_stream_plugin, "~> 0.21.3", override: true},
-      # srt plugin vs ex_hls mpeg_ts conflict, 2.4 works for both
-      {:membrane_mpeg_ts_plugin, "~> 2.4", override: true},
+      {:membrane_file_plugin, "~> 0.17"},
+      {:membrane_mp4_plugin, "~> 0.36"},
+      {:membrane_http_adaptive_stream_plugin, "~> 0.21.3"},
       {:membrane_aac_fdk_plugin,
        github: "membraneframework/membrane_aac_fdk_plugin",
        branch: "add_compensate_delay_encoder_flag",

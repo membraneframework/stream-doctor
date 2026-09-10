@@ -1,8 +1,7 @@
 # StreamDoctor
 
 Measures the audio/video drift of a live stream, end to end. Built on the
-[Membrane Framework](https://membrane.stream) and
-[Boombox](https://hexdocs.pm/boombox).
+[Membrane Framework](https://membrane.stream).
 
 The idea: instead of trusting whatever the streaming infrastructure reports,
 send it a stream whose content is machine-readable and check what comes out
@@ -22,6 +21,16 @@ streamer and any number of viewers can be driven from a script.
 
 You need Elixir, Zig 0.16.0, ffmpeg, python3 and node on your PATH, and a media
 file with an audio track (`test.mp4` by default).
+
+On macOS the built binary also needs Homebrew's OpenSSL 3:
+
+```sh
+brew install openssl@3
+```
+
+The precompiled ffmpeg it bundles expects `libssl.3.dylib` in
+`/opt/homebrew/lib` (or on `DYLD_FALLBACK_LIBRARY_PATH`). The binary checks for
+it at startup and exits with that instruction when it is missing.
 
 ```sh
 mix deps.get
@@ -79,8 +88,13 @@ const metrics = await viewer.stop();
 into a single executable for the current machine, which is what the check
 runs. Start it by hand with `PORT=4040 burrito_out/stream_doctor_macos_arm`.
 
-It needs Zig 0.16.0 on the PATH and, for now, macOS: a release step
-(`rel/slim.exs`) rewrites the NIFs' load paths so that every plugin shares one
-copy of the precompiled FFmpeg bundle instead of getting its own, which is
-what brings the binary down to about 50 MB. The binary unpacks itself into
-`~/Library/Application Support/.burrito` on the first run.
+It needs Zig 0.16.0 on the PATH. Two release steps keep the binary small:
+`rel/symlinks.exs` restores the symlinks through which every Membrane plugin
+shares one copy of the precompiled FFmpeg bundle (`mix release` copies them as
+full files, one per plugin), and `rel/burrito_plugin/plugin.zig` recreates
+those links on the target machine, because Burrito's payload format cannot
+carry symlinks. No binary patching is involved. If Burrito has no prebuilt
+ERTS for your OTP, run `rel/pack_host_erts.sh` once first. The binary unpacks
+itself into `~/Library/Application Support/.burrito` on the first run. For now
+it only boots from the dev shell, because two NIFs still find OpenSSL through
+`DYLD_LIBRARY_PATH`; that and the other open threads are tracked in `TODO.md`.
