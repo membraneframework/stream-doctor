@@ -89,23 +89,21 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     if ref_power < @local_contrast * max(local_noise.(@ref_freq), 1.0e-9) do
       {:error, :marker_not_found}
     else
-      bits =
-        Enum.map(@data_freqs ++ [@parity_freq], fn freq ->
-          tone_power = power.(freq)
-
-          present? =
-            tone_power > @local_contrast * local_noise.(freq) and
-              tone_power > @ref_floor * ref_power
-
-          if present?, do: 1, else: 0
-        end)
-
+      bits = Enum.map(@data_freqs ++ [@parity_freq], &tone_bit(&1, power, local_noise, ref_power))
       {data, [parity]} = Enum.split(bits, @data_bits)
 
       if rem(Enum.sum(data), 2) == parity,
         do: {:ok, Integer.undigits(data, 2)},
         else: {:error, :parity_mismatch}
     end
+  end
+
+  defp tone_bit(freq, power, local_noise, ref_power) do
+    tone_power = power.(freq)
+
+    if tone_power > @local_contrast * local_noise.(freq) and tone_power > @ref_floor * ref_power,
+      do: 1,
+      else: 0
   end
 
   @spec encode(non_neg_integer()) :: [0 | 1]

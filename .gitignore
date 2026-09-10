@@ -25,3 +25,6 @@ stream_doctor-*.tar
 
 # burrito binaries
 /burrito_out/
+
+# JS tooling
+/node_modules/

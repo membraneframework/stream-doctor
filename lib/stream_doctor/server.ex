@@ -184,22 +184,20 @@ defmodule StreamDoctor.Server do
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     error = if reason == :normal, do: nil, else: inspect(reason)
 
-    state =
-      cond do
-        state.streamer != nil and state.streamer.pid == pid ->
-          %{state | streamer: mark_down(state.streamer, error)}
-
-        true ->
-          case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
-            {id, viewer} -> put_in(state.viewers[id], mark_down(viewer, error))
-            nil -> state
-          end
-      end
-
-    {:noreply, state}
+    {:noreply, mark_down_pid(state, pid, error)}
   end
 
   def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
+  defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error),
+    do: %{state | streamer: mark_down(streamer, error)}
+
+  defp mark_down_pid(state, pid, error) do
+    case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
+      {id, viewer} -> put_in(state.viewers[id], mark_down(viewer, error))
+      nil -> state
+    end
+  end
 
   defp mark_down(%{status: :stopped} = entity, _error), do: entity
   defp mark_down(entity, error), do: %{entity | status: :ended, error: error}

@@ -45,7 +45,7 @@ async function spawnServer(binary, server) {
   console.log(`starting ${binary}`);
   // own process group, so that killing the burrito launcher takes the BEAM with it
   const child = spawn(binary, [], { stdio: ["ignore", "inherit", "inherit"], detached: true });
-  for (const deadline = Date.now() + 120_000; Date.now() < deadline; ) {
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
     if (child.exitCode !== null) throw new Error(`server exited with ${child.exitCode}`);
     await sleep(1000);
     try {

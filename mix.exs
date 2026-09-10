@@ -10,7 +10,8 @@ defmodule StreamDoctor.MixProject do
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      releases: releases()
+      releases: releases(),
+      dialyzer: [flags: [:error_handling]]
     ]
   end
 
@@ -52,7 +53,9 @@ defmodule StreamDoctor.MixProject do
       {:membrane_raw_audio_format, "~> 0.12"},
       {:membrane_transcoder_plugin, "~> 0.3"},
       {:membrane_aac_format, "~> 0.8"},
-      {:burrito, "~> 1.6", runtime: false}
+      {:burrito, "~> 1.6", runtime: false},
+      {:credo, "~> 1.7", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.4", only: :dev, runtime: false}
     ]
   end
 end
