@@ -38,14 +38,13 @@ close to zero. `buggy_infra.sh` delays the audio content by 200 ms on the way,
 which the check should catch. Run the same check against both and compare.
 
 The check spawns the binary (or talks to a server already listening on port
-4040), publishes the file, starts a viewer, waits for the first drift sample,
-keeps sampling for a while and finally prints PASS or FAIL. Options:
+4040), publishes the file, starts a viewer, prints the drift once a second for
+40 seconds and finally prints PASS if the last value is within 40 ms of zero.
+The file to stream is the only argument, `test.mp4` by default:
 
-* `--file test.mp4` - the file to stream,
-* `--measure-s 30` - how long to keep sampling after the first drift value,
-* `--expect 0` - the drift you expect, in ms,
-* `--tolerance 40` - how far from that is still a PASS, in ms,
-* `--binary burrito_out/stream_doctor_macos_arm` - which binary to run.
+```sh
+node examples/av_drift.mjs boombox.mp4
+```
 
 ## API
 

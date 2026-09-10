@@ -1,14 +1,5 @@
-// JS client for the stream_doctor server (see README for the API).
-//
-//   const session = await stream_doc.session();          // server on :4040
-//   const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
-//   await streamer.waitUntilLive();
-//   const viewer = await session.watch(hlsUrl);
-//   const { av_drift } = await viewer.metrics();          // any time
-//   await viewer.stop(); await streamer.stop();
-//
-// Pass `binary` to session() to spawn the burrito build when no server is
-// listening; session.close() then stops it.
+// Client for the stream_doctor server. `session({ binary })` spawns the
+// binary when no server is listening; `session.close()` stops it.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -37,23 +28,23 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const TERMINAL_STATUSES = ["ended", "failed", "stopped"];
 
-export async function session({ server = DEFAULT_SERVER, binary, cwd } = {}) {
+export async function session({ server = DEFAULT_SERVER, binary } = {}) {
   try {
     await api("GET", "/status", null, server);
     return new Session(server, null);
   } catch (e) {
     if (!binary) throw e;
   }
-  return new Session(server, await spawnServer(binary, cwd, server));
+  return new Session(server, await spawnServer(binary, server));
 }
 
-async function spawnServer(binary, cwd, server) {
+async function spawnServer(binary, server) {
   if (!fs.existsSync(binary)) {
     throw new Error(`${binary} not found, build it with: MIX_ENV=prod mix release`);
   }
-  console.log(`starting ${binary} (first run unpacks, be patient)`);
-  // own process group: the burrito launcher doesn't take the BEAM down with it
-  const child = spawn(binary, [], { cwd, stdio: ["ignore", "inherit", "inherit"], detached: true });
+  console.log(`starting ${binary}`);
+  // own process group, so that killing the burrito launcher takes the BEAM with it
+  const child = spawn(binary, [], { stdio: ["ignore", "inherit", "inherit"], detached: true });
   for (const deadline = Date.now() + 120_000; Date.now() < deadline; ) {
     if (child.exitCode !== null) throw new Error(`server exited with ${child.exitCode}`);
     await sleep(1000);
@@ -100,7 +91,7 @@ class Streamer {
   constructor(server, ready) {
     this.server = server;
     this.ready = ready;
-    ready.catch(() => {}); // reported by the awaiting methods instead
+    ready.catch(() => {});
   }
 
   status() {
