@@ -24,7 +24,7 @@ defmodule StreamDoctor.Metric.AvDrift do
   @max_samples 50
 
   @impl true
-  def name(), do: :av_drift
+  def name, do: :av_drift
 
   @impl true
   def init(_opts) do
@@ -104,7 +104,7 @@ defmodule StreamDoctor.Metric.AvDrift do
     end
   end
 
-  defp symbol_duration(), do: Membrane.Time.milliseconds(AudioMarkerDecoder.symbol_ms())
+  defp symbol_duration, do: Membrane.Time.milliseconds(AudioMarkerDecoder.symbol_ms())
 
   defp median([]), do: nil
 

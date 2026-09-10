@@ -5,9 +5,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   require Membrane.Logger
 
+  alias Membrane.RawAudio
   alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Audio.Tone
-  alias Membrane.RawAudio
 
   @scan_symbols 6
   @scan_min_score 10
@@ -214,5 +214,5 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
 
-  defp now_ms(), do: System.monotonic_time(:millisecond)
+  defp now_ms, do: System.monotonic_time(:millisecond)
 end

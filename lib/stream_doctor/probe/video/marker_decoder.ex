@@ -5,9 +5,9 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
 
   require Membrane.Logger
 
+  alias Membrane.RawVideo
   alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Video.Bar
-  alias Membrane.RawVideo
 
   def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
 
@@ -55,5 +55,5 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
     {[], state}
   end
 
-  defp now_ms(), do: System.monotonic_time(:millisecond)
+  defp now_ms, do: System.monotonic_time(:millisecond)
 end

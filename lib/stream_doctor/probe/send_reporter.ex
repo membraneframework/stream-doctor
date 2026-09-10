@@ -13,7 +13,7 @@ defmodule StreamDoctor.Probe.SendReporter do
   def_output_pad(:output, accepted_format: _any)
 
   @spec subscribe() :: :ok
-  def subscribe() do
+  def subscribe do
     {:ok, _owner} = Registry.register(@registry, @key, nil)
     :ok
   end

@@ -95,5 +95,5 @@ defmodule StreamDoctor.Server.Hls do
     end)
   end
 
-  defp now_ms(), do: System.monotonic_time(:millisecond)
+  defp now_ms, do: System.monotonic_time(:millisecond)
 end

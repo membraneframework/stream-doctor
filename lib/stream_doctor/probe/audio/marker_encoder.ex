@@ -3,8 +3,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
 
   use Membrane.Filter
 
-  alias StreamDoctor.Probe.Audio.Tone
   alias Membrane.RawAudio
+  alias StreamDoctor.Probe.Audio.Tone
 
   def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
   def_output_pad(:output, accepted_format: %RawAudio{sample_format: :s16le})

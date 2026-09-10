@@ -24,10 +24,10 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @ref_floor 0.01
 
   @spec max_symbol() :: pos_integer()
-  def max_symbol(), do: @max_symbol
+  def max_symbol, do: @max_symbol
 
   @spec symbol_ms() :: pos_integer()
-  def symbol_ms(), do: @symbol_ms
+  def symbol_ms, do: @symbol_ms
 
   @spec symbol_length(pos_integer()) :: pos_integer()
   def symbol_length(sample_rate), do: div(sample_rate * @symbol_ms, 1000)
