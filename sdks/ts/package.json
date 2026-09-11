@@ -19,9 +19,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
-    "test": "node --test client/*.test.ts",
-    "lint": "tsc --noEmit && eslint client examples && prettier --check client examples/*.ts",
-    "format": "prettier --write client examples/*.ts"
+    "test": "node --test src/*.test.ts",
+    "lint": "tsc --noEmit && eslint src examples && prettier --check src examples",
+    "format": "prettier --write src examples"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

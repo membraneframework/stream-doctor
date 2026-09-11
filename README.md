@@ -25,11 +25,12 @@ The precompiled ffmpeg it bundles expects `libssl.3.dylib` in
 it at startup and exits with that instruction when it is missing.
 
 ```sh
-mix deps.get
-MIX_ENV=prod mix release          # once: builds burrito_out/stream_doctor_macos_arm
+(cd daemon && mix deps.get && MIX_ENV=prod mix release)  # once: builds daemon/burrito_out/stream_doctor_macos_arm
 examples/working_infra.sh         # terminal 1: a local RTMP -> HLS pipeline
-node examples/av_drift.ts         # terminal 2: prints the drift, then PASS or FAIL
+node sdks/ts/examples/av_drift.ts # terminal 2: prints the drift, then PASS or FAIL
 ```
+
+The daemon (a Mix project) lives in `daemon/`, the SDKs in `sdks/<language>/`.
 
 `buggy_infra.sh` is the same pipeline with the audio delayed by 200 ms, which
 the check should catch. The file to stream is the only argument of the check,
@@ -64,24 +65,25 @@ await streamer.waitUntilLive();
 const metrics = await viewer.stop();
 ```
 
-`npm ci && npm run lint && npm test` checks the client, as CI does. To
-release, bump `version` in `package.json` and push a matching `vX.Y.Z` tag: the
+`npm ci && npm run lint && npm test` in `sdks/ts` checks the client, as CI
+does. To release, bump `version` in `sdks/ts/package.json` and push a matching
+`vX.Y.Z` tag: the
 Release workflow builds the binary per platform, then publishes the platform
 packages and the wrapper (it needs an `NPM_TOKEN` repository secret).
 
 ## Standalone binary
 
-`mix release` wraps the app with [Burrito](https://github.com/burrito-elixir/burrito)
+`mix release` in `daemon/` wraps the app with [Burrito](https://github.com/burrito-elixir/burrito)
 into a single executable for the current machine, which is what the check
-runs. Start it by hand with `PORT=4040 burrito_out/stream_doctor_macos_arm`.
+runs. Start it by hand with `PORT=4040 daemon/burrito_out/stream_doctor_macos_arm`.
 
 It needs Zig 0.16.0 on the PATH. Two release steps keep the binary small:
-`rel/symlinks.exs` restores the symlinks through which every Membrane plugin
+`daemon/rel/symlinks.exs` restores the symlinks through which every Membrane plugin
 shares one copy of the precompiled FFmpeg bundle (`mix release` copies them as
-full files, one per plugin), and `rel/burrito_plugin/plugin.zig` recreates
+full files, one per plugin), and `daemon/rel/burrito_plugin/plugin.zig` recreates
 those links on the target machine, because Burrito's payload format cannot
 carry symlinks. No binary patching is involved. If Burrito has no prebuilt
-ERTS for your OTP, run `rel/pack_host_erts.sh` once first. The binary unpacks
+ERTS for your OTP, run `daemon/rel/pack_host_erts.sh` once first. The binary unpacks
 itself into `~/Library/Application Support/.burrito` on the first run. For now
 it only boots from the dev shell, because two NIFs still find OpenSSL through
-`DYLD_LIBRARY_PATH`; that and the other open threads are tracked in `TODO.md`.
+`DYLD_LIBRARY_PATH`; that and the other open threads are tracked in `daemon/TODO.md`.

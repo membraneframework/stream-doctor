@@ -1,8 +1,8 @@
-import * as stream_doc from "../client/stream_doctor.ts";
+import * as stream_doc from "../src/stream_doctor.ts";
 
 const file = process.argv[2] ?? "test.mp4";
 
-const session = await stream_doc.session({ binary: "burrito_out/stream_doctor_macos_arm" });
+const session = await stream_doc.session({ binary: "daemon/burrito_out/stream_doctor_macos_arm" });
 const streamer = session.publish("rtmp://127.0.0.1:1935/live/test", { file });
 await streamer.waitUntilLive();
 const viewer = await session.watch("http://127.0.0.1:8123/index.m3u8");

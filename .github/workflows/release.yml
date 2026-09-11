@@ -36,6 +36,9 @@ jobs:
             target: linux_x86
             runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: daemon
     env:
       MIX_ENV: prod
       BURRITO_TARGET: ${{ matrix.target }}
@@ -59,9 +62,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            deps
-            _build
-          key: release-${{ matrix.platform }}-${{ hashFiles('mix.lock') }}
+            daemon/deps
+            daemon/_build
+          key: release-${{ matrix.platform }}-${{ hashFiles('daemon/mix.lock') }}
           restore-keys: release-${{ matrix.platform }}-
 
       - run: mix deps.get
@@ -82,13 +85,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: stream_doctor-${{ matrix.platform }}
-          path: burrito_out/stream_doctor_${{ matrix.target }}
+          path: daemon/burrito_out/stream_doctor_${{ matrix.target }}
           if-no-files-found: error
 
   publish:
     needs: build
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/ts
     permissions:
       contents: read
       id-token: write
@@ -101,6 +107,7 @@ jobs:
           node-version: 24
           cache: npm
           registry-url: https://registry.npmjs.org
+          cache-dependency-path: sdks/ts/package-lock.json
 
       - name: Check that the tag matches package.json
         run: |
@@ -113,7 +120,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: stream_doctor-*
-          path: artifacts
+          path: sdks/ts/artifacts
 
       - run: npm ci
 
