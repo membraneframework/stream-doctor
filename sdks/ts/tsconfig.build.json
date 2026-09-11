@@ -4,8 +4,8 @@
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "declaration": true,
-    "rootDir": "client",
+    "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["client/stream_doctor.ts"]
+  "include": ["src/stream_doctor.ts"]
 }

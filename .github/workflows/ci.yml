@@ -6,29 +6,53 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  js_lint_test:
+  ts_sdk:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/ts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Lint
-        run: npm run lint
-      - name: Run tests
-        run: npm test
+          cache-dependency-path: sdks/ts/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
 
-  build_test:
-    uses: membraneframework/membrane_actions/.github/workflows/build-test.yml@main
-
-  test:
-    uses: membraneframework/membrane_actions/.github/workflows/test.yml@main
-
-  lint:
-    uses: membraneframework/membrane_actions/.github/workflows/lint.yml@main
-    with:
-      docs: false
+  # the membraneframework/membrane_actions reusable workflows assume the mix
+  # project at the repository root, so their steps are inlined here
+  daemon:
+    runs-on: ubuntu-latest
+    container:
+      image: membraneframeworklabs/docker_membrane:latest
+      env:
+        ASDF_DATA_DIR: /root/.asdf
+    defaults:
+      run:
+        working-directory: daemon
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            daemon/deps
+            daemon/_build
+          key: daemon-${{ hashFiles('daemon/mix.lock') }}
+          restore-keys: daemon-
+      - run: mix deps.get
+      - run: mix compile --force --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix credo
+      - run: mix test --warnings-as-errors
+      - run: mix dialyzer
+        env:
+          MIX_ENV: dev

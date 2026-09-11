@@ -16,11 +16,12 @@ late.
 Requires Elixir, Zig 0.16.0, ffmpeg, python3, Node 24+ and macOS.
 
 ```sh
-mix deps.get
-MIX_ENV=prod mix release          # once: builds burrito_out/stream_doctor_macos_arm
+(cd daemon && mix deps.get && MIX_ENV=prod mix release)  # once: builds daemon/burrito_out/stream_doctor_macos_arm
 examples/working_infra.sh         # terminal 1: a local RTMP -> HLS pipeline
-node examples/av_drift.ts         # terminal 2: prints the drift, then PASS or FAIL
+node sdks/ts/examples/av_drift.ts # terminal 2: prints the drift, then PASS or FAIL
 ```
+
+The daemon (a Mix project) lives in `daemon/`, the SDKs in `sdks/<language>/`.
 
 `buggy_infra.sh` is the same pipeline with the audio delayed by 200 ms, which
 the check should catch. The file to stream is the only argument of the check,
@@ -55,7 +56,8 @@ await streamer.waitUntilLive();
 const metrics = await viewer.stop();
 ```
 
-`npm ci && npm run lint && npm test` checks the client, as CI does. To
-release, bump `version` in `package.json` and push a matching `vX.Y.Z` tag: the
+`npm ci && npm run lint && npm test` in `sdks/ts` checks the client, as CI
+does. To release, bump `version` in `sdks/ts/package.json` and push a matching
+`vX.Y.Z` tag: the
 Release workflow builds the binary per platform, then publishes the platform
 packages and the wrapper (it needs an `NPM_TOKEN` repository secret).
