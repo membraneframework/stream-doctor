@@ -22,17 +22,55 @@ defmodule StreamDoctor.MixProject do
     ]
   end
 
+  @burrito_targets [
+    macos_arm: [os: :darwin, cpu: :aarch64],
+    macos_x86: [os: :darwin, cpu: :x86_64],
+    linux_arm: [os: :linux, cpu: :aarch64],
+    linux_x86: [os: :linux, cpu: :x86_64]
+  ]
+
   defp releases do
     [
       stream_doctor: [
         steps: [:assemble, &StreamDoctor.Rel.Symlinks.run/1, &Burrito.wrap/1],
         burrito: [
-          targets: [macos_arm: [os: :darwin, cpu: :aarch64] ++ custom_erts()],
+          targets: burrito_targets(),
           # recreates the symlinks rel/symlinks.exs recorded, on every launch
           plugin: "rel/burrito_plugin/plugin.zig"
         ]
       ]
     ]
+  end
+
+  # the NIFs are compiled for the host, so a cross build can never run; without
+  # BURRITO_TARGET build only the host's target instead of all of them
+  defp burrito_targets do
+    if System.get_env("BURRITO_TARGET") do
+      @burrito_targets
+    else
+      {os, cpu} = host()
+
+      for {name, t} <- @burrito_targets, t[:os] == os and t[:cpu] == cpu do
+        {name, t ++ custom_erts()}
+      end
+    end
+  end
+
+  defp host do
+    os =
+      case :os.type() do
+        {:unix, :darwin} -> :darwin
+        {:unix, :linux} -> :linux
+      end
+
+    cpu =
+      case to_string(:erlang.system_info(:system_architecture)) do
+        "aarch64" <> _ -> :aarch64
+        "arm64" <> _ -> :aarch64
+        "x86_64" <> _ -> :x86_64
+      end
+
+    {os, cpu}
   end
 
   # Burrito downloads a prebuilt ERTS matching the OTP that runs `mix release`

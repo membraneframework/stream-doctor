@@ -46,12 +46,17 @@ The binary listens on port 4040 (`PORT` to change it) and speaks JSON:
 * `GET /status`.
 
 A viewer reports the drift under `metrics.av_drift.drift_ms`.
-`client/stream_doctor.ts` wraps the endpoints for scripts:
+The `stream-doctor` npm package wraps the endpoints for scripts and brings the
+binary along, as an optional dependency on `@stream-doctor/<platform>`:
+
+```sh
+npm install stream-doctor
+```
 
 ```ts
-import * as stream_doc from "./client/stream_doctor.ts";
+import * as stream_doc from "stream-doctor";
 
-const session = await stream_doc.session();
+const session = await stream_doc.session(); // spawns the bundled binary if nothing listens
 const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
 const viewer = await session.watch(hlsUrl);
 await streamer.waitUntilLive();
@@ -59,7 +64,10 @@ await streamer.waitUntilLive();
 const metrics = await viewer.stop();
 ```
 
-`npm ci && npm run lint && npm test` checks the client, as CI does.
+`npm ci && npm run lint && npm test` checks the client, as CI does. To
+release, bump `version` in `package.json` and push a matching `vX.Y.Z` tag: the
+Release workflow builds the binary per platform, then publishes the platform
+packages and the wrapper (it needs an `NPM_TOKEN` repository secret).
 
 ## Standalone binary
 

@@ -1,10 +1,31 @@
-// Client for the stream_doctor server. `session({ binary })` spawns the
-// binary when no server is listening; `session.close()` stops it.
+// Client for the stream_doctor server. `session()` spawns the binary (the one
+// bundled for this platform, or `binary`) when no server is listening;
+// `session.close()` stops it.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 
 const DEFAULT_SERVER = "http://localhost:4040";
+
+const PLATFORM_PACKAGES: Record<string, string> = {
+  "darwin-arm64": "@stream-doctor/darwin-arm64",
+  "darwin-x64": "@stream-doctor/darwin-x64",
+  "linux-arm64": "@stream-doctor/linux-arm64",
+  "linux-x64": "@stream-doctor/linux-x64",
+};
+
+// The daemon ships as one package per platform, all optional dependencies of
+// this one, so only the matching one is installed.
+export function bundledBinary(): string | null {
+  const pkg = PLATFORM_PACKAGES[`${process.platform}-${process.arch}`];
+  if (!pkg) return null;
+  try {
+    return createRequire(import.meta.url).resolve(`${pkg}/bin/stream_doctor`);
+  } catch {
+    return null;
+  }
+}
 
 export type Status =
   "streaming" | "receiving" | "waiting_for_playlist" | "ended" | "failed" | "stopped";
@@ -76,7 +97,12 @@ export async function session({
     await api("GET", "/status", null, server);
     return new Session(server, null);
   } catch (e) {
-    if (!binary) throw e;
+    binary ??= bundledBinary() ?? undefined;
+    if (!binary) {
+      throw new Error(
+        `${(e as Error).message}; no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\``
+      );
+    }
   }
   return new Session(server, await spawnServer(binary, server));
 }

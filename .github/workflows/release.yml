@@ -1,0 +1,135 @@
+name: Release
+
+# Builds the daemon on every supported platform and, for a `v*` tag matching
+# package.json, publishes @stream-doctor/<platform> for each of them followed
+# by the stream-doctor wrapper. A manual run only builds.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: "0.16.0"
+  OTP_VERSION: "28.3"
+  ELIXIR_VERSION: "1.19.3"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            target: macos_arm
+            runner: macos-latest
+          - platform: darwin-x64
+            target: macos_x86
+            runner: macos-15-intel
+          - platform: linux-arm64
+            target: linux_arm
+            runner: ubuntu-24.04-arm
+          - platform: linux-x64
+            target: linux_x86
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    env:
+      MIX_ENV: prod
+      BURRITO_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        if: runner.os == 'Linux'
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - name: Install Erlang and Elixir
+        if: runner.os == 'macOS'
+        run: brew install erlang elixir xz
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: release-${{ matrix.platform }}-${{ hashFiles('mix.lock') }}
+          restore-keys: release-${{ matrix.platform }}-
+
+      - run: mix deps.get
+      - run: mix release --overwrite
+
+      - name: Smoke test
+        run: |
+          bin=burrito_out/stream_doctor_${{ matrix.target }}
+          chmod +x "$bin"
+          "$bin" &
+          for _ in $(seq 60); do
+            if curl -sf http://localhost:4040/status; then exit 0; fi
+            sleep 2
+          done
+          echo "the daemon did not come up"
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stream_doctor-${{ matrix.platform }}
+          path: burrito_out/stream_doctor_${{ matrix.target }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check that the tag matches package.json
+        run: |
+          version=$(npm pkg get version | tr -d '"')
+          test "v$version" = "$GITHUB_REF_NAME" || {
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stream_doctor-*
+          path: artifacts
+
+      - run: npm ci
+
+      # platform packages go first so the wrapper never points at a package
+      # that is not there yet
+      - name: Publish platform packages
+        run: |
+          version=$(npm pkg get version | tr -d '"')
+          for dir in npm/*/; do
+            platform=$(basename "$dir")
+            mkdir -p "$dir/bin"
+            cp "artifacts/stream_doctor-$platform"/* "$dir/bin/stream_doctor"
+            chmod +x "$dir/bin/stream_doctor"
+            (cd "$dir" && npm pkg set version="$version" && npm publish --provenance --access public)
+            npm pkg set "optionalDependencies.@stream-doctor/$platform=$version"
+          done
+
+      - name: Publish stream-doctor
+        run: npm publish --provenance --access public
