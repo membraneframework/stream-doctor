@@ -26,9 +26,6 @@ jobs:
           - platform: darwin-arm64
             target: macos_arm
             runner: macos-latest
-          - platform: darwin-x64
-            target: macos_x86
-            runner: macos-15-intel
           - platform: linux-arm64
             target: linux_arm
             runner: ubuntu-24.04-arm
@@ -68,6 +65,14 @@ jobs:
           restore-keys: release-${{ matrix.platform }}-
 
       - run: mix deps.get
+
+      # Burrito's prebuilt ERTS is unusable here: on Linux it is a musl build
+      # that cannot load the glibc NIFs compiled on the runner, and on macOS
+      # Homebrew's newest OTP may not be offered yet (29.0.6 -> 404). Bundle the
+      # runner's own OTP instead; mix.exs picks the tarball up as custom_erts.
+      - name: Pack the host ERTS
+        run: rel/pack_host_erts.sh
+
       - run: mix release --overwrite
 
       - name: Smoke test

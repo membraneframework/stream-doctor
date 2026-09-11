@@ -24,7 +24,6 @@ defmodule StreamDoctor.MixProject do
 
   @burrito_targets [
     macos_arm: [os: :darwin, cpu: :aarch64],
-    macos_x86: [os: :darwin, cpu: :x86_64],
     linux_arm: [os: :linux, cpu: :aarch64],
     linux_x86: [os: :linux, cpu: :x86_64]
   ]
@@ -45,14 +44,16 @@ defmodule StreamDoctor.MixProject do
   # the NIFs are compiled for the host, so a cross build can never run; without
   # BURRITO_TARGET build only the host's target instead of all of them
   defp burrito_targets do
-    if System.get_env("BURRITO_TARGET") do
-      @burrito_targets
-    else
-      {os, cpu} = host()
+    {os, cpu} = host()
+    host? = fn t -> t[:os] == os and t[:cpu] == cpu end
 
-      for {name, t} <- @burrito_targets, t[:os] == os and t[:cpu] == cpu do
-        {name, t ++ custom_erts()}
-      end
+    targets =
+      if System.get_env("BURRITO_TARGET"),
+        do: @burrito_targets,
+        else: Enum.filter(@burrito_targets, fn {_, t} -> host?.(t) end)
+
+    for {name, t} <- targets do
+      if host?.(t), do: {name, t ++ custom_erts()}, else: {name, t}
     end
   end
 
@@ -75,13 +76,12 @@ defmodule StreamDoctor.MixProject do
 
   # Burrito downloads a prebuilt ERTS matching the OTP that runs `mix release`
   # (../shell.nix pins one that Beam Machine serves). When none exists for the
-  # host's OTP, run rel/pack_host_erts.sh once; its tarball is used instead,
+  # host's OTP, or it is unusable (the Linux ones are musl builds that cannot
+  # load glibc NIFs), run rel/pack_host_erts.sh; its tarball is used instead,
   # but only if it matches the running OTP. Host == target only.
   defp custom_erts do
-    otp =
-      Path.join([:code.root_dir(), "releases", :erlang.system_info(:otp_release), "OTP_VERSION"])
-
-    with {:ok, version} <- File.read(otp),
+    with [otp | _] <- Path.wildcard(Path.join([:code.root_dir(), "releases", "*", "OTP_VERSION"])),
+         {:ok, version} <- File.read(otp),
          [path | _] <- Path.wildcard("_build/custom_erts/otp-#{String.trim(version)}-*.tar.gz") do
       [custom_erts: Path.expand(path)]
     else

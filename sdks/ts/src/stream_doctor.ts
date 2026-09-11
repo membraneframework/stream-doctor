@@ -10,7 +10,6 @@ const DEFAULT_SERVER = "http://localhost:4040";
 
 const PLATFORM_PACKAGES: Record<string, string> = {
   "darwin-arm64": "@stream-doctor/darwin-arm64",
-  "darwin-x64": "@stream-doctor/darwin-x64",
   "linux-arm64": "@stream-doctor/linux-arm64",
   "linux-x64": "@stream-doctor/linux-x64",
 };

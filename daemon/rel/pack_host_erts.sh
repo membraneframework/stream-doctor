@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Packs the host's own OTP (the one `erl` on PATH runs) into the tarball layout
 # Burrito's `custom_erts` expects:  otp-<ver>-<os>-<cpu>/{erts-X.Y.Z,lib}
-# Needed when beam-machine has no prebuilt ERTS for the host OTP (29.0.6 -> 404).
+# Needed when beam-machine has no prebuilt ERTS for the host OTP (29.0.6 -> 404)
+# and on Linux, where its ERTS is a musl build that cannot load glibc NIFs.
 # Only valid when the Burrito target equals the host.
 set -euo pipefail
 root=$(erl -noshell -eval 'io:format("~s",[code:root_dir()]), halt().')
