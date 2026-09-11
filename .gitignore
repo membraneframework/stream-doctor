@@ -28,3 +28,7 @@ stream_doctor-*.tar
 
 # JS tooling
 /node_modules/
+
+# npm package build outputs
+/dist/
+/npm/*/bin/

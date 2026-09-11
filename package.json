@@ -1,8 +1,24 @@
 {
-  "name": "stream_doctor",
-  "private": true,
+  "name": "stream-doctor",
+  "version": "0.1.0",
+  "description": "Measures the audio/video drift of a live stream, end to end",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/membraneframework-labs/stream_doctor.git"
+  },
   "type": "module",
+  "exports": "./dist/stream_doctor.js",
+  "types": "./dist/stream_doctor.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "node --test client/*.test.ts",
     "lint": "tsc --noEmit && eslint client examples && prettier --check client examples/*.ts",
     "format": "prettier --write client examples/*.ts"

@@ -1,0 +1,19 @@
+{
+  "name": "@stream-doctor/linux-arm64",
+  "version": "0.0.0",
+  "description": "The stream-doctor daemon, prebuilt for linux arm64",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/membraneframework-labs/stream_doctor.git"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin"
+  ]
+}

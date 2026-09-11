@@ -1,0 +1,19 @@
+{
+  "name": "@stream-doctor/darwin-x64",
+  "version": "0.0.0",
+  "description": "The stream-doctor daemon, prebuilt for darwin x64",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/membraneframework-labs/stream_doctor.git"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ]
+}
