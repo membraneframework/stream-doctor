@@ -31,7 +31,7 @@ defmodule StreamDoctor.MixProject do
   defp releases do
     [
       stream_doctor: [
-        steps: [:assemble, &StreamDoctor.Rel.Symlinks.run/1, &Burrito.wrap/1],
+        steps: [:assemble, &StreamDoctor.Rel.Symlinks.run/1, &musl_stub/1, &Burrito.wrap/1],
         burrito: [
           targets: burrito_targets(),
           # recreates the symlinks rel/symlinks.exs recorded, on every launch
@@ -39,6 +39,15 @@ defmodule StreamDoctor.MixProject do
         ]
       ]
     ]
+  end
+
+  # Burrito 1.6.0 embeds src/musl-runtime.so into the Linux wrapper even with a
+  # custom_erts, where its musl fetch step never writes the file (upstream PR
+  # burrito-elixir/burrito#237). The path baked in is empty then, so the bytes
+  # are never used; an empty file only lets the Zig build go through.
+  defp musl_stub(release) do
+    File.write!("deps/burrito/src/musl-runtime.so", "")
+    release
   end
 
   # the NIFs are compiled for the host, so a cross build can never run; without
