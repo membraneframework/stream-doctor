@@ -20,4 +20,4 @@ ln -s "$root/$erts_dir" "$stage/$name/$erts_dir"
 ln -s "$root/lib" "$stage/$name/lib"
 echo "packing $root ($name) -> $out"
 tar -C "$stage" -h -czf "$out" "$name"
-ls -la "$out"; tar tzf "$out" | head -3
+ls -la "$out"; tar tzf "$out" | sed -n 1,3p
