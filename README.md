@@ -1,8 +1,8 @@
 # StreamDoctor
 
-Automated end-to-end testing for live video infrastructure.
+Automated end-to-end testing for video infrastructure.
 
-StreamDoctor publishes a reference stream into your pipeline, watches what
+StreamDoctor publishes a stream into your pipeline, watches what
 comes out the other end and turns the comparison into metrics you can assert
 on. The goal is that regressions in sync, latency, frame delivery or playback
 quality get caught by CI, not by someone clicking through a list of manual
