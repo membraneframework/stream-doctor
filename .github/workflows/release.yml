@@ -135,7 +135,8 @@ jobs:
       - run: npm ci
 
       # platform packages go first so the wrapper never points at a package
-      # that is not there yet
+      # that is not there yet; versions already on npm are skipped so a rerun
+      # after a partial publish can finish the job
       - name: Publish platform packages
         run: |
           version=$(npm pkg get version | tr -d '"')
@@ -144,9 +145,19 @@ jobs:
             mkdir -p "$dir/bin"
             cp "artifacts/stream_doctor-$platform"/* "$dir/bin/stream_doctor"
             chmod +x "$dir/bin/stream_doctor"
-            (cd "$dir" && npm pkg set version="$version" && npm publish --access public)
+            if npm view "@stream-doctor/$platform@$version" version >/dev/null 2>&1; then
+              echo "@stream-doctor/$platform@$version is already published, skipping"
+            else
+              (cd "$dir" && npm pkg set version="$version" && npm publish --access public)
+            fi
             npm pkg set "optionalDependencies.@stream-doctor/$platform=$version"
           done
 
       - name: Publish stream-doctor
-        run: npm publish --access public
+        run: |
+          version=$(npm pkg get version | tr -d '"')
+          if npm view "stream-doctor@$version" version >/dev/null 2>&1; then
+            echo "stream-doctor@$version is already published, skipping"
+          else
+            npm publish --access public
+          fi
