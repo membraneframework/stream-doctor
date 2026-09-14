@@ -1,0 +1,9 @@
+/_build/
+/cover/
+/deps/
+/doc/
+/tmp/
+erl_crash.dump
+*.ez
+stream_doctor-*.tar
+/.expert/
