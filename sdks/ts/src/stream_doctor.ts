@@ -5,6 +5,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 
 const DEFAULT_SERVER = "http://localhost:4040";
 
@@ -96,23 +97,35 @@ export async function session({
     await api("GET", "/status", null, server);
     return new Session(server, null);
   } catch (e) {
-    binary ??= bundledBinary() ?? undefined;
+    let installDir: string | undefined;
     if (!binary) {
-      throw new Error(
-        `${(e as Error).message}; no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\``
-      );
+      binary = bundledBinary() ?? undefined;
+      if (!binary) {
+        throw new Error(
+          `${(e as Error).message}; no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\``
+        );
+      }
+      // Burrito unpacks the payload once per release name + ERTS + app version,
+      // none of which change between npm releases, so its default cache under
+      // ~/.local/share would keep serving the previous package's daemon.
+      installDir = path.join(path.dirname(binary), "..", ".burrito");
     }
+    return new Session(server, await spawnServer(binary, server, installDir));
   }
-  return new Session(server, await spawnServer(binary, server));
 }
 
-async function spawnServer(binary: string, server: string): Promise<ChildProcess> {
+async function spawnServer(
+  binary: string,
+  server: string,
+  installDir?: string
+): Promise<ChildProcess> {
   if (!fs.existsSync(binary)) {
     throw new Error(`${binary} not found, build it with: MIX_ENV=prod mix release`);
   }
   console.log(`starting ${binary}`);
+  const env = installDir ? { ...process.env, STREAM_DOCTOR_INSTALL_DIR: installDir } : process.env;
   // own process group, so that killing the burrito launcher takes the BEAM with it
-  const child = spawn(binary, [], { stdio: ["ignore", "inherit", "inherit"], detached: true });
+  const child = spawn(binary, [], { stdio: ["ignore", "inherit", "inherit"], detached: true, env });
   for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
     if (child.exitCode !== null) throw new Error(`server exited with ${child.exitCode}`);
     await sleep(1000);
