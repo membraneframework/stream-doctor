@@ -39,6 +39,11 @@ jobs:
     env:
       MIX_ENV: prod
       BURRITO_TARGET: ${{ matrix.target }}
+      # Membrane plugins' mix.exs create deps/<plugin>/priv/plts when CI=true.
+      # That makes mix symlink the build-tree priv there, and bundlex then
+      # copies each precompiled bundle into every plugin instead of linking it
+      # (linux-x64 came out at 385 MB, over npm's limit).
+      CI: "false"
     steps:
       - uses: actions/checkout@v4
 
