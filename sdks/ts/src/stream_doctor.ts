@@ -1,10 +1,11 @@
 // Client for the stream_doctor server. `session()` spawns the binary (the one
 // bundled for this platform, or `binary`) when no server is listening;
-// `session.close()` stops it.
+// `session.close()` stops it. The daemon's output goes to `session.logFile`.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 
 const DEFAULT_SERVER = "http://localhost:4040";
@@ -98,6 +99,7 @@ export async function session({
     return new Session(server, null);
   } catch (e) {
     let installDir: string | undefined;
+    const logFile = path.join(os.tmpdir(), "stream_doctor.log");
     if (!binary) {
       binary = bundledBinary() ?? undefined;
       if (!binary) {
@@ -110,40 +112,53 @@ export async function session({
       // ~/.local/share would keep serving the previous package's daemon.
       installDir = path.join(path.dirname(binary), "..", ".burrito");
     }
-    return new Session(server, await spawnServer(binary, server, installDir));
+    const child = await spawnServer(binary, server, logFile, installDir);
+    return new Session(server, child, logFile);
   }
 }
 
 async function spawnServer(
   binary: string,
   server: string,
+  logFile: string,
   installDir?: string
 ): Promise<ChildProcess> {
   if (!fs.existsSync(binary)) {
     throw new Error(`${binary} not found, build it with: MIX_ENV=prod mix release`);
   }
-  console.log(`starting ${binary}`);
-  const env = installDir ? { ...process.env, STREAM_DOCTOR_INSTALL_DIR: installDir } : process.env;
+  const env = {
+    ...process.env,
+    // the daemon quits once its stdin (the pipe below) breaks, i.e. when this
+    // process dies, however it dies
+    STREAM_DOCTOR_EXIT_ON_STDIN_EOF: "1",
+    ...(installDir ? { STREAM_DOCTOR_INSTALL_DIR: installDir } : {}),
+  };
+  const log = fs.openSync(logFile, "a");
   // own process group, so that killing the burrito launcher takes the BEAM with it
-  const child = spawn(binary, [], { stdio: ["ignore", "inherit", "inherit"], detached: true, env });
+  const child = spawn(binary, [], { stdio: ["pipe", log, log], detached: true, env });
+  child.on("exit", () => fs.closeSync(log));
   for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
-    if (child.exitCode !== null) throw new Error(`server exited with ${child.exitCode}`);
+    if (child.exitCode !== null) {
+      throw new Error(`server exited with ${child.exitCode}, see ${logFile}`);
+    }
     await sleep(1000);
     try {
       await api("GET", "/status", null, server);
       return child;
     } catch {}
   }
-  throw new Error("server didn't come up in 2 minutes");
+  throw new Error(`server didn't come up in 2 minutes, see ${logFile}`);
 }
 
 class Session {
   server: string;
   child: ChildProcess | null;
+  logFile: string | null;
 
-  constructor(server: string, child: ChildProcess | null) {
+  constructor(server: string, child: ChildProcess | null, logFile: string | null = null) {
     this.server = server;
     this.child = child;
+    this.logFile = logFile;
   }
 
   publish(rtmpUrl: string, { file = "test.mp4" }: { file?: string } = {}): Streamer {

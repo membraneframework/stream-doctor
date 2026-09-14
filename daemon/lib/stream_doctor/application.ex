@@ -7,11 +7,12 @@ defmodule StreamDoctor.Application do
   def start(_type, _args) do
     port = Application.fetch_env!(:stream_doctor, :port)
 
-    children = [
-      {Registry, keys: :duplicate, name: StreamDoctor.Registry},
-      StreamDoctor.Server,
-      {Bandit, plug: StreamDoctor.Api, port: port}
-    ]
+    children =
+      [
+        {Registry, keys: :duplicate, name: StreamDoctor.Registry},
+        StreamDoctor.Server,
+        {Bandit, plug: StreamDoctor.Api, port: port}
+      ] ++ StreamDoctor.StdinWatcher.child_specs()
 
     Supervisor.start_link(children, strategy: :one_for_one, name: StreamDoctor.Supervisor)
   end
