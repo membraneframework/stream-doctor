@@ -12,27 +12,27 @@ late.
 
 ## Try it
 
-Requires Elixir, Zig 0.16.0, ffmpeg, python3, Node 24+ and macOS.
+Requires ffmpeg, python3, Node 24+ and macOS (Apple Silicon) or Linux.
 
-On macOS the built binary also needs Homebrew's OpenSSL 3:
+On macOS the daemon also needs Homebrew's OpenSSL 3:
 
 ```sh
 brew install openssl@3
 ```
 
 The precompiled ffmpeg it bundles expects `libssl.3.dylib` in
-`/opt/homebrew/lib` (or on `DYLD_FALLBACK_LIBRARY_PATH`). The binary checks for
+`/opt/homebrew/lib` (or on `DYLD_FALLBACK_LIBRARY_PATH`). The daemon checks for
 it at startup and exits with that instruction when it is missing.
 
 ```sh
-(cd daemon && mix deps.get && MIX_ENV=prod mix release)  # once: builds daemon/burrito_out/stream_doctor_macos_arm
+npm install stream-doctor          # once: brings the daemon binary for this platform
 examples/working_infra.sh         # terminal 1: a local RTMP -> HLS pipeline
 node sdks/ts/examples/av_drift.ts # terminal 2: prints the drift, then PASS or FAIL
 ```
 
 The daemon (a Mix project) lives in `daemon/`, the SDKs in `sdks/<language>/`.
 
-`buggy_infra.sh` is the same pipeline with the audio delayed by 200 ms, which
+`buggy_infra.sh` is the same pipeline with the audio delayed by 500 ms, which
 the check should catch. The file to stream is the only argument of the check,
 `test.mp4` by default.
 
@@ -58,6 +58,7 @@ npm install stream-doctor
 import * as stream_doc from "stream-doctor";
 
 const session = await stream_doc.session(); // spawns the bundled binary if nothing listens
+// the daemon logs to session.logFile and quits when this process dies
 const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
 const viewer = await session.watch(hlsUrl);
 await streamer.waitUntilLive();
@@ -74,10 +75,11 @@ packages and the wrapper (it needs an `NPM_TOKEN` repository secret).
 ## Standalone binary
 
 `mix release` in `daemon/` wraps the app with [Burrito](https://github.com/burrito-elixir/burrito)
-into a single executable for the current machine, which is what the check
-runs. Start it by hand with `PORT=4040 daemon/burrito_out/stream_doctor_macos_arm`.
+into a single executable for the current machine, the same one the npm
+packages ship. Point the check at it with `session({ binary: ... })`, or start
+it by hand with `PORT=4040 daemon/burrito_out/stream_doctor_macos_arm`.
 
-It needs Zig 0.16.0 on the PATH. Two release steps keep the binary small:
+It needs Elixir and Zig 0.16.0 on the PATH. Two release steps keep the binary small:
 `daemon/rel/symlinks.exs` restores the symlinks through which every Membrane plugin
 shares one copy of the precompiled FFmpeg bundle (`mix release` copies them as
 full files, one per plugin), and `daemon/rel/burrito_plugin/plugin.zig` recreates
