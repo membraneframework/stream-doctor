@@ -139,9 +139,9 @@ jobs:
             mkdir -p "$dir/bin"
             cp "artifacts/stream_doctor-$platform"/* "$dir/bin/stream_doctor"
             chmod +x "$dir/bin/stream_doctor"
-            (cd "$dir" && npm pkg set version="$version" && npm publish --provenance --access public)
+            (cd "$dir" && npm pkg set version="$version" && npm publish --access public)
             npm pkg set "optionalDependencies.@stream-doctor/$platform=$version"
           done
 
       - name: Publish stream-doctor
-        run: npm publish --provenance --access public
+        run: npm publish --access public
