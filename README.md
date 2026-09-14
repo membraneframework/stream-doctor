@@ -1,5 +1,8 @@
 # StreamDoctor
 
+[![npm](https://img.shields.io/npm/v/stream-doctor.svg)](https://www.npmjs.com/package/stream-doctor)
+[![CI](https://github.com/membraneframework-labs/stream_doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/membraneframework-labs/stream_doctor/actions/workflows/ci.yml)
+
 Measures the audio/video drift of a live stream, end to end. Built on the
 [Membrane Framework](https://membrane.stream).
 
@@ -89,3 +92,11 @@ ERTS for your OTP, run `daemon/rel/pack_host_erts.sh` once first. The binary unp
 itself into `~/Library/Application Support/.burrito` on the first run. For now
 it only boots from the dev shell, because two NIFs still find OpenSSL through
 `DYLD_LIBRARY_PATH`; that and the other open threads are tracked in `daemon/TODO.md`.
+
+## Copyright and License
+
+Copyright 2026, [Software Mansion](https://swmansion.com/?utm_source=git&utm_medium=readme&utm_campaign=stream_doctor)
+
+[![Software Mansion](https://logo.swmansion.com/logo?color=white&variant=desktop&width=200&tag=membrane-github)](https://swmansion.com/?utm_source=git&utm_medium=readme&utm_campaign=stream_doctor)
+
+Licensed under the [Apache License, Version 2.0](LICENSE)
