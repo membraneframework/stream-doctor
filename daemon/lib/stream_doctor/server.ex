@@ -5,7 +5,6 @@ defmodule StreamDoctor.Server do
 
   alias StreamDoctor.Collector
   alias StreamDoctor.Metric
-  alias StreamDoctor.Probe.SendReporter
 
   @hls_timeout 120_000
   @metric_specs [{Metric.AvDrift, []}]
@@ -40,7 +39,6 @@ defmodule StreamDoctor.Server do
   @impl true
   def init(_opts) do
     Process.flag(:trap_exit, true)
-    :ok = SendReporter.subscribe()
     {:ok, %{streamer: nil, viewers: %{}, next_id: 1}}
   end
 
@@ -49,7 +47,9 @@ defmodule StreamDoctor.Server do
     if state.streamer != nil and state.streamer.status == :streaming do
       {:reply, {:error, :already_streaming}, state}
     else
-      pid = StreamDoctor.SenderPipeline.start_link(input, rtmp_url, realtime?: true)
+      pid =
+        StreamDoctor.SenderPipeline.start_link(input, rtmp_url, realtime?: true, on_live: self())
+
       Process.monitor(pid)
 
       streamer = %{
@@ -58,7 +58,7 @@ defmodule StreamDoctor.Server do
         rtmp_url: rtmp_url,
         status: :streaming,
         error: nil,
-        frames_sent: 0
+        live: false
       }
 
       {:reply, {:ok, streamer_summary(streamer)}, %{state | streamer: streamer}}
@@ -147,12 +147,11 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:frame_sent, _t}, %{streamer: nil} = state), do: {:noreply, state}
-
-  def handle_info({:frame_sent, _t}, state) do
-    streamer = %{state.streamer | frames_sent: state.streamer.frames_sent + 1}
-    {:noreply, %{state | streamer: streamer}}
+  def handle_info({:streamer_live, pid}, %{streamer: %{pid: pid} = streamer} = state) do
+    {:noreply, %{state | streamer: %{streamer | live: true}}}
   end
+
+  def handle_info({:streamer_live, _stale_pid}, state), do: {:noreply, state}
 
   def handle_info({:playlist_ready, id}, state) do
     case state.viewers[id] do
@@ -212,7 +211,7 @@ defmodule StreamDoctor.Server do
   defp terminate_pipeline(entity), do: %{entity | status: :stopped}
 
   defp streamer_summary(streamer) do
-    Map.take(streamer, [:input, :rtmp_url, :status, :error, :frames_sent])
+    Map.take(streamer, [:input, :rtmp_url, :status, :error, :live])
   end
 
   defp viewer_summary(viewer) do

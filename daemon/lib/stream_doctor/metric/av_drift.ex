@@ -1,19 +1,10 @@
 defmodule StreamDoctor.Metric.AvDrift do
   @moduledoc """
-  A/V desync the way a pts-syncing player would see it:
+  Meassures A/V desync the way a pts-syncing player would see it:
 
       drift = (audio pts - m * symbol duration) - (video pts - n * frame duration)
 
-  Positive = audio content later than video. The sender numbers frames and
-  symbols by their source pts, so each term is the received pts of source
-  time zero and their difference is the desync. Arrival times are useless
-  here (decoders burst differently), so only timestamps are used. The frame
-  duration is fitted between the first and the latest frame: a value rounded
-  to the millisecond, multiplied by n, would be seconds off within a minute.
-  Counters wrap (audio every 3.84 s, unwrapped against the video offset, so
-  good up to ±1.92 s; video every 16384 frames, which a viewer joining after
-  the first wrap can't tell apart from zero, so join within 9 min of the
-  stream start at 30 fps). Reported value is a median.
+  Positive result means that audio content in later than video.
   """
 
   @behaviour StreamDoctor.Metric
@@ -71,7 +62,7 @@ defmodule StreamDoctor.Metric.AvDrift do
         last -> unwrap(m, last, AudioMarkerDecoder.max_symbol())
       end
 
-    drift = pts - m * symbol_duration() - video_offset
+    drift = round(pts - m * symbol_duration() - video_offset)
     %{state | audio: m, samples: Enum.take([drift | state.samples], @max_samples)}
   end
 
@@ -114,5 +105,5 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   defp to_ms(nil), do: nil
-  defp to_ms(time), do: round(time / 1_000_000)
+  defp to_ms(time), do: Membrane.Time.as_milliseconds(time, :round)
 end

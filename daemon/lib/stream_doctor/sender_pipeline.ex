@@ -2,7 +2,8 @@ defmodule StreamDoctor.SenderPipeline do
   @moduledoc """
   File in, markers on, RTMP out.
 
-  Opts: `:input`, `:rtmp_url`, `:realtime?` (default true).
+  Opts: `:input`, `:rtmp_url`, `:realtime?` (default true), `:on_live` (pid that gets
+  `{:streamer_live, pipeline_pid}` once the first video frame reaches the sink).
   """
 
   use Membrane.Pipeline
@@ -25,6 +26,7 @@ defmodule StreamDoctor.SenderPipeline do
     state = %{
       rtmp_url: Keyword.fetch!(opts, :rtmp_url),
       realtime?: Keyword.get(opts, :realtime?, true),
+      on_live: Keyword.get(opts, :on_live),
       awaiting_tracks: nil
     }
 
@@ -61,6 +63,15 @@ defmodule StreamDoctor.SenderPipeline do
   def handle_child_notification(_notification, _child, _ctx, state), do: {[], state}
 
   @impl true
+  def handle_element_start_of_stream(:rtmp_sink, Membrane.Pad.ref(:video, _id), _ctx, state) do
+    if state.on_live, do: send(state.on_live, {:streamer_live, self()})
+    {[], state}
+  end
+
+  @impl true
+  def handle_element_start_of_stream(_child, _pad, _ctx, state), do: {[], state}
+
+  @impl true
   def handle_element_end_of_stream(:rtmp_sink, Membrane.Pad.ref(kind, _id), _ctx, state) do
     awaiting_tracks = MapSet.delete(state.awaiting_tracks, kind)
 
@@ -92,7 +103,6 @@ defmodule StreamDoctor.SenderPipeline do
     |> child(:keyframe_scheduler, __MODULE__.KeyframeScheduler)
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
     |> maybe_realtimer(:video, state)
-    |> child(:send_reporter, StreamDoctor.Probe.SendReporter)
     |> via_in(Membrane.Pad.ref(:video, 0))
     |> get_child(:rtmp_sink)
   end

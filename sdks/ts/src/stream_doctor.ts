@@ -36,7 +36,7 @@ export interface StreamerStatus {
   rtmp_url: string;
   status: Status;
   error: string | null;
-  frames_sent: number;
+  live: boolean;
 }
 
 export interface AvDrift {
@@ -214,7 +214,7 @@ class Streamer {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const streamer = await api<StreamerStatus>("GET", "/streamer", null, this.server);
-      if (streamer.frames_sent > 0) return streamer;
+      if (streamer.live) return streamer;
       if (TERMINAL_STATUSES.includes(streamer.status)) {
         throw new Error(
           `streamer ${streamer.status} before going live${streamer.error ? `: ${streamer.error}` : ""}`

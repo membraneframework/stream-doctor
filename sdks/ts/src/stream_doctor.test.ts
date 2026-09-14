@@ -18,7 +18,7 @@ const routes: Record<string, (body: any) => object> = {
   },
   "GET /streamer": () => ({
     status: streamerPolls++ >= 2 ? "running" : "starting",
-    frames_sent: streamerPolls > 2 ? 10 : 0,
+    live: streamerPolls > 2,
   }),
   "DELETE /streamer": () => ({ status: "stopped" }),
   "POST /viewers": ({ hls_url }) => {
@@ -83,7 +83,7 @@ test("publish posts the input and waitUntilLive polls until frames flow", async 
   const s = await session({ server: url });
   const streamer = s.publish("rtmp://host/app/key", { file: "clip.mp4" });
   const live = await streamer.waitUntilLive({ intervalMs: 1 });
-  assert.equal(live.frames_sent, 10);
+  assert.equal(live.live, true);
   assert.deepEqual(requests[1], {
     method: "POST",
     path: "/streamer",
@@ -95,7 +95,7 @@ test("publish posts the input and waitUntilLive polls until frames flow", async 
 
 test("waitUntilLive reports a streamer that failed before going live", async () => {
   const s = await session({ server: url });
-  routes["GET /streamer"] = () => ({ status: "failed", frames_sent: 0, error: "boom" });
+  routes["GET /streamer"] = () => ({ status: "failed", live: false, error: "boom" });
   const streamer = s.publish("rtmp://host/app/key");
   await assert.rejects(streamer.waitUntilLive({ intervalMs: 1 }), /streamer failed.*: boom/);
 });

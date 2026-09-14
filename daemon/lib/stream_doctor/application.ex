@@ -9,7 +9,6 @@ defmodule StreamDoctor.Application do
 
     children =
       [
-        {Registry, keys: :duplicate, name: StreamDoctor.Registry},
         StreamDoctor.Server,
         {Bandit, plug: StreamDoctor.Api, port: port}
       ] ++ StreamDoctor.StdinWatcher.child_specs()
