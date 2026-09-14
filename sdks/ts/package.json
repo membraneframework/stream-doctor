@@ -1,6 +1,6 @@
 {
   "name": "stream-doctor",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Measures the audio/video drift of a live stream, end to end",
   "license": "Apache-2.0",
   "repository": {
