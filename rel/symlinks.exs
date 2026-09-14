@@ -1,35 +1,5 @@
 defmodule StreamDoctor.Rel.Symlinks do
-  @moduledoc """
-  Release step: put the symlinks back and hand them to the Burrito plugin.
-
-  bundlex downloads each precompiled bundle (ffmpeg, srt, ...) once into its own
-  `priv/shared/precompiled/<bundle>` and gives every plugin a relative symlink
-  at `priv/bundlex/nif/<bundle>`; the NIF's rpath points at that link. Inside a
-  bundle, versioned dylib aliases are symlinks too.
-
-  `mix release` copies every `priv` with `dereference_symlinks: true` (no
-  opt-out), so each plugin gets its own full copy of ffmpeg and every alias
-  becomes a full file. Burrito's FOILZ archiver then drops symlinks entirely, so
-  restoring them in the release dir alone is not enough for the binary.
-
-  This step, in pure Elixir:
-
-    1. discovers every symlink inside each app's `priv` in the build tree and
-       maps it to release paths (`lib/<app>-<vsn>/priv/...`), across apps;
-    2. deletes the dereferenced copy in the release and recreates the link
-       there, so a plain (tarball) release keeps working;
-    3. dedupes byte-identical files inside each precompiled bundle into links
-       (the Linux bundles ship alias copies as real files, no symlinks at all);
-    4. drops the bundles' `include/` dirs, which are only needed at compile time;
-    5. writes `rel/burrito_plugin/symlinks.zon` (a ZON list of
-       `.{ "link", "target" }` pairs, link paths release relative).
-       `rel/burrito_plugin/plugin.zig` imports it at wrapper build time and
-       recreates the links in the install dir on every launch, before the
-       payload is unpacked.
-
-  Not done here (see TODO.md): pruning bundle libraries the NIFs never load,
-  and fixing NIFs that link system OpenSSL by absolute path.
-  """
+  @moduledoc false
 
   @manifest Path.expand("burrito_plugin/symlinks.zon", __DIR__)
 
