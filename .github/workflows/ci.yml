@@ -10,6 +10,22 @@ permissions:
   contents: read
 
 jobs:
+  ts_sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: sdks/ts/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
   # the membraneframework/membrane_actions reusable workflows assume the mix
   # project at the repository root, so their steps are inlined here
   daemon:
