@@ -20,8 +20,8 @@
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "test": "node --test src/*.test.ts",
-    "lint": "tsc --noEmit && eslint src examples && prettier --check src examples",
-    "format": "prettier --write src examples"
+    "lint": "tsc --noEmit && eslint src && prettier --check src",
+    "format": "prettier --write src"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

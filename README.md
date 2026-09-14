@@ -28,16 +28,15 @@ The precompiled ffmpeg it bundles expects `libssl.3.dylib` in
 it at startup and exits with that instruction when it is missing.
 
 ```sh
-npm install stream-doctor          # once: brings the daemon binary for this platform
-examples/working_infra.sh         # terminal 1: a local RTMP -> HLS pipeline
-node sdks/ts/examples/av_drift.ts # terminal 2: prints the drift, then PASS or FAIL
+npm install stream-doctor  # once: brings the daemon binary for this platform
+examples/working_infra.sh # a local RTMP -> HLS pipeline to measure against
 ```
 
-The daemon (a Mix project) lives in `daemon/`, the SDKs in `sdks/<language>/`.
-
+Then run a script like the one under [API](#api) against it.
 `buggy_infra.sh` is the same pipeline with the audio delayed by 500 ms, which
-the check should catch. The file to stream is the only argument of the check,
-`test.mp4` by default.
+the measurement should catch.
+
+The daemon (a Mix project) lives in `daemon/`, the SDKs in `sdks/<language>/`.
 
 ## API
 
@@ -50,12 +49,10 @@ The binary listens on port 4040 (`PORT` to change it) and speaks JSON:
 * `GET /status`.
 
 A viewer reports the drift under `metrics.av_drift.drift_ms`.
-The `stream-doctor` npm package wraps the endpoints for scripts and brings the
-binary along, as an optional dependency on `@stream-doctor/<platform>`:
-
-```sh
-npm install stream-doctor
-```
+The [`stream-doctor`](https://www.npmjs.com/package/stream-doctor) npm package
+(sources in `sdks/ts/`, usage in its README) wraps the endpoints for scripts
+and brings the binary along, as an optional dependency on
+`@stream-doctor/<platform>`:
 
 ```ts
 import * as stream_doc from "stream-doctor";
@@ -77,21 +74,8 @@ packages and the wrapper (it needs an `NPM_TOKEN` repository secret).
 
 ## Standalone binary
 
-`mix release` in `daemon/` wraps the app with [Burrito](https://github.com/burrito-elixir/burrito)
-into a single executable for the current machine, the same one the npm
-packages ship. Point the check at it with `session({ binary: ... })`, or start
-it by hand with `PORT=4040 daemon/burrito_out/stream_doctor_macos_arm`.
-
-It needs Elixir and Zig 0.16.0 on the PATH. Two release steps keep the binary small:
-`daemon/rel/symlinks.exs` restores the symlinks through which every Membrane plugin
-shares one copy of the precompiled FFmpeg bundle (`mix release` copies them as
-full files, one per plugin), and `daemon/rel/burrito_plugin/plugin.zig` recreates
-those links on the target machine, because Burrito's payload format cannot
-carry symlinks. No binary patching is involved. If Burrito has no prebuilt
-ERTS for your OTP, run `daemon/rel/pack_host_erts.sh` once first. The binary unpacks
-itself into `~/Library/Application Support/.burrito` on the first run. For now
-it only boots from the dev shell, because two NIFs still find OpenSSL through
-`DYLD_LIBRARY_PATH`; that and the other open threads are tracked in `daemon/TODO.md`.
+Building the daemon into a single executable is described in
+[`daemon/README.md`](daemon/README.md).
 
 ## Copyright and License
 
