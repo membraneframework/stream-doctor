@@ -56,5 +56,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
     {[], state}
   end
 
-  defp now_ms, do: System.monotonic_time(:millisecond)
+  defp now_ms do
+    System.monotonic_time(:millisecond)
+  end
 end

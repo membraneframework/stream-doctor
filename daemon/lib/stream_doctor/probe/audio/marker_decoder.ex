@@ -209,12 +209,16 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
-  defp symbol_pts(%{anchor_pts: nil}), do: nil
+  defp symbol_pts(%{anchor_pts: nil}) do
+    nil
+  end
 
   defp symbol_pts(state) do
     consumed_samples = state.appended_samples - div(byte_size(state.buffer), 8)
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
 
-  defp now_ms, do: System.monotonic_time(:millisecond)
+  defp now_ms do
+    System.monotonic_time(:millisecond)
+  end
 end

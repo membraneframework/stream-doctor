@@ -45,7 +45,9 @@ defmodule StreamDoctor.ReceiverPipeline do
   end
 
   @impl true
-  def handle_child_notification(_notification, _child, _ctx, state), do: {[], state}
+  def handle_child_notification(_notification, _child, _ctx, state) do
+    {[], state}
+  end
 
   @impl true
   def handle_element_end_of_stream(child, :input, _ctx, state)
@@ -61,7 +63,9 @@ defmodule StreamDoctor.ReceiverPipeline do
   end
 
   @impl true
-  def handle_element_end_of_stream(_child, _pad, _ctx, state), do: {[], state}
+  def handle_element_end_of_stream(_child, _pad, _ctx, state) do
+    {[], state}
+  end
 
   defp track_spec({:video_output, _format}, state) do
     get_child(:hls_source)

@@ -28,7 +28,9 @@ defmodule StreamDoctor.Probe.Video.Bar do
         }
 
   @spec max_frame() :: pos_integer()
-  def max_frame, do: @max_frame
+  def max_frame do
+    @max_frame
+  end
 
   @doc "Even coordinates, for 4:2:0."
   @spec geometry(pos_integer(), pos_integer()) :: geometry()
@@ -147,5 +149,7 @@ defmodule StreamDoctor.Probe.Video.Bar do
     Enum.sum(values) / length(values)
   end
 
-  defp even(n), do: n - rem(n, 2)
+  defp even(n) do
+    n - rem(n, 2)
+  end
 end

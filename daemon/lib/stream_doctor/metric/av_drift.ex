@@ -15,7 +15,9 @@ defmodule StreamDoctor.Metric.AvDrift do
   @max_samples 50
 
   @impl true
-  def name, do: :av_drift
+  def name do
+    :av_drift
+  end
 
   @impl true
   def init(_opts) do
@@ -30,8 +32,9 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event({:video_frame_received, _frame_number, _pts = nil, _observed_at}, state),
-    do: state
+  def handle_event({:video_frame_received, _frame_number, _pts = nil, _observed_at}, state) do
+    state
+  end
 
   @impl true
   def handle_event({:video_frame_received, frame_number, pts, _observed_at}, state) do
@@ -55,8 +58,9 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event({:audio_symbol_received, _symbol_number, _pts = nil, _observed_at}, state),
-    do: state
+  def handle_event({:audio_symbol_received, _symbol_number, _pts = nil, _observed_at}, state) do
+    state
+  end
 
   @impl true
   def handle_event(
@@ -75,7 +79,9 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event(_event, state), do: state
+  def handle_event(_event, state) do
+    state
+  end
 
   @impl true
   def report(state) do
@@ -95,7 +101,9 @@ defmodule StreamDoctor.Metric.AvDrift do
     symbol_number + k * max
   end
 
-  defp unwrap(value, nil, _max), do: value
+  defp unwrap(value, nil, _max) do
+    value
+  end
 
   defp unwrap(value, last, max) do
     candidate = Integer.floor_div(last, max) * max + value
@@ -107,15 +115,24 @@ defmodule StreamDoctor.Metric.AvDrift do
     end
   end
 
-  defp symbol_duration, do: Membrane.Time.milliseconds(AudioMarkerDecoder.symbol_ms())
+  defp symbol_duration do
+    Membrane.Time.milliseconds(AudioMarkerDecoder.symbol_ms())
+  end
 
-  defp median([]), do: nil
+  defp median([]) do
+    nil
+  end
 
   defp median(samples) do
     sorted = Enum.sort(samples)
     Enum.at(sorted, div(length(sorted), 2))
   end
 
-  defp to_ms(nil), do: nil
-  defp to_ms(time), do: Membrane.Time.as_milliseconds(time, :round)
+  defp to_ms(nil) do
+    nil
+  end
+
+  defp to_ms(time) do
+    Membrane.Time.as_milliseconds(time, :round)
+  end
 end

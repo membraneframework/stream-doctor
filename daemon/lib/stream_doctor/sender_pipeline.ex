@@ -58,7 +58,9 @@ defmodule StreamDoctor.SenderPipeline do
   end
 
   @impl true
-  def handle_child_notification(_notification, _child, _ctx, state), do: {[], state}
+  def handle_child_notification(_notification, _child, _ctx, state) do
+    {[], state}
+  end
 
   @impl true
   def handle_element_start_of_stream(:rtmp_sink, Membrane.Pad.ref(:video, _id), _ctx, state) do
@@ -67,7 +69,9 @@ defmodule StreamDoctor.SenderPipeline do
   end
 
   @impl true
-  def handle_element_start_of_stream(_child, _pad, _ctx, state), do: {[], state}
+  def handle_element_start_of_stream(_child, _pad, _ctx, state) do
+    {[], state}
+  end
 
   @impl true
   def handle_element_end_of_stream(:rtmp_sink, Membrane.Pad.ref(kind, _id), _ctx, state) do
@@ -81,11 +85,21 @@ defmodule StreamDoctor.SenderPipeline do
   end
 
   @impl true
-  def handle_element_end_of_stream(_child, _pad, _ctx, state), do: {[], state}
+  def handle_element_end_of_stream(_child, _pad, _ctx, state) do
+    {[], state}
+  end
 
-  defp to_kind(%AAC{}), do: :audio
-  defp to_kind(%H264{}), do: :video
-  defp to_kind(%H265{}), do: :video
+  defp to_kind(%AAC{}) do
+    :audio
+  end
+
+  defp to_kind(%H264{}) do
+    :video
+  end
+
+  defp to_kind(%H265{}) do
+    :video
+  end
 
   defp track_spec({track_id, :video}) do
     get_child(:demuxer)

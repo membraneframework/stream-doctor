@@ -24,13 +24,19 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @ref_floor 0.01
 
   @spec max_symbol() :: pos_integer()
-  def max_symbol, do: @max_symbol
+  def max_symbol do
+    @max_symbol
+  end
 
   @spec symbol_ms() :: pos_integer()
-  def symbol_ms, do: @symbol_ms
+  def symbol_ms do
+    @symbol_ms
+  end
 
   @spec symbol_length(pos_integer()) :: pos_integer()
-  def symbol_length(sample_rate), do: div(sample_rate * @symbol_ms, 1000)
+  def symbol_length(sample_rate) do
+    div(sample_rate * @symbol_ms, 1000)
+  end
 
   @doc "One symbol as mono s16le."
   @spec symbol_samples(non_neg_integer(), pos_integer()) :: binary()
@@ -122,8 +128,11 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     s1 * s1 + s2 * s2 - coeff * s1 * s2
   end
 
-  defp goertzel_loop(<<sample::float-64-little, rest::binary>>, coeff, s1, s2),
-    do: goertzel_loop(rest, coeff, sample + coeff * s1 - s2, s1)
+  defp goertzel_loop(<<sample::float-64-little, rest::binary>>, coeff, s1, s2) do
+    goertzel_loop(rest, coeff, sample + coeff * s1 - s2, s1)
+  end
 
-  defp goertzel_loop(<<>>, _coeff, s1, s2), do: {s1, s2}
+  defp goertzel_loop(<<>>, _coeff, s1, s2) do
+    {s1, s2}
+  end
 end

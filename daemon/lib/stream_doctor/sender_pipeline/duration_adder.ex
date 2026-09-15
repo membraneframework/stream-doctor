@@ -58,11 +58,19 @@ defmodule StreamDoctor.SenderPipeline.DurationAdder do
        Enum.reverse(state.pending) ++ [end_of_stream: :output], %{state | held: nil, pending: []}}
   end
 
-  defp forward(action, %{held: nil} = state), do: {[action], state}
-  defp forward(action, state), do: {[], %{state | pending: [action | state.pending]}}
+  defp forward(action, %{held: nil} = state) do
+    {[action], state}
+  end
 
-  defp timestamp(buffer), do: buffer.dts || buffer.pts
+  defp forward(action, state) do
+    {[], %{state | pending: [action | state.pending]}}
+  end
 
-  defp stamp(buffer, duration),
-    do: %{buffer | metadata: Map.put(buffer.metadata, :duration, duration)}
+  defp timestamp(buffer) do
+    buffer.dts || buffer.pts
+  end
+
+  defp stamp(buffer, duration) do
+    %{buffer | metadata: Map.put(buffer.metadata, :duration, duration)}
+  end
 end

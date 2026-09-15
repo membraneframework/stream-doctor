@@ -36,8 +36,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
     {[buffer: {:output, buffer}], %{state | position: position + frames}}
   end
 
-  defp marker_frames(_position, 0, _sample_rate, _channels, state, acc),
-    do: {Enum.reverse(acc), state}
+  defp marker_frames(_position, 0, _sample_rate, _channels, state, acc) do
+    {Enum.reverse(acc), state}
+  end
 
   defp marker_frames(position, frames, sample_rate, channels, state, acc) do
     symbol_length = Tone.symbol_length(sample_rate)

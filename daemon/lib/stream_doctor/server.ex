@@ -21,22 +21,34 @@ defmodule StreamDoctor.Server do
   end
 
   @spec stop_streamer() :: {:ok, map()} | {:error, :not_found}
-  def stop_streamer, do: GenServer.call(__MODULE__, :stop_streamer, 15_000)
+  def stop_streamer do
+    GenServer.call(__MODULE__, :stop_streamer, 15_000)
+  end
 
   @spec streamer() :: {:ok, map()} | {:error, :not_found}
-  def streamer, do: GenServer.call(__MODULE__, :streamer)
+  def streamer do
+    GenServer.call(__MODULE__, :streamer)
+  end
 
   @spec start_viewer(String.t()) :: {:ok, map()}
-  def start_viewer(hls_url), do: GenServer.call(__MODULE__, {:start_viewer, hls_url})
+  def start_viewer(hls_url) do
+    GenServer.call(__MODULE__, {:start_viewer, hls_url})
+  end
 
   @spec stop_viewer(String.t()) :: {:ok, map()} | {:error, :not_found}
-  def stop_viewer(id), do: GenServer.call(__MODULE__, {:stop_viewer, id}, 15_000)
+  def stop_viewer(id) do
+    GenServer.call(__MODULE__, {:stop_viewer, id}, 15_000)
+  end
 
   @spec viewer(String.t()) :: {:ok, map()} | {:error, :not_found}
-  def viewer(id), do: GenServer.call(__MODULE__, {:viewer, id})
+  def viewer(id) do
+    GenServer.call(__MODULE__, {:viewer, id})
+  end
 
   @spec status() :: map()
-  def status, do: GenServer.call(__MODULE__, :status)
+  def status do
+    GenServer.call(__MODULE__, :status)
+  end
 
   @impl true
   def init(_opts) do
@@ -154,7 +166,9 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:streamer_live, _stale_pid}, state), do: {:noreply, state}
+  def handle_info({:streamer_live, _stale_pid}, state) do
+    {:noreply, state}
+  end
 
   @impl true
   def handle_info({:playlist_ready, id}, state) do
@@ -193,10 +207,13 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+  def handle_info({:EXIT, _pid, _reason}, state) do
+    {:noreply, state}
+  end
 
-  defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error),
-    do: %{state | streamer: mark_down(streamer, error)}
+  defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
+    %{state | streamer: mark_down(streamer, error)}
+  end
 
   defp mark_down_pid(state, pid, error) do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
@@ -205,8 +222,13 @@ defmodule StreamDoctor.Server do
     end
   end
 
-  defp mark_down(%{status: :stopped} = entity, _error), do: entity
-  defp mark_down(entity, error), do: %{entity | status: :ended, error: error}
+  defp mark_down(%{status: :stopped} = entity, _error) do
+    entity
+  end
+
+  defp mark_down(entity, error) do
+    %{entity | status: :ended, error: error}
+  end
 
   defp terminate_pipeline(%{pid: pid, status: status} = entity)
        when pid != nil and status in [:streaming, :receiving] do
@@ -214,7 +236,9 @@ defmodule StreamDoctor.Server do
     %{entity | status: :stopped}
   end
 
-  defp terminate_pipeline(entity), do: %{entity | status: :stopped}
+  defp terminate_pipeline(entity) do
+    %{entity | status: :stopped}
+  end
 
   defp streamer_summary(streamer) do
     Map.take(streamer, [:input, :rtmp_url, :status, :error, :live])
