@@ -1,7 +1,3 @@
-// Client for the stream_doctor server. `session()` spawns the binary (the one
-// bundled for this platform, or `binary`) when no server is listening;
-// `session.close()` stops it. The daemon's output goes to `session.logFile`.
-
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -10,23 +6,15 @@ import path from "node:path";
 
 const DEFAULT_SERVER = "http://localhost:4040";
 
+const LOG_FILE = path.join(os.tmpdir(), "stream_doctor.log");
+
 const PLATFORM_PACKAGES: Record<string, string> = {
   "darwin-arm64": "@stream-doctor/darwin-arm64",
   "linux-arm64": "@stream-doctor/linux-arm64",
   "linux-x64": "@stream-doctor/linux-x64",
 };
 
-// The daemon ships as one package per platform, all optional dependencies of
-// this one, so only the matching one is installed.
-export function bundledBinary(): string | null {
-  const pkg = PLATFORM_PACKAGES[`${process.platform}-${process.arch}`];
-  if (!pkg) return null;
-  try {
-    return createRequire(import.meta.url).resolve(`${pkg}/bin/stream_doctor`);
-  } catch {
-    return null;
-  }
-}
+const TERMINAL_STATUSES: Status[] = ["ended", "failed", "stopped"];
 
 export type Status =
   "streaming" | "receiving" | "waiting_for_playlist" | "ended" | "failed" | "stopped";
@@ -63,33 +51,6 @@ export interface ServerStatus {
   viewers: ViewerStatus[];
 }
 
-async function api<T>(
-  method: string,
-  path: string,
-  body: object | null,
-  server: string
-): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(server + path, {
-      method,
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch (e) {
-    throw new Error(
-      `${method} ${path}: cannot reach ${server} (is the server running?): ${(e as Error).message}`
-    );
-  }
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}: ${text}`);
-  return JSON.parse(text);
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const TERMINAL_STATUSES: Status[] = ["ended", "failed", "stopped"];
-
 export async function session({
   server = DEFAULT_SERVER,
   binary,
@@ -99,7 +60,6 @@ export async function session({
     return new Session(server, null);
   } catch (e) {
     let installDir: string | undefined;
-    const logFile = path.join(os.tmpdir(), "stream_doctor.log");
     if (!binary) {
       binary = bundledBinary() ?? undefined;
       if (!binary) {
@@ -107,47 +67,21 @@ export async function session({
           `${(e as Error).message}; no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\``
         );
       }
-      // Burrito unpacks the payload once per release name + ERTS + app version,
-      // none of which change between npm releases, so its default cache under
-      // ~/.local/share would keep serving the previous package's daemon.
       installDir = path.join(path.dirname(binary), "..", ".burrito");
     }
-    const child = await spawnServer(binary, server, logFile, installDir);
-    return new Session(server, child, logFile);
+    const child = await spawnServer(binary, server, installDir);
+    return new Session(server, child, LOG_FILE);
   }
 }
 
-async function spawnServer(
-  binary: string,
-  server: string,
-  logFile: string,
-  installDir?: string
-): Promise<ChildProcess> {
-  if (!fs.existsSync(binary)) {
-    throw new Error(`${binary} not found, build it with: MIX_ENV=prod mix release`);
+export function bundledBinary(): string | null {
+  const pkg = PLATFORM_PACKAGES[`${process.platform}-${process.arch}`];
+  if (!pkg) return null;
+  try {
+    return createRequire(import.meta.url).resolve(`${pkg}/bin/stream_doctor`);
+  } catch {
+    return null;
   }
-  const env = {
-    ...process.env,
-    // the daemon quits once its stdin (the pipe below) breaks, i.e. when this
-    // process dies, however it dies
-    STREAM_DOCTOR_EXIT_ON_STDIN_EOF: "1",
-    ...(installDir ? { STREAM_DOCTOR_INSTALL_DIR: installDir } : {}),
-  };
-  const log = fs.openSync(logFile, "a");
-  // own process group, so that killing the burrito launcher takes the BEAM with it
-  const child = spawn(binary, [], { stdio: ["pipe", log, log], detached: true, env });
-  child.on("exit", () => fs.closeSync(log));
-  for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
-    if (child.exitCode !== null) {
-      throw new Error(`server exited with ${child.exitCode}, see ${logFile}`);
-    }
-    await sleep(1000);
-    try {
-      await api("GET", "/status", null, server);
-      return child;
-    } catch {}
-  }
-  throw new Error(`server didn't come up in 2 minutes, see ${logFile}`);
 }
 
 class Session {
@@ -271,3 +205,57 @@ class Viewer {
 }
 
 export type { Session, Streamer, Viewer };
+
+async function spawnServer(
+  binary: string,
+  server: string,
+  installDir?: string
+): Promise<ChildProcess> {
+  if (!fs.existsSync(binary)) {
+    throw new Error(`${binary} not found, build it with: MIX_ENV=prod mix release`);
+  }
+  const env = {
+    ...process.env,
+    STREAM_DOCTOR_EXIT_ON_STDIN_EOF: "1",
+    ...(installDir ? { STREAM_DOCTOR_INSTALL_DIR: installDir } : {}),
+  };
+  const log = fs.openSync(LOG_FILE, "a");
+  const child = spawn(binary, [], { stdio: ["pipe", log, log], detached: true, env });
+  child.on("exit", () => fs.closeSync(log));
+  for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
+    if (child.exitCode !== null) {
+      throw new Error(`server exited with ${child.exitCode}, see ${LOG_FILE}`);
+    }
+    await sleep(1000);
+    try {
+      await api("GET", "/status", null, server);
+      return child;
+    } catch {}
+  }
+  throw new Error(`server didn't come up in 2 minutes, see ${LOG_FILE}`);
+}
+
+async function api<T>(
+  method: string,
+  path: string,
+  body: object | null,
+  server: string
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(server + path, {
+      method,
+      headers: body ? { "content-type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw new Error(
+      `${method} ${path}: cannot reach ${server} (is the server running?): ${(e as Error).message}`
+    );
+  }
+  const text = await res.text();
+  if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}: ${text}`);
+  return JSON.parse(text);
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

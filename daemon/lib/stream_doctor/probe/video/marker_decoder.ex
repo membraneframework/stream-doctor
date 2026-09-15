@@ -1,5 +1,7 @@
 defmodule StreamDoctor.Probe.Video.MarkerDecoder do
-  @moduledoc "Reads the bar off each frame, reports to a collector (or logs)."
+  @moduledoc """
+  Reads the bar off each frame, reports to a collector (or logs).
+  """
 
   use Membrane.Sink
 
@@ -9,15 +11,14 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
   alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Video.Bar
 
-  def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
+  def_input_pad :input, accepted_format: %RawVideo{pixel_format: :I420}
 
-  def_options(
-    collector: [
-      spec: pid() | nil,
-      default: nil,
-      description: "gets `{:video_frame_received, n, pts, t}`; nil = log"
-    ]
-  )
+  def_options collector: [
+                spec: pid() | nil,
+                default: nil,
+                description:
+                  "Gets `{:video_frame_received, frame_number, pts}`. When nil, events are logged instead."
+              ]
 
   @spec max_frame() :: pos_integer()
   defdelegate max_frame(), to: Bar
@@ -45,7 +46,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
       {{:ok, frame_number}, collector} ->
         Collector.event(
           collector,
-          {:video_frame_received, frame_number, buffer.pts, now_ms()}
+          {:video_frame_received, frame_number, buffer.pts}
         )
 
       {{:error, reason}, _collector} ->
@@ -54,6 +55,4 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
 
     {[], state}
   end
-
-  defp now_ms, do: System.monotonic_time(:millisecond)
 end

@@ -1,6 +1,9 @@
 defmodule StreamDoctor.Probe.Audio.Tone do
   @moduledoc false
 
+  # This module was vibe-coded: the signal design and the decoder were written by an LLM and
+  # tuned by trial against real streams, not derived from a reference.
+
   # Audio marker: 30 ms symbols, number wraps at 128. 500 Hz = always-on ref,
   # 1000..4000 Hz = 7 bits MSB first, 4500 Hz = parity. All multiples of
   # 33.3 Hz so symbols toggle without clicks. Decoding = Goertzel over the
@@ -23,14 +26,23 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @local_contrast 8.0
   @ref_floor 0.01
 
+  @scan_symbols 6
+  @scan_min_score 10
+
   @spec max_symbol() :: pos_integer()
-  def max_symbol, do: @max_symbol
+  def max_symbol do
+    @max_symbol
+  end
 
   @spec symbol_ms() :: pos_integer()
-  def symbol_ms, do: @symbol_ms
+  def symbol_ms do
+    @symbol_ms
+  end
 
   @spec symbol_length(pos_integer()) :: pos_integer()
-  def symbol_length(sample_rate), do: div(sample_rate * @symbol_ms, 1000)
+  def symbol_length(sample_rate) do
+    div(sample_rate * @symbol_ms, 1000)
+  end
 
   @doc "One symbol as mono s16le."
   @spec symbol_samples(non_neg_integer(), pos_integer()) :: binary()
@@ -59,6 +71,70 @@ defmodule StreamDoctor.Probe.Audio.Tone do
 
       <<value::16-signed-little>>
     end
+  end
+
+  @doc "Symbols a buffer must hold for `find_alignment/2`. One more than are scored, since the offset sweep reaches into the next symbol."
+  @spec alignment_buffer_symbols() :: pos_integer()
+  def alignment_buffer_symbols do
+    @scan_symbols + 1
+  end
+
+  @doc "Sample offset of the symbol boundary in a buffer of `alignment_buffer_symbols/0` symbols, if any."
+  @spec find_alignment(binary(), pos_integer()) :: {:ok, non_neg_integer()} | :error
+  def find_alignment(buffer, sample_rate) do
+    symbol_length = symbol_length(sample_rate)
+    step = max(div(symbol_length, 16), 1)
+
+    scores =
+      Enum.map(0..(symbol_length - 1)//step, fn offset ->
+        {offset, alignment_score(buffer, offset, sample_rate)}
+      end)
+
+    best_score = scores |> Enum.map(fn {_offset, score} -> score end) |> Enum.max()
+
+    if best_score >= @scan_min_score,
+      do: {:ok, plateau_center(scores, best_score)},
+      else: :error
+  end
+
+  defp alignment_score(buffer, offset, sample_rate) do
+    symbol_bytes = symbol_length(sample_rate) * 8
+
+    results =
+      Enum.map(0..(@scan_symbols - 1), fn i ->
+        buffer
+        |> binary_part(offset * 8 + i * symbol_bytes, symbol_bytes)
+        |> decode_window(sample_rate)
+      end)
+
+    parity_score = Enum.count(results, &match?({:ok, _n}, &1))
+
+    sequence_score =
+      results
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.count(fn
+        [{:ok, a}, {:ok, b}] -> rem(a + 1, @max_symbol) == b
+        _other -> false
+      end)
+
+    parity_score + 2 * sequence_score
+  end
+
+  # Decoding tolerates a few ms of misalignment, so the top score spans a plateau
+  # (possibly straddling the wrap) and the boundary is its middle.
+  defp plateau_center(scores, best_score) do
+    best? = fn {_offset, score} -> score == best_score end
+    rotation = Enum.find_index(scores, &(not best?.(&1))) || 0
+    {head, tail} = Enum.split(scores, rotation)
+
+    {offset, _score} =
+      (tail ++ head)
+      |> Enum.chunk_by(best?)
+      |> Enum.filter(&best?.(hd(&1)))
+      |> Enum.max_by(&length/1)
+      |> then(&Enum.at(&1, div(length(&1), 2)))
+
+    offset
   end
 
   @doc "Window = symbol-length binary of f64le mono samples."
@@ -122,8 +198,11 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     s1 * s1 + s2 * s2 - coeff * s1 * s2
   end
 
-  defp goertzel_loop(<<sample::float-64-little, rest::binary>>, coeff, s1, s2),
-    do: goertzel_loop(rest, coeff, sample + coeff * s1 - s2, s1)
+  defp goertzel_loop(<<sample::float-64-little, rest::binary>>, coeff, s1, s2) do
+    goertzel_loop(rest, coeff, sample + coeff * s1 - s2, s1)
+  end
 
-  defp goertzel_loop(<<>>, _coeff, s1, s2), do: {s1, s2}
+  defp goertzel_loop(<<>>, _coeff, s1, s2) do
+    {s1, s2}
+  end
 end

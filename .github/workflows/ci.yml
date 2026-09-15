@@ -41,8 +41,6 @@ jobs:
       MIX_ENV: test
     steps:
       - uses: actions/checkout@v4
-      # the image records its tool versions in /root/.tool-versions, but a
-      # container job runs with HOME=/github/home, so asdf never finds them
       - run: cp /root/.tool-versions .
       - uses: actions/cache@v4
         with:
