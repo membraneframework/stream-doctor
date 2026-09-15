@@ -5,15 +5,6 @@
 
 Automated end-to-end testing for video infrastructure.
 
-> Join the conversation in
-> [discussion #16](https://github.com/membraneframework-labs/stream_doctor/discussions/16).
-
-StreamDoctor publishes a stream into your pipeline, watches what comes out the
-other end and turns the comparison into metrics you can assert on. The goal is
-that regressions in sync, latency, frame delivery or playback quality get
-caught by CI, not by someone clicking through a list of manual checks before a
-release.
-
 > **Status: early proof of concept.** This repository shows the core idea
 > working on a single RTMP to HLS scenario with a single metric, the
 > audio/video drift. It is a preview of the approach, not a finished product.
@@ -23,14 +14,17 @@ release.
 > [issue #1](https://github.com/membraneframework-labs/stream_doctor/issues/1).
 > Feedback on it is welcome.
 
+> Join the conversation in
+> [discussion #16](https://github.com/membraneframework-labs/stream_doctor/discussions/16).
+
+StreamDoctor publishes a stream into your pipeline, watches what comes out the
+other end and turns the comparison into metrics you can assert on. The goal is
+that regressions in sync, latency, frame delivery or playback quality get
+caught by CI, not by someone clicking through a list of manual checks before a
+release.
+
 Built on the [Membrane Framework](https://membrane.stream) and
 [Boombox](https://hexdocs.pm/boombox).
-
-<p align="center">
-  <a href="https://membrane.stream"><img src="https://raw.githubusercontent.com/membraneframework/membrane_core/master/assets/logo.svg" alt="Membrane Framework" height="80"></a>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <a href="https://hexdocs.pm/boombox"><img src="https://github.com/user-attachments/assets/1c5f25a2-cc27-4349-ae72-91315d43d6a1" alt="Boombox" height="80"></a>
-</p>
 
 ## The idea
 
@@ -50,7 +44,7 @@ const viewer = await session.watch(hlsUrl);
 // ... let it measure ...
 const metrics = await viewer.stop();
 
-expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50);
+expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50); // any test runner's assertion
 ```
 
 The stream carries markers in both audio and video that identify each moment
@@ -70,14 +64,9 @@ Then run a script like the one above against it. `examples/buggy_infra.sh` is
 the same pipeline with the audio delayed by 500 ms, which the check should
 catch.
 
-On macOS the daemon also needs Homebrew's OpenSSL 3 (`brew install openssl@3`).
-The precompiled ffmpeg it bundles expects `libssl.3.dylib` in
-`/opt/homebrew/lib` (or on `DYLD_FALLBACK_LIBRARY_PATH`). The daemon checks for
-it at startup and exits with that instruction when it is missing.
-
 The daemon (a Mix project) lives in `daemon/`, see its
 [README](daemon/README.md) for building it from source. The SDKs live in
-`sdks/<language>/`.
+[`sdks/`](sdks/), currently only [TypeScript](sdks/ts/).
 
 ## HTTP API
 
