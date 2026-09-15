@@ -1,6 +1,9 @@
 defmodule StreamDoctor.Probe.Audio.Tone do
   @moduledoc false
 
+  # This module was vibe-coded: the signal design and the decoder were written by an LLM and
+  # tuned by trial against real streams, not derived from a reference.
+
   # Audio marker: 30 ms symbols, number wraps at 128. 500 Hz = always-on ref,
   # 1000..4000 Hz = 7 bits MSB first, 4500 Hz = parity. All multiples of
   # 33.3 Hz so symbols toggle without clicks. Decoding = Goertzel over the
