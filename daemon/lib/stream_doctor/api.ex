@@ -3,7 +3,8 @@ defmodule StreamDoctor.Api do
   JSON API, listens on `PORT` (default 4040).
 
     * `POST/GET/DELETE /streamer` - `{"input", "rtmp_url"}`
-    * `POST /viewers` - `{"hls_url"}`; `GET/DELETE /viewers/:id`
+    * `POST /viewers` - `{"hls_url"}`
+    * `GET/DELETE /viewers/:id`
     * `GET /status`
   """
 
