@@ -97,7 +97,6 @@ defmodule StreamDoctor.SenderPipeline do
       tune: :zerolatency,
       gop_size: 60
     })
-    |> child(:keyframe_scheduler, __MODULE__.KeyframeScheduler)
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
     |> child({:realtimer, :video}, Membrane.Realtimer)
     |> via_in(Membrane.Pad.ref(:video, 0))
