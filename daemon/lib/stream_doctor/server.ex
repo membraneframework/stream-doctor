@@ -176,7 +176,6 @@ defmodule StreamDoctor.Server do
       %{status: :waiting_for_playlist} = viewer ->
         pid =
           StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url,
-            live_edge?: true,
             collector: viewer.collector
           )
 

@@ -2,7 +2,7 @@ defmodule StreamDoctor.ReceiverPipeline do
   @moduledoc """
   Reads HLS playlist and decodes markers.
 
-  Options: `:url`, `:collector`, `:live_edge?` (default false).
+  Options: `:url`, `:collector`.
   """
 
   use Membrane.Pipeline
@@ -25,7 +25,7 @@ defmodule StreamDoctor.ReceiverPipeline do
     spec =
       child(:hls_source, %HTTPAdaptiveStream.Source{
         url: Keyword.fetch!(opts, :url),
-        live_edge_mode?: Keyword.get(opts, :live_edge?, false)
+        live_edge_mode?: true
       })
 
     {[spec: spec], state}
