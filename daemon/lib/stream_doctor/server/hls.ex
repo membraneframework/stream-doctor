@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Server.Hls do
+defmodule StreamDoctor.Server.HLS do
   @moduledoc false
 
   alias ExM3U8.{MediaPlaylist, MultivariantPlaylist}
