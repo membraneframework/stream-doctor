@@ -1,16 +1,15 @@
 defmodule StreamDoctor.Metric do
   @moduledoc """
-  A metric is a fold over timestamped events. `observed_at` is the monotonic
-  millisecond clock of the probe that decoded the event, `pts` the media
-  timestamp as `Membrane.Time` (or nil).
+  A metric is a fold over events. `pts` is the media timestamp as `Membrane.Time`, or nil when
+  the probe could not determine it.
   """
 
   @type state :: term()
   @type event ::
           {:video_frame_received, frame_number :: non_neg_integer(),
-           pts :: Membrane.Time.t() | nil, observed_at :: integer()}
+           pts :: Membrane.Time.t() | nil}
           | {:audio_symbol_received, symbol_number :: non_neg_integer(),
-             pts :: Membrane.Time.t() | nil, observed_at :: integer()}
+             pts :: Membrane.Time.t() | nil}
 
   @doc "Key under which `report/1` results appear in summaries."
   @callback name() :: atom()

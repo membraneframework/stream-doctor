@@ -17,7 +17,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
                 spec: pid() | nil,
                 default: nil,
                 description:
-                  "Gets `{:video_frame_received, frame_number, pts, observed_at}`. When nil, events are logged instead."
+                  "Gets `{:video_frame_received, frame_number, pts}`. When nil, events are logged instead."
               ]
 
   @spec max_frame() :: pos_integer()
@@ -46,7 +46,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
       {{:ok, frame_number}, collector} ->
         Collector.event(
           collector,
-          {:video_frame_received, frame_number, buffer.pts, now_ms()}
+          {:video_frame_received, frame_number, buffer.pts}
         )
 
       {{:error, reason}, _collector} ->
@@ -54,9 +54,5 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
     end
 
     {[], state}
-  end
-
-  defp now_ms do
-    System.monotonic_time(:millisecond)
   end
 end

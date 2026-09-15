@@ -22,7 +22,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
                 spec: pid() | nil,
                 default: nil,
                 description:
-                  "Gets `{:audio_symbol_received, symbol_number, pts, observed_at}`. When nil, events are logged instead."
+                  "Gets `{:audio_symbol_received, symbol_number, pts}`. When nil, events are logged instead."
               ]
 
   @spec max_symbol() :: pos_integer()
@@ -178,7 +178,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       {{:ok, symbol_number}, collector} ->
         Collector.event(
           collector,
-          {:audio_symbol_received, symbol_number, symbol_pts(state), now_ms()}
+          {:audio_symbol_received, symbol_number, symbol_pts(state)}
         )
 
       {{:error, reason}, _collector} ->
@@ -216,9 +216,5 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   defp symbol_pts(state) do
     consumed_samples = state.appended_samples - div(byte_size(state.buffer), 8)
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
-  end
-
-  defp now_ms do
-    System.monotonic_time(:millisecond)
   end
 end
