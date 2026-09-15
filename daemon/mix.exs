@@ -35,7 +35,7 @@ defmodule StreamDoctor.MixProject do
         burrito: [
           targets: burrito_targets(),
           # recreates the symlinks rel/symlinks.exs recorded, on every launch
-          plugin: "rel/burrito_plugin/plugin.zig"
+          plugin: "rel/burrito_plugin/symlinks.zig"
         ]
       ]
     ]
