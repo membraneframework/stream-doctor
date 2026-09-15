@@ -17,7 +17,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
                 spec: pid() | nil,
                 default: nil,
                 description:
-                  "gets `{:video_frame_received, frame_number, pts, observed_at}`; nil = log"
+                  "Gets `{:video_frame_received, frame_number, pts, observed_at}`. When nil, events are logged instead."
               ]
 
   @spec max_frame() :: pos_integer()

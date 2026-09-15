@@ -1,9 +1,6 @@
 defmodule StreamDoctor.SenderPipeline.DurationAdder do
   @moduledoc """
-  Stamps `metadata.duration` on each buffer as the gap to the next buffer's timestamp. Delays the
-  stream by one buffer to do so; the last buffer before end of stream reuses the previous
-  duration. Stream formats and events arriving while a buffer is held are emitted after it, so
-  ordering is preserved.
+  Puts the time until the next buffer into each buffer's `metadata.duration`.
   """
 
   use Membrane.Filter

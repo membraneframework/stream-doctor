@@ -72,8 +72,8 @@ defmodule StreamDoctor.Server.HLS do
 
   defp describe_playlist(url, %MediaPlaylist{info: %MediaPlaylist.Info{end_list?: true}}) do
     raise "the playlist at #{url} is a finished VoD recording (#EXT-X-ENDLIST), " <>
-            "not a live stream - latency cannot be measured against it; " <>
-            "use the channel's live playback URL while the stream is running"
+            "not a live stream, so latency cannot be measured against it. " <>
+            "Use the channel's live playback URL while the stream is running"
   end
 
   defp describe_playlist(_url, %MediaPlaylist{info: info, timeline: timeline}) do
@@ -81,10 +81,10 @@ defmodule StreamDoctor.Server.HLS do
     segments = Enum.count(timeline, &match?(%Segment{}, &1))
 
     IO.puts(
-      "playlist: #{segments} segments listed, target duration #{target} s - " <>
-        "the reader joins at the newest listed segment, so the measured latency is " <>
-        "the server's ingest-to-playlist delay plus that segment's age (0-#{target} s); " <>
-        "a regular player joining ~#{2 * target} s behind the live edge would add that much on top"
+      "playlist: #{segments} segments listed, target duration #{target} s. " <>
+        "The reader joins at the newest listed segment, so the measured latency is " <>
+        "the server's ingest-to-playlist delay plus that segment's age (0-#{target} s). " <>
+        "A regular player joining ~#{2 * target} s behind the live edge would add that much on top"
     )
   end
 
