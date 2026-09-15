@@ -50,7 +50,7 @@ defmodule StreamDoctor.Server do
       {:reply, {:error, :already_streaming}, state}
     else
       pid =
-        StreamDoctor.SenderPipeline.start_link(input, rtmp_url, realtime?: true, on_live: self())
+        StreamDoctor.SenderPipeline.start_link(input, rtmp_url, on_live: self())
 
       Process.monitor(pid)
 
@@ -161,7 +161,6 @@ defmodule StreamDoctor.Server do
         pid =
           StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url,
             live_edge?: true,
-            realtime?: false,
             collector: viewer.collector
           )
 

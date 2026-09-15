@@ -1,9 +1,10 @@
 defmodule StreamDoctor.SenderPipeline do
   @moduledoc """
-  File in, markers on, RTMP out.
+  Reads the content of an MP4 file,
+  adds audio and video markers and streams it via RTMP.
 
-  Opts: `:input`, `:rtmp_url`, `:realtime?` (default true), `:on_live` (pid that gets
-  `{:streamer_live, pipeline_pid}` once the first video frame reaches the sink).
+  Options: `:input`, `:rtmp_url`, `:on_live` (pid that gets `{:streamer_live, pipeline_pid}`
+  once the first video frame reaches the sink).
   """
 
   use Membrane.Pipeline
@@ -12,7 +13,6 @@ defmodule StreamDoctor.SenderPipeline do
 
   alias Membrane.{AAC, H264, H265, MP4, RawAudio, RawVideo, Transcoder}
 
-  @doc "Linked. Returns the pipeline pid."
   @spec start_link(term(), String.t(), keyword()) :: pid()
   def start_link(input, rtmp_url, opts \\ []) do
     {:ok, _supervisor, pipeline} =
@@ -25,7 +25,6 @@ defmodule StreamDoctor.SenderPipeline do
   def handle_init(_ctx, opts) do
     state = %{
       rtmp_url: Keyword.fetch!(opts, :rtmp_url),
-      realtime?: Keyword.get(opts, :realtime?, true),
       on_live: Keyword.get(opts, :on_live),
       awaiting_tracks: nil
     }
@@ -51,10 +50,9 @@ defmodule StreamDoctor.SenderPipeline do
           rtmp_url: state.rtmp_url,
           tracks: kinds,
           max_attempts: 10,
-          # the sink would otherwise rebase the video alone, skewing the sync
           reset_timestamps: false
         })
-      ] ++ Enum.map(tracks, &track_spec(&1, state))
+      ] ++ Enum.map(tracks, &track_spec/1)
 
     {[spec: spec], %{state | awaiting_tracks: MapSet.new(kinds)}}
   end
@@ -89,7 +87,7 @@ defmodule StreamDoctor.SenderPipeline do
   defp to_kind(%H264{}), do: :video
   defp to_kind(%H265{}), do: :video
 
-  defp track_spec({track_id, :video}, state) do
+  defp track_spec({track_id, :video}) do
     get_child(:demuxer)
     |> via_out(Membrane.Pad.ref(:output, track_id))
     |> child(:video_decoder, %Transcoder{output_stream_format: RawVideo})
@@ -97,31 +95,24 @@ defmodule StreamDoctor.SenderPipeline do
     |> child(:encoder, %Membrane.H264.FFmpeg.Encoder{
       preset: :veryfast,
       tune: :zerolatency,
-      # safety net, real cadence comes from KeyframeScheduler
       gop_size: 60
     })
     |> child(:keyframe_scheduler, __MODULE__.KeyframeScheduler)
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
-    |> maybe_realtimer(:video, state)
+    |> child({:realtimer, :video}, Membrane.Realtimer)
     |> via_in(Membrane.Pad.ref(:video, 0))
     |> get_child(:rtmp_sink)
   end
 
-  defp track_spec({track_id, :audio}, state) do
+  defp track_spec({track_id, :audio}) do
     get_child(:demuxer)
     |> via_out(Membrane.Pad.ref(:output, track_id))
-    # the demuxer emits raw AAC frames with an esds config; FDK wants ADTS
     |> child(:aac_parser, AAC.Parser)
     |> child(:audio_decoder, %Transcoder{output_stream_format: RawAudio})
     |> child(:audio_marker_encoder, StreamDoctor.Probe.Audio.MarkerEncoder)
     |> child(:audio_encoder, %Membrane.AAC.FDK.Encoder{compensate_delay: true})
-    |> maybe_realtimer(:audio, state)
+    |> child({:realtimer, :audio}, Membrane.Realtimer)
     |> via_in(Membrane.Pad.ref(:audio, 0))
     |> get_child(:rtmp_sink)
   end
-
-  defp maybe_realtimer(link, kind, %{realtime?: true}),
-    do: child(link, {:realtimer, kind}, Membrane.Realtimer)
-
-  defp maybe_realtimer(link, _kind, _state), do: link
 end
