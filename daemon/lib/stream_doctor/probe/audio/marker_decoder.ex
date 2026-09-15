@@ -58,7 +58,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    mono = downmix_to_floats(buffer.payload, state.format.channels)
+    mono = channel0_to_floats(buffer.payload, state.format.channels)
 
     anchor_pts =
       cond do
@@ -197,7 +197,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
-  defp downmix_to_floats(payload, channels) do
+  defp channel0_to_floats(payload, channels) do
     skip = (channels - 1) * 2
 
     for <<sample::16-signed-little, _rest::binary-size(^skip) <- payload>>, into: <<>> do
