@@ -1,10 +1,10 @@
 defmodule StreamDoctor.Metric.AvDrift do
   @moduledoc """
-  Meassures A/V desync the way a pts-syncing player would see it:
+  Measures A/V desync the way a pts-syncing player would see it:
 
-      drift = (audio pts - m * symbol duration) - (video pts - n * frame duration)
+      drift = (audio pts - symbol_number * symbol duration) - (video pts - frame_number * frame duration)
 
-  Positive result means that audio content in later than video.
+  Positive result means that audio content is later than video.
   """
 
   @behaviour StreamDoctor.Metric
@@ -30,43 +30,45 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event({:video_frame_received, _n, nil, _observed_at}, state), do: state
+  def handle_event({:video_frame_received, _frame_number, _pts = nil, _observed_at}, state),
+    do: state
 
-  def handle_event({:video_frame_received, n, pts, _observed_at}, state) do
-    n = unwrap(n, state.video, VideoMarkerDecoder.max_frame())
-    {first_n, first_pts} = state.video_first || {n, pts}
+  def handle_event({:video_frame_received, frame_number, pts, _observed_at}, state) do
+    frame_number = unwrap(frame_number, state.video, VideoMarkerDecoder.max_frame())
+    {first_frame_number, first_pts} = state.video_first || {frame_number, pts}
 
     frame_duration =
-      if n > first_n and pts > first_pts,
-        do: (pts - first_pts) / (n - first_n),
+      if frame_number > first_frame_number and pts > first_pts,
+        do: (pts - first_pts) / (frame_number - first_frame_number),
         else: state.frame_duration
 
-    video_offset = frame_duration && pts - n * frame_duration
+    video_offset = frame_duration && pts - frame_number * frame_duration
 
     %{
       state
-      | video_first: {first_n, first_pts},
-        video: n,
+      | video_first: {first_frame_number, first_pts},
+        video: frame_number,
         frame_duration: frame_duration,
         video_offset: video_offset
     }
   end
 
-  def handle_event({:audio_symbol_received, _m, nil, _observed_at}, state), do: state
+  def handle_event({:audio_symbol_received, _symbol_number, _pts = nil, _observed_at}, state),
+    do: state
 
   def handle_event(
-        {:audio_symbol_received, m, pts, _observed_at},
+        {:audio_symbol_received, symbol_number, pts, _observed_at},
         %{video_offset: video_offset} = state
       )
       when video_offset != nil do
-    m =
+    symbol_number =
       case state.audio do
-        nil -> unwrap_against_video(m, pts, video_offset)
-        last -> unwrap(m, last, AudioMarkerDecoder.max_symbol())
+        nil -> unwrap_against_video(symbol_number, pts, video_offset)
+        last -> unwrap(symbol_number, last, AudioMarkerDecoder.max_symbol())
       end
 
-    drift = round(pts - m * symbol_duration() - video_offset)
-    %{state | audio: m, samples: Enum.take([drift | state.samples], @max_samples)}
+    drift = round(pts - symbol_number * symbol_duration() - video_offset)
+    %{state | audio: symbol_number, samples: Enum.take([drift | state.samples], @max_samples)}
   end
 
   def handle_event(_event, state), do: state
@@ -80,16 +82,19 @@ defmodule StreamDoctor.Metric.AvDrift do
     }
   end
 
-  defp unwrap_against_video(m, pts, video_offset) do
+  defp unwrap_against_video(symbol_number, pts, video_offset) do
     max = AudioMarkerDecoder.max_symbol()
-    k = round((pts - video_offset - m * symbol_duration()) / (max * symbol_duration()))
-    m + k * max
+
+    k =
+      round((pts - video_offset - symbol_number * symbol_duration()) / (max * symbol_duration()))
+
+    symbol_number + k * max
   end
 
-  defp unwrap(m, nil, _max), do: m
+  defp unwrap(value, nil, _max), do: value
 
-  defp unwrap(m, last, max) do
-    candidate = Integer.floor_div(last, max) * max + m
+  defp unwrap(value, last, max) do
+    candidate = Integer.floor_div(last, max) * max + value
 
     cond do
       candidate < last - div(max, 2) -> candidate + max

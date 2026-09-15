@@ -7,10 +7,10 @@ defmodule StreamDoctor.Metric do
 
   @type state :: term()
   @type event ::
-          {:video_frame_received, frame :: non_neg_integer(), pts :: Membrane.Time.t() | nil,
-           observed_at :: integer()}
-          | {:audio_symbol_received, symbol :: non_neg_integer(), pts :: Membrane.Time.t() | nil,
-             observed_at :: integer()}
+          {:video_frame_received, frame_number :: non_neg_integer(),
+           pts :: Membrane.Time.t() | nil, observed_at :: integer()}
+          | {:audio_symbol_received, symbol_number :: non_neg_integer(),
+             pts :: Membrane.Time.t() | nil, observed_at :: integer()}
 
   @doc "Key under which `report/1` results appear in summaries."
   @callback name() :: atom()

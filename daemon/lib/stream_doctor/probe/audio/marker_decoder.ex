@@ -18,7 +18,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   def_options collector: [
                 spec: pid() | nil,
                 default: nil,
-                description: "gets `{:audio_symbol_received, m, pts, observed_at}`; nil = log"
+                description:
+                  "gets `{:audio_symbol_received, symbol_number, pts, observed_at}`; nil = log"
               ]
 
   @spec max_symbol() :: pos_integer()
