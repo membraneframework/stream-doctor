@@ -29,6 +29,7 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
     {[], %{state | held: buffer}}
   end
 
+  @impl true
   def handle_buffer(:input, buffer, _ctx, %{frame_duration: nil, held: held} = state) do
     frame_duration = buffer.pts - held.pts
 
@@ -40,6 +41,7 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
     {[buffer: {:output, [draw(held, state), draw(buffer, state)]}], state}
   end
 
+  @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
     {[buffer: {:output, draw(buffer, state)}], state}
   end
@@ -49,6 +51,7 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
     {[end_of_stream: :output], state}
   end
 
+  @impl true
   def handle_end_of_stream(:input, _ctx, %{held: held} = state) do
     buffer = %{held | payload: Bar.draw(held.payload, state.geometry, 0)}
     {[buffer: {:output, buffer}, end_of_stream: :output], %{state | held: nil}}

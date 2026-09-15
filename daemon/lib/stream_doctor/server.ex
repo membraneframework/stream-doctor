@@ -153,8 +153,10 @@ defmodule StreamDoctor.Server do
     {:noreply, %{state | streamer: %{streamer | live: true}}}
   end
 
+  @impl true
   def handle_info({:streamer_live, _stale_pid}, state), do: {:noreply, state}
 
+  @impl true
   def handle_info({:playlist_ready, id}, state) do
     case state.viewers[id] do
       %{status: :waiting_for_playlist} = viewer ->
@@ -172,6 +174,7 @@ defmodule StreamDoctor.Server do
     end
   end
 
+  @impl true
   def handle_info({:viewer_failed, id, reason}, state) do
     case state.viewers[id] do
       %{status: :waiting_for_playlist} = viewer ->
@@ -182,12 +185,14 @@ defmodule StreamDoctor.Server do
     end
   end
 
+  @impl true
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
     error = if reason == :normal, do: nil, else: inspect(reason)
 
     {:noreply, mark_down_pid(state, pid, error)}
   end
 
+  @impl true
   def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
 
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error),
