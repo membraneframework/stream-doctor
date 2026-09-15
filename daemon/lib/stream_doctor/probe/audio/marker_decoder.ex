@@ -12,8 +12,6 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Audio.Tone
 
-  @scan_symbols 6
-  @scan_min_score 10
   @max_error_streak 8
 
   def_input_pad :input, accepted_format: %RawAudio{sample_format: :f64le, channels: 1}
@@ -83,7 +81,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     symbol_bytes = Tone.symbol_length(state.format.sample_rate) * 8
 
     cond do
-      not state.synced? and byte_size(state.buffer) >= (@scan_symbols + 1) * symbol_bytes ->
+      not state.synced? and byte_size(state.buffer) >= Tone.scan_symbols() * symbol_bytes ->
         state |> synchronize(symbol_bytes) |> process()
 
       state.synced? and byte_size(state.buffer) >= symbol_bytes ->
@@ -95,69 +93,16 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   end
 
   defp synchronize(state, symbol_bytes) do
-    sample_rate = state.format.sample_rate
-    symbol_length = Tone.symbol_length(sample_rate)
-    step = max(div(symbol_length, 16), 1)
+    case Tone.find_alignment(state.buffer, state.format.sample_rate) do
+      {:ok, offset} ->
+        Membrane.Logger.debug("Audio marker alignment found at offset #{offset}")
+        rest_size = byte_size(state.buffer) - offset * 8
+        %{state | buffer: binary_part(state.buffer, offset * 8, rest_size), synced?: true}
 
-    scores =
-      Enum.map(0..(symbol_length - 1)//step, fn offset ->
-        {offset, alignment_score(state.buffer, offset, sample_rate)}
-      end)
-
-    best_score = scores |> Enum.map(fn {_offset, score} -> score end) |> Enum.max()
-    best_offset = plateau_center(scores, best_score)
-
-    if best_score >= @scan_min_score do
-      Membrane.Logger.debug(
-        "Audio marker alignment found at offset #{best_offset} (score #{best_score})"
-      )
-
-      rest_size = byte_size(state.buffer) - best_offset * 8
-      %{state | buffer: binary_part(state.buffer, best_offset * 8, rest_size), synced?: true}
-    else
-      rest_size = byte_size(state.buffer) - symbol_bytes
-      %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
+      :error ->
+        rest_size = byte_size(state.buffer) - symbol_bytes
+        %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
     end
-  end
-
-  # Decoding tolerates a few ms of misalignment, so the top score spans a
-  # plateau (possibly straddling the wrap) and the boundary is its middle.
-  defp plateau_center(scores, best_score) do
-    best? = fn {_offset, score} -> score == best_score end
-    rotation = Enum.find_index(scores, &(not best?.(&1))) || 0
-    {head, tail} = Enum.split(scores, rotation)
-
-    {offset, _score} =
-      (tail ++ head)
-      |> Enum.chunk_by(best?)
-      |> Enum.filter(&best?.(hd(&1)))
-      |> Enum.max_by(&length/1)
-      |> then(&Enum.at(&1, div(length(&1), 2)))
-
-    offset
-  end
-
-  defp alignment_score(buffer, offset, sample_rate) do
-    symbol_bytes = Tone.symbol_length(sample_rate) * 8
-
-    results =
-      Enum.map(0..(@scan_symbols - 1), fn i ->
-        buffer
-        |> binary_part(offset * 8 + i * symbol_bytes, symbol_bytes)
-        |> Tone.decode_window(sample_rate)
-      end)
-
-    parity_score = Enum.count(results, &match?({:ok, _n}, &1))
-
-    sequence_score =
-      results
-      |> Enum.chunk_every(2, 1, :discard)
-      |> Enum.count(fn
-        [{:ok, a}, {:ok, b}] -> rem(a + 1, Tone.max_symbol()) == b
-        _other -> false
-      end)
-
-    parity_score + 2 * sequence_score
   end
 
   defp decode_symbol(state, symbol_bytes) do

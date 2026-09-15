@@ -26,6 +26,9 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @local_contrast 8.0
   @ref_floor 0.01
 
+  @scan_symbols 6
+  @scan_min_score 10
+
   @spec max_symbol() :: pos_integer()
   def max_symbol do
     @max_symbol
@@ -68,6 +71,70 @@ defmodule StreamDoctor.Probe.Audio.Tone do
 
       <<value::16-signed-little>>
     end
+  end
+
+  @doc "Symbols a buffer must hold for `find_alignment/2` to run."
+  @spec scan_symbols() :: pos_integer()
+  def scan_symbols do
+    @scan_symbols + 1
+  end
+
+  @doc "Sample offset of the symbol boundary in a buffer of `scan_symbols/0` symbols, if any."
+  @spec find_alignment(binary(), pos_integer()) :: {:ok, non_neg_integer()} | :error
+  def find_alignment(buffer, sample_rate) do
+    symbol_length = symbol_length(sample_rate)
+    step = max(div(symbol_length, 16), 1)
+
+    scores =
+      Enum.map(0..(symbol_length - 1)//step, fn offset ->
+        {offset, alignment_score(buffer, offset, sample_rate)}
+      end)
+
+    best_score = scores |> Enum.map(fn {_offset, score} -> score end) |> Enum.max()
+
+    if best_score >= @scan_min_score,
+      do: {:ok, plateau_center(scores, best_score)},
+      else: :error
+  end
+
+  defp alignment_score(buffer, offset, sample_rate) do
+    symbol_bytes = symbol_length(sample_rate) * 8
+
+    results =
+      Enum.map(0..(@scan_symbols - 1), fn i ->
+        buffer
+        |> binary_part(offset * 8 + i * symbol_bytes, symbol_bytes)
+        |> decode_window(sample_rate)
+      end)
+
+    parity_score = Enum.count(results, &match?({:ok, _n}, &1))
+
+    sequence_score =
+      results
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.count(fn
+        [{:ok, a}, {:ok, b}] -> rem(a + 1, @max_symbol) == b
+        _other -> false
+      end)
+
+    parity_score + 2 * sequence_score
+  end
+
+  # Decoding tolerates a few ms of misalignment, so the top score spans a plateau
+  # (possibly straddling the wrap) and the boundary is its middle.
+  defp plateau_center(scores, best_score) do
+    best? = fn {_offset, score} -> score == best_score end
+    rotation = Enum.find_index(scores, &(not best?.(&1))) || 0
+    {head, tail} = Enum.split(scores, rotation)
+
+    {offset, _score} =
+      (tail ++ head)
+      |> Enum.chunk_by(best?)
+      |> Enum.filter(&best?.(hd(&1)))
+      |> Enum.max_by(&length/1)
+      |> then(&Enum.at(&1, div(length(&1), 2)))
+
+    offset
   end
 
   @doc "Window = symbol-length binary of f64le mono samples."
