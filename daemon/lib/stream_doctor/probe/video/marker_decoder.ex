@@ -14,7 +14,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
   def_options collector: [
                 spec: pid() | nil,
                 default: nil,
-                description: "gets `{:video_frame_received, n, pts, t}`; nil = log"
+                description: "gets `{:video_frame_received, n, pts, observed_at}`; nil = log"
               ]
 
   @spec max_frame() :: pos_integer()

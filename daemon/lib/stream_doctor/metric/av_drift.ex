@@ -30,9 +30,9 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event({:video_frame_received, _n, nil, _t}, state), do: state
+  def handle_event({:video_frame_received, _n, nil, _observed_at}, state), do: state
 
-  def handle_event({:video_frame_received, n, pts, _t}, state) do
+  def handle_event({:video_frame_received, n, pts, _observed_at}, state) do
     n = unwrap(n, state.video, VideoMarkerDecoder.max_frame())
     {first_n, first_pts} = state.video_first || {n, pts}
 
@@ -52,9 +52,12 @@ defmodule StreamDoctor.Metric.AvDrift do
     }
   end
 
-  def handle_event({:audio_symbol_received, _m, nil, _t}, state), do: state
+  def handle_event({:audio_symbol_received, _m, nil, _observed_at}, state), do: state
 
-  def handle_event({:audio_symbol_received, m, pts, _t}, %{video_offset: video_offset} = state)
+  def handle_event(
+        {:audio_symbol_received, m, pts, _observed_at},
+        %{video_offset: video_offset} = state
+      )
       when video_offset != nil do
     m =
       case state.audio do
