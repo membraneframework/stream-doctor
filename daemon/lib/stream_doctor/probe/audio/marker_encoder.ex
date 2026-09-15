@@ -1,5 +1,9 @@
 defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
-  @moduledoc "Replaces audio with the marker tones (see `StreamDoctor.Probe.Audio.Tone`). Symbol m covers source time m * 30 ms, whatever pts the audio starts at. Replaces, not mixes, so content can't confuse the decoder."
+  @moduledoc """
+  Replaces audio with the marker tones (see `StreamDoctor.Probe.Audio.Tone`). Symbol number k
+  covers source time k * 30 ms, whatever pts the audio starts at. Replaces, not mixes, so content
+  can't confuse the decoder.
+  """
 
   use Membrane.Filter
 

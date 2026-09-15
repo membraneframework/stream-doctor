@@ -1,5 +1,7 @@
 defmodule StreamDoctor.Probe.Video.MarkerDecoder do
-  @moduledoc "Reads the bar off each frame, reports to a collector (or logs)."
+  @moduledoc """
+  Reads the bar off each frame, reports to a collector (or logs).
+  """
 
   use Membrane.Sink
 

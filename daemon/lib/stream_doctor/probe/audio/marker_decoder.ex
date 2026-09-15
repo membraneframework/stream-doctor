@@ -1,5 +1,8 @@
 defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
-  @moduledoc "Reads audio symbols, reports them to a collector (or logs). Self-syncs to symbol boundaries since AAC shifts them."
+  @moduledoc """
+  Reads audio symbols, reports them to a collector (or logs). Self-syncs to symbol boundaries
+  since AAC shifts them.
+  """
 
   use Membrane.Sink
 

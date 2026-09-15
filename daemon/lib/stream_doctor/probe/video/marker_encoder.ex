@@ -1,5 +1,9 @@
 defmodule StreamDoctor.Probe.Video.MarkerEncoder do
-  @moduledoc "Draws the bar on each frame. The frame number is the pts in frame durations, so number 0 is source time zero whether or not a frame sits there; wraps at `StreamDoctor.Probe.Video.Bar.max_frame/0`."
+  @moduledoc """
+  Draws the bar on each frame. The frame number is the pts in frame durations, so number 0 is
+  source time zero whether or not a frame sits there; wraps at
+  `StreamDoctor.Probe.Video.Bar.max_frame/0`.
+  """
 
   use Membrane.Filter
 

@@ -1,5 +1,7 @@
 defmodule StreamDoctor.Collector do
-  @moduledoc "One per viewer; holds `StreamDoctor.Metric`s, folds events in, answers reports."
+  @moduledoc """
+  One per viewer; holds `StreamDoctor.Metric`s, folds events in, answers reports.
+  """
 
   use GenServer
 
