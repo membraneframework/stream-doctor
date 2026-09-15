@@ -18,7 +18,7 @@ defmodule StreamDoctor.Metric do
   @doc "Builds the initial state from the options given in the collector's metric spec."
   @callback init(opts :: keyword()) :: state()
 
-  @doc "Folds one event into the state. Called for every event, regardless of kind."
+  @doc "Folds one event into the state. Called for every event."
   @callback handle_event(event(), state()) :: state()
 
   @doc "Current value of the metric. Must be JSON-encodable."
