@@ -91,6 +91,7 @@ defmodule StreamDoctor.SenderPipeline do
     get_child(:demuxer)
     |> via_out(Membrane.Pad.ref(:output, track_id))
     |> child(:video_decoder, %Transcoder{output_stream_format: RawVideo})
+    |> child(:video_duration_adder, __MODULE__.DurationAdder)
     |> child(:video_marker_encoder, StreamDoctor.Probe.Video.MarkerEncoder)
     |> child(:encoder, %Membrane.H264.FFmpeg.Encoder{
       preset: :veryfast,
