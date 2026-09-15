@@ -1,17 +1,11 @@
-//! Burrito plugin: recreate the symlinks that `mix release` dereferenced and
+//! Recreate the symlinks that `mix release` dereferenced and
 //! Burrito's FOILZ archiver cannot carry.
 //!
-//! The manifest (`symlinks.zon`) is written next to this file by
+//! The manifest is written next to this file by
 //! `rel/symlinks.exs` and imported at wrapper build time.
-//!
-//! Burrito calls `burrito_plugin_entry` on EVERY launch, BEFORE the payload is
-//! unpacked on first run (see burrito/src/wrapper.zig). That ordering is what
-//! makes this work: we create (possibly dangling) links first, the archiver's
-//! create_dirs tolerates already-existing directories, and the payload holds
-//! no file at any link path (the release step removed the copies), so
-//! unpacking never overwrites a link. Zig 0.16 std.Io API, as used by Burrito 1.6.
 const std = @import("std");
-const Io = std.Io;
+
+const io = std.Options.debug_io;
 
 const Link = struct { []const u8, []const u8 };
 
@@ -22,21 +16,18 @@ pub fn burrito_plugin_entry(install_dir: []const u8, program_manifest_json: []co
 
     var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena_state.deinit();
+    const arena = arena_state.allocator();
 
-    apply(std.Options.debug_io, arena_state.allocator(), install_dir, manifest);
-}
-
-fn apply(io: Io, arena: std.mem.Allocator, install_dir: []const u8, links: []const Link) void {
-    for (links) |l| {
+    for (manifest) |l| {
         const link, const target = l;
-        ensure_link(io, arena, install_dir, link, target) catch |err| {
+        ensure_link(arena, install_dir, link, target) catch |err| {
             warn("symlinks: failed to create {s} -> {s}: {t}", .{ link, target, err });
         };
     }
 }
 
-fn ensure_link(io: Io, arena: std.mem.Allocator, install_dir: []const u8, link_rel: []const u8, target: []const u8) !void {
-    const cwd = Io.Dir.cwd();
+fn ensure_link(arena: std.mem.Allocator, install_dir: []const u8, link_rel: []const u8, target: []const u8) !void {
+    const cwd = std.Io.Dir.cwd();
     const link_path = try std.fs.path.join(arena, &.{ install_dir, link_rel });
 
     if (std.fs.path.dirname(link_path)) |parent| try cwd.createDirPath(io, parent);
@@ -55,7 +46,7 @@ fn ensure_link(io: Io, arena: std.mem.Allocator, install_dir: []const u8, link_r
 
 fn warn(comptime fmt: []const u8, args: anytype) void {
     var buf: [128]u8 = undefined;
-    var w = Io.File.stderr().writer(std.Options.debug_io, &buf);
+    var w = std.Io.File.stderr().writer(io, &buf);
     w.interface.print("[w] " ++ fmt ++ "\n", args) catch {};
     w.interface.flush() catch {};
 }

@@ -1,16 +1,14 @@
 defmodule StreamDoctor.ReceiverPipeline do
   @moduledoc """
-  HLS in, decoded markers out to a collector (or the log).
+  Reads HLS playlist and decodes markers.
 
-  Opts: `:url`, `:collector`, `:realtime?` (default false), `:live_edge?`
-  (default false).
+  Options: `:url`, `:collector`.
   """
 
   use Membrane.Pipeline
 
-  alias Membrane.{AAC, H264, HTTPAdaptiveStream}
+  alias Membrane.{AAC, H264, HTTPAdaptiveStream, RawAudio}
 
-  @doc "Linked. Returns the pipeline pid."
   @spec start_link(String.t(), keyword()) :: pid()
   def start_link(url, opts \\ []) do
     {:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(__MODULE__, [url: url] ++ opts)
@@ -21,14 +19,13 @@ defmodule StreamDoctor.ReceiverPipeline do
   def handle_init(_ctx, opts) do
     state = %{
       collector: Keyword.get(opts, :collector),
-      realtime?: Keyword.get(opts, :realtime?, false),
       awaiting_tracks: nil
     }
 
     spec =
       child(:hls_source, %HTTPAdaptiveStream.Source{
         url: Keyword.fetch!(opts, :url),
-        live_edge_mode?: Keyword.get(opts, :live_edge?, false)
+        live_edge_mode?: true
       })
 
     {[spec: spec], state}
@@ -48,7 +45,9 @@ defmodule StreamDoctor.ReceiverPipeline do
   end
 
   @impl true
-  def handle_child_notification(_notification, _child, _ctx, state), do: {[], state}
+  def handle_child_notification(_notification, _child, _ctx, state) do
+    {[], state}
+  end
 
   @impl true
   def handle_element_end_of_stream(child, :input, _ctx, state)
@@ -64,7 +63,9 @@ defmodule StreamDoctor.ReceiverPipeline do
   end
 
   @impl true
-  def handle_element_end_of_stream(_child, _pad, _ctx, state), do: {[], state}
+  def handle_element_end_of_stream(_child, _pad, _ctx, state) do
+    {[], state}
+  end
 
   defp track_spec({:video_output, _format}, state) do
     get_child(:hls_source)
@@ -74,7 +75,6 @@ defmodule StreamDoctor.ReceiverPipeline do
       output_stream_structure: :annexb
     })
     |> child(:video_decoder, Membrane.H264.FFmpeg.Decoder)
-    |> maybe_realtimer(:video, state)
     |> child(:video_marker_decoder, %StreamDoctor.Probe.Video.MarkerDecoder{
       collector: state.collector
     })
@@ -85,14 +85,11 @@ defmodule StreamDoctor.ReceiverPipeline do
     |> via_out(:audio_output)
     |> child(:audio_parser, %AAC.Parser{out_encapsulation: :ADTS})
     |> child(:audio_decoder, Membrane.AAC.FDK.Decoder)
-    |> maybe_realtimer(:audio, state)
+    |> child(:audio_converter, %Membrane.FFmpeg.SWResample.Converter{
+      output_stream_format: %RawAudio{sample_format: :f64le, channels: 1, sample_rate: 48_000}
+    })
     |> child(:audio_marker_decoder, %StreamDoctor.Probe.Audio.MarkerDecoder{
       collector: state.collector
     })
   end
-
-  defp maybe_realtimer(link, kind, %{realtime?: true}),
-    do: child(link, {:realtimer, kind}, Membrane.Realtimer)
-
-  defp maybe_realtimer(link, _kind, _state), do: link
 end

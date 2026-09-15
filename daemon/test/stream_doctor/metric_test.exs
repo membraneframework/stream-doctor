@@ -10,17 +10,16 @@ defmodule StreamDoctor.MetricTest do
   end
 
   describe "AvDrift" do
-    # Receiver-side events of a stream whose timestamps start at 1400 ms:
-    # frame i has pts 1400 ms + i / fps; audio symbol m has pts
+    # Receiver-side events of a stream whose timestamps start at 1400 ms.
+    # Frame i has pts 1400 ms + i / fps. Audio symbol m has pts
     # 1400 + m * 30 + shift_ms (the audio content shifted against the
     # video's). Counters are emitted wrapped, as the decoders produce them.
-    # Arrival times are irrelevant to the metric and set to 0.
     defp video_recv(range, fps \\ 25) do
       max_frame = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
 
       Enum.map(range, fn i ->
         pts = milliseconds(1400) + div(i * Membrane.Time.second(), fps)
-        {:video_frame_received, rem(i, max_frame), pts, 0}
+        {:video_frame_received, rem(i, max_frame), pts}
       end)
     end
 
@@ -28,7 +27,7 @@ defmodule StreamDoctor.MetricTest do
       max_symbol = StreamDoctor.Probe.Audio.MarkerDecoder.max_symbol()
 
       Enum.map(range, fn m ->
-        {:audio_symbol_received, rem(m, max_symbol), milliseconds(1400 + m * 30 + shift_ms), 0}
+        {:audio_symbol_received, rem(m, max_symbol), milliseconds(1400 + m * 30 + shift_ms)}
       end)
     end
 
@@ -46,7 +45,7 @@ defmodule StreamDoctor.MetricTest do
       # 10 s of stream; the audio counter wraps at 3.84 s
       assert drift(av_events(10)) == 0
       report = Metric.AvDrift.report(run(Metric.AvDrift, [], av_events(10)))
-      assert report.frame_duration_ms == 40.0
+      assert report.frame_duration_ms == 40
     end
 
     test "a frame duration that isn't whole milliseconds doesn't ramp" do
@@ -67,15 +66,6 @@ defmodule StreamDoctor.MetricTest do
       # ...even at the largest resolvable drift
       assert_in_delta drift(av_events(6, 1800, 30)), 1800, 1
       assert_in_delta drift(av_events(6, -1800, 30)), -1800, 1
-    end
-
-    test "is independent of arrival times" do
-      bursty =
-        av_events(10)
-        |> Enum.with_index()
-        |> Enum.map(fn {event, i} -> put_elem(event, 3, 1000 + rem(i * 7919, 3000)) end)
-
-      assert drift(bursty) == 0
     end
 
     test "reports nil until both tracks are decoded" do

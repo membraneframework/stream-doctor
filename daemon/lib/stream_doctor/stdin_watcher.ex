@@ -11,7 +11,9 @@ defmodule StreamDoctor.StdinWatcher do
     if System.get_env(@env), do: [__MODULE__], else: []
   end
 
-  def start_link(_), do: Task.start_link(&run/0)
+  def start_link(_) do
+    Task.start_link(&run/0)
+  end
 
   defp run do
     case IO.read(:stdio, :line) do
