@@ -1,8 +1,3 @@
-//! Recreate the symlinks that `mix release` dereferenced and
-//! Burrito's FOILZ archiver cannot carry.
-//!
-//! The manifest is written next to this file by
-//! `rel/symlinks.exs` and imported at wrapper build time.
 const std = @import("std");
 
 const io = std.Options.debug_io;
