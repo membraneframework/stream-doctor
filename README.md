@@ -5,6 +5,9 @@
 
 Automated end-to-end testing for video infrastructure.
 
+> Join the conversation in
+> [discussion #16](https://github.com/membraneframework-labs/stream_doctor/discussions/16).
+
 StreamDoctor publishes a stream into your pipeline, watches what comes out the
 other end and turns the comparison into metrics you can assert on. The goal is
 that regressions in sync, latency, frame delivery or playback quality get
@@ -22,6 +25,12 @@ release.
 
 Built on the [Membrane Framework](https://membrane.stream) and
 [Boombox](https://hexdocs.pm/boombox).
+
+<p align="center">
+  <a href="https://membrane.stream"><img src="https://raw.githubusercontent.com/membraneframework/membrane_core/master/assets/logo.svg" alt="Membrane Framework" height="80"></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://hexdocs.pm/boombox"><img src="https://github.com/user-attachments/assets/1c5f25a2-cc27-4349-ae72-91315d43d6a1" alt="Boombox" height="80"></a>
+</p>
 
 ## The idea
 
