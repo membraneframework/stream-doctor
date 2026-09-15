@@ -25,7 +25,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_mp4_plugin, "~> 0.36"},
       {:membrane_http_adaptive_stream_plugin, "~> 0.21.3"},
       {:membrane_aac_fdk_plugin, "~> 0.19.0", override: true},
-      {:ex_m3u8, "~> 0.15"},
+      {:req, "~> 0.5"},
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.5"},
       {:membrane_realtimer_plugin, "~> 0.11.1"},
