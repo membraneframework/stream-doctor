@@ -5,16 +5,14 @@ defmodule StreamDoctor.SenderPipeline.KeyframeScheduler do
 
   use Membrane.Filter
 
-  def_input_pad(:input, accepted_format: _any)
-  def_output_pad(:output, accepted_format: _any)
+  def_input_pad :input, accepted_format: _any
+  def_output_pad :output, accepted_format: _any
 
-  def_options(
-    interval: [
-      spec: Membrane.Time.t(),
-      default: Membrane.Time.seconds(2),
-      description: "pts between keyframes"
-    ]
-  )
+  def_options interval: [
+                spec: Membrane.Time.t(),
+                default: Membrane.Time.seconds(2),
+                description: "pts between keyframes"
+              ]
 
   @impl true
   def handle_init(_ctx, opts) do

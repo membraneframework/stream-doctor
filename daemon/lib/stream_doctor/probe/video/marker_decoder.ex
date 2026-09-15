@@ -9,15 +9,13 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
   alias StreamDoctor.Collector
   alias StreamDoctor.Probe.Video.Bar
 
-  def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
+  def_input_pad :input, accepted_format: %RawVideo{pixel_format: :I420}
 
-  def_options(
-    collector: [
-      spec: pid() | nil,
-      default: nil,
-      description: "gets `{:video_frame_received, n, pts, t}`; nil = log"
-    ]
-  )
+  def_options collector: [
+                spec: pid() | nil,
+                default: nil,
+                description: "gets `{:video_frame_received, n, pts, t}`; nil = log"
+              ]
 
   @spec max_frame() :: pos_integer()
   defdelegate max_frame(), to: Bar

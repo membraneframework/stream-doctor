@@ -6,8 +6,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
   alias Membrane.RawAudio
   alias StreamDoctor.Probe.Audio.Tone
 
-  def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
-  def_output_pad(:output, accepted_format: %RawAudio{sample_format: :s16le})
+  def_input_pad :input, accepted_format: %RawAudio{sample_format: :s16le}
+  def_output_pad :output, accepted_format: %RawAudio{sample_format: :s16le}
 
   @impl true
   def handle_init(_ctx, _opts) do

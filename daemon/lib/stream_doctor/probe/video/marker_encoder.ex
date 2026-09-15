@@ -6,8 +6,8 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
   alias Membrane.RawVideo
   alias StreamDoctor.Probe.Video.Bar
 
-  def_input_pad(:input, accepted_format: %RawVideo{pixel_format: :I420})
-  def_output_pad(:output, accepted_format: %RawVideo{pixel_format: :I420})
+  def_input_pad :input, accepted_format: %RawVideo{pixel_format: :I420}
+  def_output_pad :output, accepted_format: %RawVideo{pixel_format: :I420}
 
   @impl true
   def handle_init(_ctx, _opts) do

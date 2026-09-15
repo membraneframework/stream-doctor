@@ -13,15 +13,13 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   @scan_min_score 10
   @max_error_streak 8
 
-  def_input_pad(:input, accepted_format: %RawAudio{sample_format: :s16le})
+  def_input_pad :input, accepted_format: %RawAudio{sample_format: :s16le}
 
-  def_options(
-    collector: [
-      spec: pid() | nil,
-      default: nil,
-      description: "gets `{:audio_symbol_received, m, pts, t}`; nil = log"
-    ]
-  )
+  def_options collector: [
+                spec: pid() | nil,
+                default: nil,
+                description: "gets `{:audio_symbol_received, m, pts, t}`; nil = log"
+              ]
 
   @spec max_symbol() :: pos_integer()
   defdelegate max_symbol(), to: Tone

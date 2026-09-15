@@ -1,5 +1,7 @@
 defmodule StreamDoctor.Server do
-  @moduledoc "State for the HTTP API: one streamer, some viewers. Metrics live in collectors."
+  @moduledoc """
+  Holds state of the HTTP API session.
+  """
 
   use GenServer
 
