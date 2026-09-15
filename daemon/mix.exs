@@ -34,6 +34,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_raw_video_format, "~> 0.4"},
       {:membrane_raw_audio_format, "~> 0.12"},
       {:membrane_transcoder_plugin, "~> 0.3"},
+      {:membrane_ffmpeg_swresample_plugin, "~> 0.20"},
       {:membrane_aac_format, "~> 0.8"},
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false}

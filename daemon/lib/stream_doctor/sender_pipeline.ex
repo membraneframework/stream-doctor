@@ -123,6 +123,9 @@ defmodule StreamDoctor.SenderPipeline do
     |> via_out(Membrane.Pad.ref(:output, track_id))
     |> child(:aac_parser, AAC.Parser)
     |> child(:audio_decoder, %Transcoder{output_stream_format: RawAudio})
+    |> child(:audio_converter, %Membrane.FFmpeg.SWResample.Converter{
+      output_stream_format: %RawAudio{sample_format: :s16le, channels: 1, sample_rate: 48_000}
+    })
     |> child(:audio_marker_encoder, StreamDoctor.Probe.Audio.MarkerEncoder)
     |> child(:audio_encoder, %Membrane.AAC.FDK.Encoder{compensate_delay: true})
     |> child({:realtimer, :audio}, Membrane.Realtimer)

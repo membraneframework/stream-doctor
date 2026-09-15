@@ -16,7 +16,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   @scan_min_score 10
   @max_error_streak 8
 
-  def_input_pad :input, accepted_format: %RawAudio{sample_format: :s16le}
+  def_input_pad :input, accepted_format: %RawAudio{sample_format: :f64le, channels: 1}
 
   def_options collector: [
                 spec: pid() | nil,
@@ -62,8 +62,6 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    mono = channel0_to_floats(buffer.payload, state.format.channels)
-
     anchor_pts =
       cond do
         state.anchor_pts != nil -> state.anchor_pts
@@ -73,9 +71,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
     state = %{
       state
-      | buffer: state.buffer <> mono,
+      | buffer: state.buffer <> buffer.payload,
         anchor_pts: anchor_pts,
-        appended_samples: state.appended_samples + div(byte_size(mono), 8)
+        appended_samples: state.appended_samples + div(byte_size(buffer.payload), 8)
     }
 
     {[], process(state)}
@@ -198,14 +196,6 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
       {:error, _reason} ->
         %{state | error_streak: state.error_streak + 1}
-    end
-  end
-
-  defp channel0_to_floats(payload, channels) do
-    skip = (channels - 1) * 2
-
-    for <<sample::16-signed-little, _rest::binary-size(^skip) <- payload>>, into: <<>> do
-      <<sample * 1.0::float-64-little>>
     end
   end
 

@@ -7,7 +7,7 @@ defmodule StreamDoctor.ReceiverPipeline do
 
   use Membrane.Pipeline
 
-  alias Membrane.{AAC, H264, HTTPAdaptiveStream}
+  alias Membrane.{AAC, H264, HTTPAdaptiveStream, RawAudio}
 
   @spec start_link(String.t(), keyword()) :: pid()
   def start_link(url, opts \\ []) do
@@ -85,6 +85,9 @@ defmodule StreamDoctor.ReceiverPipeline do
     |> via_out(:audio_output)
     |> child(:audio_parser, %AAC.Parser{out_encapsulation: :ADTS})
     |> child(:audio_decoder, Membrane.AAC.FDK.Decoder)
+    |> child(:audio_converter, %Membrane.FFmpeg.SWResample.Converter{
+      output_stream_format: %RawAudio{sample_format: :f64le, channels: 1, sample_rate: 48_000}
+    })
     |> child(:audio_marker_decoder, %StreamDoctor.Probe.Audio.MarkerDecoder{
       collector: state.collector
     })
