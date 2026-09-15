@@ -1,104 +1,59 @@
 defmodule StreamDoctor.Rel.Symlinks do
   @moduledoc """
-  Release step: put the symlinks back and hand them to the Burrito plugin.
+  This release step:
+  - prunes headers added by bundlex,
+  - Removes duplicate libs made from `mix release` dereferencing symlinks,
+  - Saves the links to a manifest file so the burrito plugin can recreate them
+    when installing the app.
+    
 
-  bundlex downloads each precompiled bundle (ffmpeg, srt, ...) once into its own
-  `priv/shared/precompiled/<bundle>` and gives every plugin a relative symlink
-  at `priv/bundlex/nif/<bundle>`; the NIF's rpath points at that link. Inside a
-  bundle, versioned dylib aliases are symlinks too.
-
-  `mix release` copies every `priv` with `dereference_symlinks: true` (no
-  opt-out), so each plugin gets its own full copy of ffmpeg and every alias
-  becomes a full file. Burrito's FOILZ archiver then drops symlinks entirely, so
-  restoring them in the release dir alone is not enough for the binary.
+  bundlex downloads each precompiled package (ffmpeg, srt, ...) once into its own
+  `priv/shared/precompiled/<package>` and gives every plugin a relative symlink
+  at `priv/bundlex/nif/<package>`; the NIF's rpath points at that link. Inside a
+  package, versioned library aliases (`libx.so`, `libx.so.1`) are symlinks too.
 
   This step, in pure Elixir:
 
     1. discovers every symlink inside each app's `priv` in the build tree and
        maps it to release paths (`lib/<app>-<vsn>/priv/...`), across apps;
-    2. deletes the dereferenced copy in the release and recreates the link
-       there, so a plain (tarball) release keeps working;
-    3. dedupes byte-identical files inside each precompiled bundle into links
-       (the Linux bundles ship alias copies as real files, no symlinks at all);
-    4. drops the bundles' `include/` dirs, which are only needed at compile time;
-    5. writes `rel/burrito_plugin/symlinks.zon` (a ZON list of
-       `.{ "link", "target" }` pairs, link paths release relative).
-       `rel/burrito_plugin/plugin.zig` imports it at wrapper build time and
-       recreates the links in the install dir on every launch, before the
-       payload is unpacked.
-
-  Not done here (see TODO.md): pruning bundle libraries the NIFs never load,
-  and fixing NIFs that link system OpenSSL by absolute path.
   """
 
   @manifest Path.expand("burrito_plugin/symlinks.zon", __DIR__)
 
-  def run(%Mix.Release{} = release) do
-    lib_dir = Path.join(release.path, "lib")
-    before = dir_size(lib_dir)
+  @type manifest_t :: [{link :: Path.t(), target :: Path.t()}]
 
+  # Version string as read from the `.app` file (a charlist).
+  @typep vsn :: charlist()
+
+  # A located path: owning app, its version, and the path inside that app's priv.
+  @typep located :: {Application.app(), vsn(), Path.t()}
+
+  @spec run(Mix.Release.t()) :: Mix.Release.t()
+  def run(%Mix.Release{} = release) do
     drop_headers(release)
 
-    restored =
-      release.applications
-      |> Enum.flat_map(fn {app, props} -> app_links(app, props, release) end)
-      |> Enum.sort()
-      |> Enum.map(fn {link, target} ->
-        replace_with_link(release, link, target)
-        {link, target}
-      end)
+    entries =
+      Enum.flat_map(release.applications, fn {app, props} -> app_links(app, props, release) end)
 
-    deduped = dedupe_bundles(release)
-    entries = Enum.sort(restored ++ deduped)
+    Enum.each(entries, fn {link, _target} -> File.rm_rf!(Path.join(release.path, link)) end)
 
     if entries == [] do
-      Mix.raise("#{inspect(__MODULE__)}: no symlinks found in any app's priv; refusing to write an empty manifest")
+      Mix.raise(
+        "#{inspect(__MODULE__)}: no symlinks found in any app's priv; refusing to write an empty manifest"
+      )
     end
 
     File.mkdir_p!(Path.dirname(@manifest))
     File.write!(@manifest, to_zon(entries))
 
     Mix.shell().info(
-      "symlinks: restored #{length(restored)}, deduped #{length(deduped)}; " <>
-        "lib/: #{mb(before)} -> #{mb(dir_size(lib_dir))}; manifest: #{Path.relative_to_cwd(@manifest)}"
+      "symlinks: #{length(entries)} links; manifest: #{Path.relative_to_cwd(@manifest)}"
     )
 
     release
   end
 
-  # ---- manifest -----------------------------------------------------------------
-
-  # `.{ .{ "link", "target" }, ... }`; the plugin imports it as `[]const Link`.
-  defp to_zon(entries) do
-    body =
-      Enum.map_join(entries, "", fn {link, target} ->
-        "    .{ #{zon_string(link)}, #{zon_string(target)} },\n"
-      end)
-
-    ".{\n" <> body <> "}\n"
-  end
-
-  # ZON strings use Zig escapes; paths are bytes, so only the two delimiters
-  # need escaping (control characters would need \xNN and do not occur).
-  defp zon_string(s) do
-    escaped = s |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
-    "\"#{escaped}\""
-  end
-
-  # ---- release-side edits -----------------------------------------------------
-
-  defp replace_with_link(release, link, target) do
-    abs = Path.join(release.path, link)
-
-    case File.lstat(abs) do
-      {:ok, _} -> File.rm_rf!(abs)
-      _ -> Mix.shell().info("  (no dereferenced copy at #{link})")
-    end
-
-    File.mkdir_p!(Path.dirname(abs))
-    File.ln_s!(target, abs)
-  end
-
+  @spec drop_headers(Mix.Release.t()) :: :ok
   defp drop_headers(release) do
     release.path
     |> Path.join("lib/bundlex-*/priv/shared/precompiled/*/include")
@@ -106,37 +61,8 @@ defmodule StreamDoctor.Rel.Symlinks do
     |> Enum.each(&File.rm_rf!/1)
   end
 
-  # Byte-identical regular files within one bundle lib dir -> keep the longest
-  # name (the fully versioned one), link the others to it. Returns manifest
-  # entries. Runs after link restoration, so on macOS this usually finds
-  # nothing; on Linux it collapses the alias copies the bundle ships as files.
-  defp dedupe_bundles(release) do
-    release.path
-    |> Path.join("lib/bundlex-*/priv/shared/precompiled/*/lib")
-    |> Path.wildcard()
-    |> Enum.flat_map(fn lib_dir ->
-      lib_dir
-      |> File.ls!()
-      |> Enum.map(&Path.join(lib_dir, &1))
-      |> Enum.filter(&(File.lstat!(&1).type == :regular))
-      |> Enum.group_by(fn f -> {File.stat!(f).size, :crypto.hash(:sha, File.read!(f))} end)
-      |> Map.values()
-      |> Enum.filter(&(length(&1) > 1))
-      |> Enum.flat_map(fn files ->
-        [keep | drop] = Enum.sort_by(files, &String.length(Path.basename(&1)), :desc)
-
-        Enum.map(drop, fn file ->
-          File.rm!(file)
-          File.ln_s!(Path.basename(keep), file)
-          {Path.relative_to(file, release.path), Path.basename(keep)}
-        end)
-      end)
-    end)
-  end
-
-  # ---- discovery ----------------------------------------------------------------
-
   # Walk the build-tree priv of `app`; return [{release_link_path, relative_target}].
+  @spec app_links(Application.app(), keyword(), Mix.Release.t()) :: manifest_t()
   defp app_links(app, props, release) do
     build_priv = build_priv(app)
 
@@ -146,21 +72,17 @@ defmodule StreamDoctor.Rel.Symlinks do
       |> Enum.flat_map(fn link ->
         raw = File.read_link!(link)
         rel_inside = Path.relative_to(link, build_priv)
-        link_dir = Path.dirname(link)
 
-        # bundlex links (../../../../bundlex/priv/...) are relative to the
-        # _build layout, not to the deps/ realpath; try lexical first.
-        candidates = [Path.expand(raw, link_dir), Path.expand(raw, realpath(link_dir))]
-
-        case Enum.find_value(candidates, &locate(&1, release)) do
+        # bundlex writes its links relative to the _build layout
+        # (../../../../bundlex/priv/...), so lexical expansion is enough.
+        case locate(Path.expand(raw, Path.dirname(link)), release) do
           {tapp, tvsn, target_inside} ->
             link_rel = release_priv(app, props[:vsn], rel_inside)
             target_rel = release_priv(tapp, tvsn, target_inside)
-            [{link_rel, relative_path(Path.dirname(link_rel), target_rel)}]
+            [{link_rel, Path.relative_to(target_rel, Path.dirname(link_rel), force: true)}]
 
           nil ->
-            Mix.shell().info("  skipping #{app}: priv/#{rel_inside} -> #{raw} (points outside any app's priv)")
-            []
+            Mix.raise("#{app}: priv/#{rel_inside} -> #{raw} points outside every app's priv")
         end
       end)
     else
@@ -168,14 +90,14 @@ defmodule StreamDoctor.Rel.Symlinks do
     end
   end
 
-  # Symlinks under dir, recursively; does not descend into symlinked dirs.
+  @spec find_symlinks(Path.t()) :: [Path.t()]
   defp find_symlinks(dir) do
     dir
     |> File.ls!()
-    |> Enum.sort()
     |> Enum.flat_map(fn name ->
       path = Path.join(dir, name)
 
+      # don't follow directory symlinks
       case File.lstat!(path).type do
         :symlink -> [path]
         :directory -> find_symlinks(path)
@@ -184,74 +106,37 @@ defmodule StreamDoctor.Rel.Symlinks do
     end)
   end
 
-  # Absolute path -> {app, vsn, path_inside_priv}, matching against every app's
-  # build-tree priv both as written and fully resolved.
+  # Absolute build-tree path -> {app, vsn, path_inside_priv}.
+  @spec locate(Path.t(), Mix.Release.t()) :: located() | nil
   defp locate(abs, release) do
     Enum.find_value(release.applications, fn {app, props} ->
       priv = build_priv(app)
 
-      if File.dir?(priv) do
-        real_priv = realpath(priv)
-
-        Enum.find_value([{priv, abs}, {real_priv, abs}, {real_priv, realpath_dirname(abs)}], fn {base, path} ->
-          if path == base or String.starts_with?(path, base <> "/") do
-            {app, props[:vsn], Path.relative_to(path, base)}
-          end
-        end)
+      if String.starts_with?(abs, priv <> "/") do
+        {app, props[:vsn], Path.relative_to(abs, priv)}
       end
     end)
   end
 
+  @spec build_priv(Application.app()) :: Path.t()
   defp build_priv(app), do: Path.join([Mix.Project.build_path(), "lib", to_string(app), "priv"])
 
-  defp release_priv(app, vsn, ""), do: Path.join(["lib", "#{app}-#{vsn}", "priv"])
+  @spec release_priv(Application.app(), vsn(), Path.t()) :: Path.t()
   defp release_priv(app, vsn, inside), do: Path.join(["lib", "#{app}-#{vsn}", "priv", inside])
 
-  # ---- path helpers ---------------------------------------------------------------
+  @spec to_zon(manifest_t()) :: String.t()
+  defp to_zon(entries),
+    do: """
+    .{
+    #{Enum.map_join(entries, ",\n", fn {link, target} -> "    .{ #{zon_string(link)}, #{zon_string(target)} }" end)},
+    }
+    """
 
-  defp realpath(path) do
-    ["/" | parts] = path |> Path.expand() |> Path.split()
-    do_realpath(parts, "/")
+  # ZON strings use Zig escapes; paths are bytes, so only the two delimiters
+  # need escaping (control characters would need \xNN and do not occur).
+  @spec zon_string(String.t()) :: String.t()
+  defp zon_string(s) do
+    escaped = s |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
+    "\"#{escaped}\""
   end
-
-  defp do_realpath([], acc), do: acc
-
-  defp do_realpath([part | rest], acc) do
-    candidate = Path.join(acc, part)
-
-    case File.read_link(candidate) do
-      {:ok, target} -> do_realpath(rest, realpath(Path.expand(target, acc)))
-      {:error, _} -> do_realpath(rest, candidate)
-    end
-  end
-
-  # Canonicalise the directory only; keep the final component as written so
-  # alias chains (libx.dylib -> libx.1.dylib -> ...) survive.
-  defp realpath_dirname(abs), do: Path.join(realpath(Path.dirname(abs)), Path.basename(abs))
-
-  defp relative_path(from, to) do
-    {f, t} = drop_common(Path.split(from), Path.split(to))
-    Path.join(List.duplicate("..", length(f)) ++ t)
-  end
-
-  defp drop_common([h | f], [h | t]), do: drop_common(f, t)
-  defp drop_common(f, t), do: {f, t}
-
-  # Bytes of regular files under dir, without following symlinks.
-  defp dir_size(dir) do
-    dir
-    |> File.ls!()
-    |> Enum.map(fn name ->
-      path = Path.join(dir, name)
-
-      case File.lstat!(path) do
-        %{type: :regular, size: size} -> size
-        %{type: :directory} -> dir_size(path)
-        _ -> 0
-      end
-    end)
-    |> Enum.sum()
-  end
-
-  defp mb(bytes), do: "#{div(bytes, 1_000_000)} MB"
 end
