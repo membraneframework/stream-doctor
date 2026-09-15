@@ -43,7 +43,7 @@ defmodule StreamDoctor.Metric.AvDrift do
 
     frame_duration =
       if frame_number > first_frame_number and pts > first_pts,
-        do: (pts - first_pts) / (frame_number - first_frame_number),
+        do: div(pts - first_pts, frame_number - first_frame_number),
         else: state.frame_duration
 
     video_offset = frame_duration && pts - frame_number * frame_duration
@@ -87,7 +87,7 @@ defmodule StreamDoctor.Metric.AvDrift do
   def report(state) do
     %{
       drift_ms: state.samples |> median() |> to_ms(),
-      frame_duration_ms: state.frame_duration && Float.round(state.frame_duration / 1_000_000, 2),
+      frame_duration_ms: to_ms(state.frame_duration),
       latest_samples: state.samples |> Enum.take(10) |> Enum.map(&to_ms/1)
     }
   end
