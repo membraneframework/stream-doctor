@@ -35,7 +35,7 @@ defmodule StreamDoctor.MixProject do
         burrito: [
           targets: burrito_targets(),
           # recreates the symlinks rel/symlinks.exs recorded, on every launch
-          plugin: "rel/burrito_plugin/plugin.zig"
+          plugin: "rel/burrito_plugin/symlinks.zig"
         ]
       ]
     ]
@@ -104,7 +104,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_mp4_plugin, "~> 0.36"},
       {:membrane_http_adaptive_stream_plugin, "~> 0.21.3"},
       {:membrane_aac_fdk_plugin, "~> 0.19.0", override: true},
-      {:ex_m3u8, "~> 0.15"},
+      {:req, "~> 0.5"},
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.5"},
       {:membrane_realtimer_plugin, "~> 0.11.1"},
@@ -113,6 +113,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_raw_video_format, "~> 0.4"},
       {:membrane_raw_audio_format, "~> 0.12"},
       {:membrane_transcoder_plugin, "~> 0.3"},
+      {:membrane_ffmpeg_swresample_plugin, "~> 0.20"},
       {:membrane_aac_format, "~> 0.8"},
       {:burrito, "~> 1.6", runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},

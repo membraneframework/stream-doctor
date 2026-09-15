@@ -1,18 +1,27 @@
 defmodule StreamDoctor.Collector do
-  @moduledoc "One per viewer; holds `StreamDoctor.Metric`s, folds events in, answers reports."
+  @moduledoc """
+  One collector per viewer. Holds `StreamDoctor.Metric`s, folds events into them and answers
+  reports.
+  """
 
   use GenServer
 
   alias StreamDoctor.Metric
 
   @spec start_link([{module(), keyword()}]) :: GenServer.on_start()
-  def start_link(metric_specs), do: GenServer.start_link(__MODULE__, metric_specs)
+  def start_link(metric_specs) do
+    GenServer.start_link(__MODULE__, metric_specs)
+  end
 
   @spec event(pid(), Metric.event()) :: :ok
-  def event(collector, event), do: GenServer.cast(collector, {:event, event})
+  def event(collector, event) do
+    GenServer.cast(collector, {:event, event})
+  end
 
   @spec report(pid()) :: map()
-  def report(collector), do: GenServer.call(collector, :report)
+  def report(collector) do
+    GenServer.call(collector, :report)
+  end
 
   @impl true
   def init(metric_specs) do
