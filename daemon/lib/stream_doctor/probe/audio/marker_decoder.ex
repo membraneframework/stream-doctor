@@ -81,7 +81,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     symbol_bytes = Tone.symbol_length(state.format.sample_rate) * 8
 
     cond do
-      not state.synced? and byte_size(state.buffer) >= Tone.scan_symbols() * symbol_bytes ->
+      not state.synced? and
+          byte_size(state.buffer) >= Tone.alignment_buffer_symbols() * symbol_bytes ->
         state |> synchronize(symbol_bytes) |> process()
 
       state.synced? and byte_size(state.buffer) >= symbol_bytes ->

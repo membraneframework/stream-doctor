@@ -73,13 +73,13 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     end
   end
 
-  @doc "Symbols a buffer must hold for `find_alignment/2` to run."
-  @spec scan_symbols() :: pos_integer()
-  def scan_symbols do
+  @doc "Symbols a buffer must hold for `find_alignment/2`. One more than are scored, since the offset sweep reaches into the next symbol."
+  @spec alignment_buffer_symbols() :: pos_integer()
+  def alignment_buffer_symbols do
     @scan_symbols + 1
   end
 
-  @doc "Sample offset of the symbol boundary in a buffer of `scan_symbols/0` symbols, if any."
+  @doc "Sample offset of the symbol boundary in a buffer of `alignment_buffer_symbols/0` symbols, if any."
   @spec find_alignment(binary(), pos_integer()) :: {:ok, non_neg_integer()} | :error
   def find_alignment(buffer, sample_rate) do
     symbol_length = symbol_length(sample_rate)
