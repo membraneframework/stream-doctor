@@ -1,4 +1,4 @@
-import * as stream_doc from "../sdks/ts/src/stream_doctor.ts";
+import * as stream_doc from "stream-doctor";
 
 const file = process.argv[2] ?? "test.mp4";
 
