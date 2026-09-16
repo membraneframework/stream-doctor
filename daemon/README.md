@@ -13,8 +13,8 @@ mix run --no-halt
 ```
 
 This starts the daemon on port 4040 (`PORT` to change it). Connect with
-`session({ server: "http://localhost:4040" })` from the TypeScript SDK, or set
-`STREAM_DOCTOR_SERVER`, so no binary is needed for development.
+`session({ daemonUrl: "http://localhost:4040" })` from the TypeScript SDK,
+so no binary is needed for development.
 
 ## Standalone binary
 
@@ -22,7 +22,7 @@ This starts the daemon on port 4040 (`PORT` to change it). Connect with
 into a single executable for the current machine, the same one the npm
 packages ship. Point the check at it with `session({ binary: ... })`, or start
 it by hand with `PORT=4040 burrito_out/stream_doctor_<target>` and connect with
-`session({ server: "http://localhost:4040" })`, where the target is
+`session({ daemonUrl: "http://localhost:4040" })`, where the target is
 `macos_arm`, `linux_arm` or `linux_x86` (see `mix.exs`).
 
 It needs Elixir and Zig 0.16.0 on the PATH. Two release steps keep the binary small:

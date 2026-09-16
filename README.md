@@ -55,7 +55,7 @@ on `@stream-doctor/<platform>`. Nothing else is needed.
 On other platforms, or to run the latest code, start the daemon from the Mix
 project in [`daemon/`](daemon/). This needs Elixir 1.19+, see
 [Running from source](daemon/README.md#running-from-source), then connect
-with `session({ server: "http://localhost:4040" })`.
+with `session({ daemonUrl: "http://localhost:4040" })`.
 
 ### Building the daemon binary
 
@@ -101,8 +101,8 @@ catch.
 
 `session()` spawns the daemon bundled with the npm package on a free port,
 `session({ port })` picks the port and `session({ binary })` the executable.
-To use a daemon you started yourself, pass `session({ server: "http://..." })`
-or set `STREAM_DOCTOR_SERVER`, then nothing is spawned.
+To use a daemon you started yourself, pass `session({ daemonUrl: "http://..." })`,
+then nothing is spawned.
 
 ## HTTP API
 

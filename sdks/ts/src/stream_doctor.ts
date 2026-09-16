@@ -51,39 +51,39 @@ export interface ViewerStatus {
 }
 
 /** State of the whole daemon. */
-export interface ServerStatus {
+export interface DaemonStatus {
   streamer: StreamerStatus | null;
   viewers: ViewerStatus[];
 }
 
-/** Spawns a daemon from `binary` (the bundled one by default) on `port` (a free one by default), or connects to a running one when `server` (or `STREAM_DOCTOR_SERVER`) is set. */
+/** Spawns a daemon from `binary` (the bundled one by default) on `port` (a free one by default), or connects to a running one when `daemonUrl` is set. */
 export async function session({
-  server = process.env.STREAM_DOCTOR_SERVER,
+  daemonUrl,
   binary,
   port,
-}: { server?: string; binary?: string; port?: number } = {}): Promise<Session> {
-  if (server) {
+}: { daemonUrl?: string; binary?: string; port?: number } = {}): Promise<Session> {
+  if (daemonUrl) {
     if (binary !== undefined || port !== undefined) {
       throw new Error(
-        "`server` connects to a running daemon, it cannot be combined with `binary` or `port`"
+        "`daemonUrl` connects to a running daemon, it cannot be combined with `binary` or `port`"
       );
     }
-    await api("GET", "/status", null, server);
-    return new Session(server, null);
+    await api("GET", "/status", null, daemonUrl);
+    return new Session(daemonUrl, null);
   }
   let installDir: string | undefined;
   if (!binary) {
     binary = bundledBinary() ?? undefined;
     if (!binary) {
       throw new Error(
-        `no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\` or a running daemon with \`server\``
+        `no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\` or a running daemon with \`daemonUrl\``
       );
     }
     installDir = path.join(path.dirname(binary), "..", ".burrito");
   }
   port ??= await freePort();
   const url = `http://localhost:${port}`;
-  const child = await spawnServer(binary, url, port, installDir);
+  const child = await spawnDaemon(binary, url, port, installDir);
   return new Session(url, child, LOG_FILE);
 }
 
@@ -100,12 +100,12 @@ export function bundledBinary(): string | null {
 
 /** A connection to the daemon, grouping one publisher and any number of viewers. */
 class Session {
-  server: string;
+  daemonUrl: string;
   child: ChildProcess | null;
   logFile: string | null;
 
-  constructor(server: string, child: ChildProcess | null, logFile: string | null = null) {
-    this.server = server;
+  constructor(daemonUrl: string, child: ChildProcess | null, logFile: string | null = null) {
+    this.daemonUrl = daemonUrl;
     this.child = child;
     this.logFile = logFile;
   }
@@ -116,20 +116,20 @@ class Session {
       "POST",
       "/streamer",
       { input: file, rtmp_url: rtmpUrl },
-      this.server
+      this.daemonUrl
     );
-    return new Streamer(this.server, ready);
+    return new Streamer(this.daemonUrl, ready);
   }
 
   /** Starts a viewer collecting metrics from the HLS playlist at `hlsUrl`. */
   async watch(hlsUrl: string): Promise<Viewer> {
-    const { id } = await api<ViewerStatus>("POST", "/viewers", { hls_url: hlsUrl }, this.server);
-    return new Viewer(this.server, id);
+    const { id } = await api<ViewerStatus>("POST", "/viewers", { hls_url: hlsUrl }, this.daemonUrl);
+    return new Viewer(this.daemonUrl, id);
   }
 
   /** Current state of the daemon. */
-  status(): Promise<ServerStatus> {
-    return api("GET", "/status", null, this.server);
+  status(): Promise<DaemonStatus> {
+    return api("GET", "/status", null, this.daemonUrl);
   }
 
   /** Stops the daemon if this session spawned it. */
@@ -147,18 +147,18 @@ class Session {
 
 /** The publisher of a session. */
 class Streamer {
-  server: string;
+  daemonUrl: string;
   ready: Promise<StreamerStatus>;
 
-  constructor(server: string, ready: Promise<StreamerStatus>) {
-    this.server = server;
+  constructor(daemonUrl: string, ready: Promise<StreamerStatus>) {
+    this.daemonUrl = daemonUrl;
     this.ready = ready;
     ready.catch(() => {});
   }
 
   /** Current state of the publisher. */
   status(): Promise<StreamerStatus> {
-    return this.ready.then(() => api("GET", "/streamer", null, this.server));
+    return this.ready.then(() => api("GET", "/streamer", null, this.daemonUrl));
   }
 
   /** Resolves once the stream is live, rejects if it ends or fails first. */
@@ -169,7 +169,7 @@ class Streamer {
     await this.ready;
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      const streamer = await api<StreamerStatus>("GET", "/streamer", null, this.server);
+      const streamer = await api<StreamerStatus>("GET", "/streamer", null, this.daemonUrl);
       if (streamer.live) return streamer;
       if (TERMINAL_STATUSES.includes(streamer.status)) {
         throw new Error(
@@ -184,23 +184,23 @@ class Streamer {
   /** Stops publishing. */
   async stop(): Promise<StreamerStatus> {
     await this.ready;
-    return api("DELETE", "/streamer", null, this.server);
+    return api("DELETE", "/streamer", null, this.daemonUrl);
   }
 }
 
 /** A viewer of a session. */
 class Viewer {
-  server: string;
+  daemonUrl: string;
   id: string;
 
-  constructor(server: string, id: string) {
-    this.server = server;
+  constructor(daemonUrl: string, id: string) {
+    this.daemonUrl = daemonUrl;
     this.id = id;
   }
 
   /** Current state of the viewer. */
   status(): Promise<ViewerStatus> {
-    return api("GET", `/viewers/${this.id}`, null, this.server);
+    return api("GET", `/viewers/${this.id}`, null, this.daemonUrl);
   }
 
   /** Metrics collected so far. */
@@ -227,16 +227,21 @@ class Viewer {
 
   /** Stops the viewer and returns its final metrics. */
   async stop(): Promise<Metrics> {
-    const { metrics } = await api<ViewerStatus>("DELETE", `/viewers/${this.id}`, null, this.server);
+    const { metrics } = await api<ViewerStatus>(
+      "DELETE",
+      `/viewers/${this.id}`,
+      null,
+      this.daemonUrl
+    );
     return metrics;
   }
 }
 
 export type { Session, Streamer, Viewer };
 
-async function spawnServer(
+async function spawnDaemon(
   binary: string,
-  server: string,
+  daemonUrl: string,
   port: number,
   installDir?: string
 ): Promise<ChildProcess> {
@@ -254,33 +259,33 @@ async function spawnServer(
   child.on("exit", () => fs.closeSync(log));
   for (const deadline = Date.now() + 120_000; Date.now() < deadline;) {
     if (child.exitCode !== null) {
-      throw new Error(`server exited with ${child.exitCode}, see ${LOG_FILE}`);
+      throw new Error(`daemon exited with ${child.exitCode}, see ${LOG_FILE}`);
     }
     await sleep(1000);
     try {
-      await api("GET", "/status", null, server);
+      await api("GET", "/status", null, daemonUrl);
       return child;
     } catch {}
   }
-  throw new Error(`server didn't come up in 2 minutes, see ${LOG_FILE}`);
+  throw new Error(`daemon didn't come up in 2 minutes, see ${LOG_FILE}`);
 }
 
 async function api<T>(
   method: string,
   path: string,
   body: object | null,
-  server: string
+  daemonUrl: string
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(server + path, {
+    res = await fetch(daemonUrl + path, {
       method,
       headers: body ? { "content-type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (e) {
     throw new Error(
-      `${method} ${path}: cannot reach ${server} (is the server running?): ${(e as Error).message}`
+      `${method} ${path}: cannot reach ${daemonUrl} (is the daemon running?): ${(e as Error).message}`
     );
   }
   const text = await res.text();
