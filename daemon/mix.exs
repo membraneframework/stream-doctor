@@ -4,7 +4,7 @@ defmodule StreamDoctor.MixProject do
   def project do
     [
       app: :stream_doctor,
-      version: "0.1.1",
+      version: "0.0.6",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
