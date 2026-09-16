@@ -1,7 +1,20 @@
-# StreamDoctor daemon
+# stream-doctor daemon
 
 The Mix project behind the `stream-doctor` binary. See the
 [root README](../README.md) for what it does and how to use it.
+
+## Running from source
+
+Needs Elixir 1.19+ and ffmpeg on the PATH.
+
+```sh
+mix deps.get
+mix run --no-halt
+```
+
+This starts the daemon on port 4040 (`PORT` to change it). `session()` from
+the TypeScript SDK connects to it when something already listens there, so no
+binary is needed for development.
 
 ## Standalone binary
 

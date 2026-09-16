@@ -32,13 +32,38 @@ The project consists of:
   [README](daemon/README.md) for building it from source,
 * the SDKs in [`sdks/`](sdks/), currently only [TypeScript](sdks/ts/).
 
-## Getting started
+## Installation
 
-Requires ffmpeg, python3, Node 20+ and macOS (Apple Silicon) or Linux.
+Requires Node 20+.
 
 ```sh
-npm install stream-doctor  # brings the daemon binary for this platform
+npm install stream-doctor
 ```
+
+This installs the TypeScript SDK. The SDK talks to the daemon, which does the
+actual streaming and measuring, so you also need to make sure it is available.
+There are three ways to do that.
+
+### Precompiled daemon
+
+On macOS (Apple Silicon), Linux (x86_64) and Linux (arm64) the daemon binary
+is downloaded automatically along with the package, as an optional dependency
+on `@stream-doctor/<platform>`. Nothing else is needed.
+
+### Running the daemon from source
+
+On other platforms, or to run the latest code, start the daemon from the Mix
+project in [`daemon/`](daemon/). This needs Elixir 1.19+, see
+[Running from source](daemon/README.md#running-from-source). `session()`
+connects to the running daemon instead of spawning one.
+
+### Building the daemon binary
+
+To get a standalone executable like the precompiled ones, see
+[Standalone binary](daemon/README.md#standalone-binary) and pass it with
+`session({ binary })`.
+
+## Getting started
 
 Tests are written the same way you already write browser tests. A session
 groups a publisher and any number of viewers, the publisher streams marked
@@ -63,7 +88,8 @@ The stream carries markers in both audio and video that identify each moment
 of the source. Because a viewer can recover the original position from what
 it receives, it can measure exactly what the pipeline did to the stream.
 
-To try it against a local pipeline, start one of the examples:
+To try it against a local pipeline, start one of the examples (they need
+ffmpeg and python3):
 
 ```sh
 examples/working_infra.sh # a local RTMP -> HLS pipeline to measure against
