@@ -7,7 +7,7 @@ defmodule StreamDoctor.Application do
 
   @impl true
   def start(_type, _args) do
-    Logger.info("Running StreamDoctor v#{Application.spec(:stream_doctor, :vsn)}")
+    Logger.info("Running stream-doctor v#{Application.spec(:stream_doctor, :vsn)}")
     port = Application.fetch_env!(:stream_doctor, :port)
 
     children =
