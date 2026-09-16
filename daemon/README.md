@@ -8,8 +8,9 @@ The Mix project behind the `stream-doctor` binary. See the
 `mix release` wraps the app with [Burrito](https://github.com/burrito-elixir/burrito)
 into a single executable for the current machine, the same one the npm
 packages ship. Point the check at it with `session({ binary: ... })`, or start
-it by hand with `PORT=4040 burrito_out/stream_doctor_<target>`, where the
-target is `macos_arm`, `linux_arm` or `linux_x86` (see `mix.exs`).
+it by hand with `PORT=4040 burrito_out/stream_doctor_<target>` and connect with
+`session({ server: "http://localhost:4040" })`, where the target is
+`macos_arm`, `linux_arm` or `linux_x86` (see `mix.exs`).
 
 It needs Elixir and Zig 0.16.0 on the PATH. Two release steps keep the binary small:
 `rel/symlinks.exs` restores the symlinks through which every Membrane plugin

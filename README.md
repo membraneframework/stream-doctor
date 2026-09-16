@@ -36,7 +36,7 @@ playback URL your product exposes:
 ```ts
 import * as stream_doc from "stream-doctor";
 
-const session = await stream_doc.session(); // spawns the bundled binary if nothing listens
+const session = await stream_doc.session(); // spawns the bundled daemon on a free port
 const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
 await streamer.waitUntilLive();
 
@@ -63,6 +63,11 @@ examples/working_infra.sh # a local RTMP -> HLS pipeline to measure against
 Then run a script like the one above against it. `examples/buggy_infra.sh` is
 the same pipeline with the audio delayed by 500 ms, which the check should
 catch.
+
+`session()` spawns the daemon bundled with the npm package on a free port,
+`session({ port })` picks the port and `session({ binary })` the executable.
+To use a daemon you started yourself, pass `session({ server: "http://..." })`
+or set `STREAM_DOCTOR_SERVER`, then nothing is spawned.
 
 The daemon (a Mix project) lives in `daemon/`, see its
 [README](daemon/README.md) for building it from source. The SDKs live in

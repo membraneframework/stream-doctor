@@ -1,10 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import net, { type AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-
-const DEFAULT_SERVER = "http://localhost:4040";
 
 const LOG_FILE = path.join(os.tmpdir(), "stream_doctor.log");
 
@@ -52,26 +51,33 @@ export interface ServerStatus {
 }
 
 export async function session({
-  server = DEFAULT_SERVER,
+  server = process.env.STREAM_DOCTOR_SERVER,
   binary,
-}: { server?: string; binary?: string } = {}): Promise<Session> {
-  try {
+  port,
+}: { server?: string; binary?: string; port?: number } = {}): Promise<Session> {
+  if (server) {
+    if (binary !== undefined || port !== undefined) {
+      throw new Error(
+        "`server` connects to a running daemon, it cannot be combined with `binary` or `port`"
+      );
+    }
     await api("GET", "/status", null, server);
     return new Session(server, null);
-  } catch (e) {
-    let installDir: string | undefined;
-    if (!binary) {
-      binary = bundledBinary() ?? undefined;
-      if (!binary) {
-        throw new Error(
-          `${(e as Error).message}; no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\``
-        );
-      }
-      installDir = path.join(path.dirname(binary), "..", ".burrito");
-    }
-    const child = await spawnServer(binary, server, installDir);
-    return new Session(server, child, LOG_FILE);
   }
+  let installDir: string | undefined;
+  if (!binary) {
+    binary = bundledBinary() ?? undefined;
+    if (!binary) {
+      throw new Error(
+        `no stream_doctor binary bundled for ${process.platform}-${process.arch}, pass one with \`binary\` or a running daemon with \`server\``
+      );
+    }
+    installDir = path.join(path.dirname(binary), "..", ".burrito");
+  }
+  port ??= await freePort();
+  const url = `http://localhost:${port}`;
+  const child = await spawnServer(binary, url, port, installDir);
+  return new Session(url, child, LOG_FILE);
 }
 
 export function bundledBinary(): string | null {
@@ -209,6 +215,7 @@ export type { Session, Streamer, Viewer };
 async function spawnServer(
   binary: string,
   server: string,
+  port: number,
   installDir?: string
 ): Promise<ChildProcess> {
   if (!fs.existsSync(binary)) {
@@ -217,6 +224,7 @@ async function spawnServer(
   const env = {
     ...process.env,
     STREAM_DOCTOR_EXIT_ON_STDIN_EOF: "1",
+    PORT: String(port),
     ...(installDir ? { STREAM_DOCTOR_INSTALL_DIR: installDir } : {}),
   };
   const log = fs.openSync(LOG_FILE, "a");
@@ -256,6 +264,17 @@ async function api<T>(
   const text = await res.text();
   if (!res.ok) throw new Error(`${method} ${path}: HTTP ${res.status}: ${text}`);
   return JSON.parse(text);
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(0, () => {
+      const { port } = probe.address() as AddressInfo;
+      probe.close(() => resolve(port));
+    });
+  });
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
