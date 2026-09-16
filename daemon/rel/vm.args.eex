@@ -1,0 +1,5 @@
+## burrito starts the release through the elixir CLI without --no-halt (so it
+## would halt right after boot) and mangles its -mode flag (so code would load
+## lazily from disk); fix both here
+-mode embedded
+-extra --no-halt --

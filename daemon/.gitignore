@@ -6,5 +6,6 @@
 erl_crash.dump
 *.ez
 stream_doctor-*.tar
-/.expert/
 /burrito_out/
+/.expert/
+/rel/burrito_plugin/symlinks.zon
