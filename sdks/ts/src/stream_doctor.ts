@@ -56,7 +56,7 @@ export interface ServerStatus {
   viewers: ViewerStatus[];
 }
 
-/** Connects to a running daemon at `server`, or spawns one from `binary` (the bundled one by default). */
+/** Spawns a daemon from `binary` (the bundled one by default) on `port` (a free one by default), or connects to a running one when `server` (or `STREAM_DOCTOR_SERVER`) is set. */
 export async function session({
   server = process.env.STREAM_DOCTOR_SERVER,
   binary,

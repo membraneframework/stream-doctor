@@ -12,9 +12,9 @@ mix deps.get
 mix run --no-halt
 ```
 
-This starts the daemon on port 4040 (`PORT` to change it). `session()` from
-the TypeScript SDK connects to it when something already listens there, so no
-binary is needed for development.
+This starts the daemon on port 4040 (`PORT` to change it). Connect with
+`session({ server: "http://localhost:4040" })` from the TypeScript SDK, or set
+`STREAM_DOCTOR_SERVER`, so no binary is needed for development.
 
 ## Standalone binary
 

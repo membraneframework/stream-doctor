@@ -54,8 +54,8 @@ on `@stream-doctor/<platform>`. Nothing else is needed.
 
 On other platforms, or to run the latest code, start the daemon from the Mix
 project in [`daemon/`](daemon/). This needs Elixir 1.19+, see
-[Running from source](daemon/README.md#running-from-source). `session()`
-connects to the running daemon instead of spawning one.
+[Running from source](daemon/README.md#running-from-source), then connect
+with `session({ server: "http://localhost:4040" })`.
 
 ### Building the daemon binary
 
