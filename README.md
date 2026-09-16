@@ -95,9 +95,10 @@ ffmpeg and python3):
 examples/working_infra.sh # a local RTMP -> HLS pipeline to measure against
 ```
 
-Then run a script like the one above against it. `examples/buggy_infra.sh` is
-the same pipeline with the audio delayed by 500 ms, which the check should
-catch.
+Then run a script like the one above against it, for example
+[`examples/av_drift.ts`](examples/av_drift.ts) with `node examples/av_drift.ts`.
+`examples/buggy_infra.sh` is the same pipeline with the audio delayed by
+500 ms, which the check should catch.
 
 `session()` spawns the daemon bundled with the npm package on a free port,
 `session({ port })` picks the port and `session({ binary })` the executable.
