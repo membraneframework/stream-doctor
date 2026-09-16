@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # the membraneframework/membrane_actions reusable workflows assume the mix
+  # project at the repository root, so their steps are inlined here
+  daemon:
+    runs-on: ubuntu-latest
+    container:
+      image: membraneframeworklabs/docker_membrane:latest
+      env:
+        ASDF_DATA_DIR: /root/.asdf
+    defaults:
+      run:
+        working-directory: daemon
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp /root/.tool-versions .
+      - uses: actions/cache@v4
+        with:
+          path: |
+            daemon/deps
+            daemon/_build
+          key: daemon-${{ hashFiles('daemon/mix.lock') }}
+          restore-keys: daemon-
+      - run: mix deps.get
+      - run: mix compile --force --warnings-as-errors
+      - run: mix format --check-formatted
+      - run: mix test --warnings-as-errors
+      - run: mix credo
+        env:
+          MIX_ENV: dev
+      - run: mix dialyzer
+        env:
+          MIX_ENV: dev
