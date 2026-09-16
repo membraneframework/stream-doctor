@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/membraneframework-labs/stream_doctor.git"
+    "url": "git+https://github.com/membraneframework/stream-doctor.git"
   },
   "os": [
     "linux"

@@ -15,9 +15,11 @@ const PLATFORM_PACKAGES: Record<string, string> = {
 
 const TERMINAL_STATUSES: Status[] = ["ended", "failed", "stopped"];
 
+/** Lifecycle state of a streamer or viewer. */
 export type Status =
   "streaming" | "receiving" | "waiting_for_playlist" | "ended" | "failed" | "stopped";
 
+/** State of the publisher, as reported by the daemon. */
 export interface StreamerStatus {
   input: string;
   rtmp_url: string;
@@ -26,17 +28,20 @@ export interface StreamerStatus {
   live: boolean;
 }
 
+/** Audio/video drift measured by a viewer, in milliseconds. */
 export interface AvDrift {
   drift_ms: number | null;
   frame_duration_ms: number | null;
   latest_samples: number[];
 }
 
+/** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
   error?: string;
 }
 
+/** State of a viewer, as reported by the daemon. */
 export interface ViewerStatus {
   id: string;
   hls_url: string;
@@ -45,11 +50,13 @@ export interface ViewerStatus {
   metrics: Metrics;
 }
 
+/** State of the whole daemon. */
 export interface ServerStatus {
   streamer: StreamerStatus | null;
   viewers: ViewerStatus[];
 }
 
+/** Connects to a running daemon at `server`, or spawns one from `binary` (the bundled one by default). */
 export async function session({
   server = process.env.STREAM_DOCTOR_SERVER,
   binary,
@@ -80,6 +87,7 @@ export async function session({
   return new Session(url, child, LOG_FILE);
 }
 
+/** Path to the daemon binary bundled for this platform, or null if there is none. */
 export function bundledBinary(): string | null {
   const pkg = PLATFORM_PACKAGES[`${process.platform}-${process.arch}`];
   if (!pkg) return null;
@@ -90,6 +98,7 @@ export function bundledBinary(): string | null {
   }
 }
 
+/** A connection to the daemon, grouping one publisher and any number of viewers. */
 class Session {
   server: string;
   child: ChildProcess | null;
@@ -101,6 +110,7 @@ class Session {
     this.logFile = logFile;
   }
 
+  /** Starts publishing `file` to `rtmpUrl`. */
   publish(rtmpUrl: string, { file = "test.mp4" }: { file?: string } = {}): Streamer {
     const ready = api<StreamerStatus>(
       "POST",
@@ -111,15 +121,18 @@ class Session {
     return new Streamer(this.server, ready);
   }
 
+  /** Starts a viewer collecting metrics from the HLS playlist at `hlsUrl`. */
   async watch(hlsUrl: string): Promise<Viewer> {
     const { id } = await api<ViewerStatus>("POST", "/viewers", { hls_url: hlsUrl }, this.server);
     return new Viewer(this.server, id);
   }
 
+  /** Current state of the daemon. */
   status(): Promise<ServerStatus> {
     return api("GET", "/status", null, this.server);
   }
 
+  /** Stops the daemon if this session spawned it. */
   close(): Promise<void> {
     const child = this.child;
     if (!child || child.exitCode !== null || child.pid === undefined) return Promise.resolve();
@@ -132,6 +145,7 @@ class Session {
   }
 }
 
+/** The publisher of a session. */
 class Streamer {
   server: string;
   ready: Promise<StreamerStatus>;
@@ -142,10 +156,12 @@ class Streamer {
     ready.catch(() => {});
   }
 
+  /** Current state of the publisher. */
   status(): Promise<StreamerStatus> {
     return this.ready.then(() => api("GET", "/streamer", null, this.server));
   }
 
+  /** Resolves once the stream is live, rejects if it ends or fails first. */
   async waitUntilLive({
     timeoutMs = 60_000,
     intervalMs = 250,
@@ -165,12 +181,14 @@ class Streamer {
     }
   }
 
+  /** Stops publishing. */
   async stop(): Promise<StreamerStatus> {
     await this.ready;
     return api("DELETE", "/streamer", null, this.server);
   }
 }
 
+/** A viewer of a session. */
 class Viewer {
   server: string;
   id: string;
@@ -180,15 +198,18 @@ class Viewer {
     this.id = id;
   }
 
+  /** Current state of the viewer. */
   status(): Promise<ViewerStatus> {
     return api("GET", `/viewers/${this.id}`, null, this.server);
   }
 
+  /** Metrics collected so far. */
   async metrics(): Promise<Metrics> {
     const { metrics } = await this.status();
     return metrics;
   }
 
+  /** Resolves once the viewer ends, fails or is stopped, calling `onUpdate` with each polled state. */
   async waitUntilDone({
     intervalMs = 1000,
     onUpdate,
@@ -204,6 +225,7 @@ class Viewer {
     }
   }
 
+  /** Stops the viewer and returns its final metrics. */
   async stop(): Promise<Metrics> {
     const { metrics } = await api<ViewerStatus>("DELETE", `/viewers/${this.id}`, null, this.server);
     return metrics;

@@ -1,7 +1,7 @@
-# StreamDoctor
+# stream-doctor
 
 [![npm](https://img.shields.io/npm/v/stream-doctor.svg)](https://www.npmjs.com/package/stream-doctor)
-[![CI](https://github.com/membraneframework-labs/stream_doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/membraneframework-labs/stream_doctor/actions/workflows/ci.yml)
+[![CI](https://github.com/membraneframework/stream-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/membraneframework/stream-doctor/actions/workflows/ci.yml)
 
 Automated end-to-end testing for video infrastructure.
 
@@ -11,13 +11,13 @@ Automated end-to-end testing for video infrastructure.
 > The planned scope, including synthetic sources, a wider set of metrics,
 > chaos testing (packet loss, bandwidth limits, jitter), more ingest and
 > playback protocols, and SDKs for popular test runners, is described in
-> [issue #1](https://github.com/membraneframework-labs/stream_doctor/issues/1).
+> [issue #1](https://github.com/membraneframework/stream-doctor/issues/1).
 > Feedback on it is welcome.
 
 > Join the conversation in
-> [discussion #16](https://github.com/membraneframework-labs/stream_doctor/discussions/16).
+> [discussion #16](https://github.com/membraneframework/stream-doctor/discussions/16).
 
-StreamDoctor publishes a stream into your pipeline, watches what comes out the
+stream-doctor publishes a stream into your pipeline, watches what comes out the
 other end and turns the comparison into metrics you can assert on. The goal is
 that regressions in sync, latency, frame delivery or playback quality get
 caught by CI, not by someone clicking through a list of manual checks before a
@@ -26,7 +26,19 @@ release.
 Built on the [Membrane Framework](https://membrane.stream) and
 [Boombox](https://hexdocs.pm/boombox).
 
-## The idea
+The project consists of:
+
+* the daemon, a Mix project in [`daemon/`](daemon/), see its
+  [README](daemon/README.md) for building it from source,
+* the SDKs in [`sdks/`](sdks/), currently only [TypeScript](sdks/ts/).
+
+## Getting started
+
+Requires ffmpeg, python3, Node 20+ and macOS (Apple Silicon) or Linux.
+
+```sh
+npm install stream-doctor  # brings the daemon binary for this platform
+```
 
 Tests are written the same way you already write browser tests. A session
 groups a publisher and any number of viewers, the publisher streams marked
@@ -51,12 +63,9 @@ The stream carries markers in both audio and video that identify each moment
 of the source. Because a viewer can recover the original position from what
 it receives, it can measure exactly what the pipeline did to the stream.
 
-## Try it
-
-Requires ffmpeg, python3, Node 20+ and macOS (Apple Silicon) or Linux.
+To try it against a local pipeline, start one of the examples:
 
 ```sh
-npm install stream-doctor  # brings the daemon binary for this platform
 examples/working_infra.sh # a local RTMP -> HLS pipeline to measure against
 ```
 
@@ -68,10 +77,6 @@ catch.
 `session({ port })` picks the port and `session({ binary })` the executable.
 To use a daemon you started yourself, pass `session({ server: "http://..." })`
 or set `STREAM_DOCTOR_SERVER`, then nothing is spawned.
-
-The daemon (a Mix project) lives in `daemon/`, see its
-[README](daemon/README.md) for building it from source. The SDKs live in
-[`sdks/`](sdks/), currently only [TypeScript](sdks/ts/).
 
 ## HTTP API
 
