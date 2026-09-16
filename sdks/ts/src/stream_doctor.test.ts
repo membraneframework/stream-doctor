@@ -1,6 +1,9 @@
 import { test, after, before } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import http, { type IncomingMessage } from "node:http";
+import os from "node:os";
+import path from "node:path";
 import type { AddressInfo } from "node:net";
 
 import { session } from "./stream_doctor.ts";
@@ -60,27 +63,48 @@ after(() => {
   server.close();
 });
 
-test("session connects to a running server without spawning anything", async () => {
-  const s = await session({ server: url });
+test("session connects to a running daemon without spawning anything", async () => {
+  const s = await session({ daemonUrl: url });
   assert.equal(s.child, null);
   assert.deepEqual(await s.status(), { streamer: null, viewers: [] });
   await s.close();
 });
 
-test("session fails fast when nothing listens and no binary is given", async () => {
-  await assert.rejects(session({ server: "http://127.0.0.1:1" }), /cannot reach/);
+test("session fails fast when nothing listens at the given daemonUrl", async () => {
+  await assert.rejects(session({ daemonUrl: "http://127.0.0.1:1" }), /cannot reach/);
+});
+
+test("session refuses to combine daemonUrl with binary or port", async () => {
+  await assert.rejects(session({ daemonUrl: url, binary: "/x" }), /cannot be combined/);
+  await assert.rejects(session({ daemonUrl: url, port: 1 }), /cannot be combined/);
 });
 
 test("session refuses to spawn a binary that does not exist", async () => {
   await assert.rejects(
-    session({ server: "http://127.0.0.1:1", binary: "/nonexistent/stream_doctor" }),
+    session({ binary: "/nonexistent/stream_doctor" }),
     /not found, build it with/
   );
 });
 
+test("session spawns the binary on the requested port and stops it on close", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stream_doctor_test_"));
+  const fake = path.join(dir, "fake_daemon");
+  fs.writeFileSync(
+    fake,
+    `#!/bin/sh\nexec ${process.execPath} -e 'require("node:http").createServer((_, res) => res.end("{\\"streamer\\":null,\\"viewers\\":[]}")).listen(process.env.PORT)'\n`,
+    { mode: 0o755 }
+  );
+  const port = 40_000 + Math.floor(Math.random() * 10_000);
+  const s = await session({ binary: fake, port });
+  assert.equal(s.daemonUrl, `http://localhost:${port}`);
+  assert.deepEqual(await s.status(), { streamer: null, viewers: [] });
+  await s.close();
+  await assert.rejects(s.status(), /cannot reach/);
+});
+
 test("publish posts the input and waitUntilLive polls until frames flow", async () => {
   requests = [];
-  const s = await session({ server: url });
+  const s = await session({ daemonUrl: url });
   const streamer = s.publish("rtmp://host/app/key", { file: "clip.mp4" });
   const live = await streamer.waitUntilLive({ intervalMs: 1 });
   assert.equal(live.live, true);
@@ -94,14 +118,14 @@ test("publish posts the input and waitUntilLive polls until frames flow", async 
 });
 
 test("waitUntilLive reports a streamer that failed before going live", async () => {
-  const s = await session({ server: url });
+  const s = await session({ daemonUrl: url });
   routes["GET /streamer"] = () => ({ status: "failed", live: false, error: "boom" });
   const streamer = s.publish("rtmp://host/app/key");
   await assert.rejects(streamer.waitUntilLive({ intervalMs: 1 }), /streamer failed.*: boom/);
 });
 
 test("watch creates a viewer whose metrics and stop go through the API", async () => {
-  const s = await session({ server: url });
+  const s = await session({ daemonUrl: url });
   const viewer = await s.watch("http://cdn/index.m3u8");
   assert.equal(viewer.id, "v1");
   assert.deepEqual(await viewer.metrics(), { av_drift: { drift_ms: 12 } } as object);

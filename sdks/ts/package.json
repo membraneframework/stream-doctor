@@ -1,11 +1,11 @@
 {
   "name": "stream-doctor",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "Automated end-to-end testing for video infrastructure (early proof of concept)",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/membraneframework-labs/stream_doctor.git"
+    "url": "git+https://github.com/membraneframework/stream-doctor.git"
   },
   "type": "module",
   "exports": "./dist/stream_doctor.js",

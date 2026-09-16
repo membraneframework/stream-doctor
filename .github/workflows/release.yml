@@ -151,7 +151,7 @@ jobs:
             if npm view "@stream-doctor/$platform@$version" version >/dev/null 2>&1; then
               echo "@stream-doctor/$platform@$version is already published, skipping"
             else
-              (cd "$dir" && npm pkg set version="$version" && npm publish --access public)
+              (cd "$dir" && npm pkg set version="$version" && npm publish --provenance --access public)
             fi
             npm pkg set "optionalDependencies.@stream-doctor/$platform=$version"
           done
@@ -162,5 +162,5 @@ jobs:
           if npm view "stream-doctor@$version" version >/dev/null 2>&1; then
             echo "stream-doctor@$version is already published, skipping"
           else
-            npm publish --access public
+            npm publish --provenance --access public
           fi
