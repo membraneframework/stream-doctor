@@ -15,7 +15,7 @@ console.log("Stream is live.");
 console.log(`Watching ${hlsUrl}...`);
 const viewer = await session.watch(hlsUrl);
 
-let drift: number | null = null;
+let drift = null;
 for (let i = 0; i < 40; i++) {
   await new Promise((resolve) => setTimeout(resolve, 1000));
   drift = (await viewer.metrics()).av_drift?.drift_ms ?? null;
