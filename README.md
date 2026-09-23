@@ -6,8 +6,9 @@
 
 <p align="center">
   <sub>The demo runs an RTMP to HLS pipeline that delays the audio track by
-  500 ms. You can hear that the lips are out of sync, but only roughly. stream-doctor
-  measures the mismatch and reports its exact value.</sub>
+  500 ms. A viewer of the output would notice that the lips are out of sync,
+  but not by how much. stream-doctor measures the mismatch and reports its
+  exact value.</sub>
 </p>
 
 [![npm](https://img.shields.io/npm/v/stream-doctor.svg)](https://www.npmjs.com/package/stream-doctor)
