@@ -1,5 +1,15 @@
 # stream-doctor
 
+<p align="center">
+  <img src="assets/demo.webp" alt="stream-doctor detecting a 500 ms audio delay in a buggy RTMP to HLS pipeline" width="800">
+</p>
+
+<p align="center">
+  <sub>The demo runs an RTMP to HLS pipeline that delays the audio track by
+  500 ms. You can hear that the lips are out of sync, but only roughly. stream-doctor
+  measures the mismatch and reports its exact value.</sub>
+</p>
+
 [![npm](https://img.shields.io/npm/v/stream-doctor.svg)](https://www.npmjs.com/package/stream-doctor)
 [![CI](https://github.com/membraneframework/stream-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/membraneframework/stream-doctor/actions/workflows/ci.yml)
 
