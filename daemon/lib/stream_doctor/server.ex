@@ -6,6 +6,7 @@ defmodule StreamDoctor.Server do
   use GenServer
 
   alias StreamDoctor.Collector
+  alias StreamDoctor.HLS.Description
   alias StreamDoctor.Metric
 
   @hls_timeout 120_000
@@ -122,6 +123,7 @@ defmodule StreamDoctor.Server do
       pid: nil,
       status: :waiting_for_playlist,
       error: nil,
+      playlist: nil,
       collector: collector
     }
 
@@ -180,10 +182,20 @@ defmodule StreamDoctor.Server do
           )
 
         Process.monitor(pid)
+        describe_playlist(viewer)
+
         {:noreply, put_in(state.viewers[id], %{viewer | pid: pid, status: :receiving})}
 
       _stopped_or_missing ->
         {:noreply, state}
+    end
+  end
+
+  @impl true
+  def handle_info({:playlist_description, id, playlist}, state) do
+    case state.viewers[id] do
+      nil -> {:noreply, state}
+      viewer -> {:noreply, put_in(state.viewers[id], %{viewer | playlist: playlist})}
     end
   end
 
@@ -208,6 +220,23 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_info({:EXIT, _pid, _reason}, state) do
     {:noreply, state}
+  end
+
+  defp describe_playlist(viewer) do
+    server = self()
+
+    spawn_link(fn ->
+      send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
+    end)
+  end
+
+  defp playlist_description(hls_url) do
+    case Description.variants(hls_url) do
+      {:ok, variants} -> %{variants: variants, error: nil}
+      {:error, reason} -> %{variants: [], error: reason}
+    end
+  rescue
+    e -> %{variants: [], error: Exception.message(e)}
   end
 
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
@@ -249,6 +278,7 @@ defmodule StreamDoctor.Server do
       hls_url: viewer.hls_url,
       status: viewer.status,
       error: viewer.error,
+      playlist: viewer.playlist,
       metrics: safe_report(viewer.collector)
     }
   end
