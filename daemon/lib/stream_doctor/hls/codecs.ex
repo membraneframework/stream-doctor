@@ -3,6 +3,11 @@ defmodule StreamDoctor.HLS.Codecs do
   Reads the tracks an HLS variant declares in its `CODECS` attribute.
   """
 
+  @type track ::
+          %{type: :video, codec: :h264, profile: atom() | nil, level: String.t() | nil}
+          | %{type: :audio, codec: :aac, profile: Membrane.AAC.profile(), level: nil}
+          | %{type: :unknown, raw: String.t()}
+
   @aac_object_types [1, 2, 3, 4, 5, 29]
 
   # RFC 6381 avc1.PPCCLL: profile_idc, constraint_set flags, level_idc
@@ -23,7 +28,7 @@ defmodule StreamDoctor.HLS.Codecs do
     {244, [], :high_4_4_4_predictive}
   ]
 
-  @spec parse(String.t() | nil) :: [map()]
+  @spec parse(String.t() | nil) :: [track()]
   def parse(nil), do: []
 
   def parse(codecs) do
@@ -32,7 +37,7 @@ defmodule StreamDoctor.HLS.Codecs do
     |> Enum.map(&track(String.trim(&1)))
   end
 
-  defp track("avc1." <> params = raw) do
+  defp track("avc1." <> params) do
     case Base.decode16(params, case: :mixed) do
       {:ok, <<profile_idc, constraints, level_idc>>} ->
         %{
@@ -43,7 +48,7 @@ defmodule StreamDoctor.HLS.Codecs do
         }
 
       _ ->
-        unknown(raw)
+        %{type: :video, codec: :h264, profile: nil, level: nil}
     end
   end
 

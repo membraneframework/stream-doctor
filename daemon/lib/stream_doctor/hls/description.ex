@@ -16,7 +16,20 @@ defmodule StreamDoctor.HLS.Description do
     tracks: []
   }
 
-  @spec variants(String.t()) :: {:ok, [map()]} | {:error, String.t()}
+  @type variant :: %{
+          id: non_neg_integer(),
+          uri: String.t() | nil,
+          bandwidth: non_neg_integer() | nil,
+          average_bandwidth: non_neg_integer() | nil,
+          resolution: %{width: pos_integer(), height: pos_integer()} | nil,
+          frame_rate: float() | nil,
+          name: String.t() | nil,
+          codecs: String.t() | nil,
+          tracks: [Codecs.track()],
+          container: :cmaf | :mpeg_ts | nil
+        }
+
+  @spec variants(String.t()) :: {:ok, [variant()]} | {:error, String.t()}
   def variants(url) do
     with {:ok, playlist} <- fetch(url) do
       parse_variants(playlist, url)

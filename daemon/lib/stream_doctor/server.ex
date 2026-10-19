@@ -195,7 +195,7 @@ defmodule StreamDoctor.Server do
   def handle_info({:playlist_description, id, playlist}, state) do
     case state.viewers[id] do
       nil -> {:noreply, state}
-      viewer -> {:noreply, put_in(state.viewers[id], %{viewer | playlist: playlist})}
+      _viewer -> {:noreply, put_in(state.viewers[id].playlist, playlist)}
     end
   end
 
@@ -225,9 +225,12 @@ defmodule StreamDoctor.Server do
   defp describe_playlist(viewer) do
     server = self()
 
-    spawn_link(fn ->
-      send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
-    end)
+    pid =
+      spawn(fn ->
+        send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
+      end)
+
+    Process.monitor(pid)
   end
 
   defp playlist_description(hls_url) do

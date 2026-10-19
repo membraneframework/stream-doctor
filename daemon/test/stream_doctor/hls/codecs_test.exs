@@ -53,7 +53,11 @@ defmodule StreamDoctor.HLS.CodecsTest do
   test "codecs this module does not parse are passed through raw" do
     assert [%{type: :unknown, raw: "hvc1.1.6.L93.B0"}] = Codecs.parse("hvc1.1.6.L93.B0")
     assert [%{type: :unknown, raw: "av01.0.04M.08"}] = Codecs.parse("av01.0.04M.08")
-    assert [%{type: :unknown, raw: "avc1.zzzz"}] = Codecs.parse("avc1.zzzz")
+  end
+
+  test "an avc1 entry whose parameters do not decode is still reported as h264" do
+    assert [%{type: :video, codec: :h264, profile: nil, level: nil}] = Codecs.parse("avc1.zzzz")
+    assert [%{type: :video, codec: :h264, profile: nil, level: nil}] = Codecs.parse("avc1.6400")
   end
 
   test "an absent CODECS attribute yields no tracks" do

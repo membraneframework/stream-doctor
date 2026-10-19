@@ -3,6 +3,11 @@ defmodule StreamDoctor.HLS.DescriptionTest do
 
   alias StreamDoctor.HLS.Description
 
+  setup_all do
+    Req.default_options(plug: {Req.Test, :http})
+    on_exit(fn -> Req.default_options([]) end)
+  end
+
   @base "http://cdn.example/a/master.m3u8"
 
   @media_ts """
