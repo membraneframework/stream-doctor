@@ -238,8 +238,6 @@ defmodule StreamDoctor.Server do
       {:ok, variants} -> %{variants: variants, error: nil}
       {:error, reason} -> %{variants: [], error: reason}
     end
-  rescue
-    e -> %{variants: [], error: Exception.message(e)}
   end
 
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
