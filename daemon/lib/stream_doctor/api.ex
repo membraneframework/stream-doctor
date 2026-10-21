@@ -25,6 +25,9 @@ defmodule StreamDoctor.Api do
 
           {:error, :already_streaming} ->
             send_json(conn, 409, %{error: "streamer already running - DELETE /streamer first"})
+
+          {:error, {:invalid_input, reason}} ->
+            send_json(conn, 400, %{error: reason})
         end
 
       _params ->
