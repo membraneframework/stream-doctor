@@ -18,6 +18,9 @@ defmodule StreamDoctor.Probe.Video.Bar do
 
   defp geometry_native(_width, _height), do: :erlang.nif_error(:nif_not_loaded)
 
+  @spec bar_top(geometry()) :: pos_integer()
+  def bar_top(_geometry), do: :erlang.nif_error(:nif_not_loaded)
+
   @spec encode(binary(), geometry(), non_neg_integer()) :: binary()
   def encode(_payload, _geometry, _frame_number), do: :erlang.nif_error(:nif_not_loaded)
 

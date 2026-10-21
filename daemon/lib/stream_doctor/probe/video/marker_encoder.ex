@@ -2,8 +2,7 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
   @moduledoc """
   Draws the bar on each frame. The frame number is the pts divided by the frame duration, so
   number 0 is source time zero whether or not a frame sits there. It wraps at
-  `StreamDoctor.Probe.Video.Bar.max_frame/0`. Every buffer must carry `metadata.duration`, see
-  `StreamDoctor.SenderPipeline.DurationAdder`.
+  `StreamDoctor.Probe.Video.Bar.max_frame/0`. Every buffer must carry `metadata.duration`.
   """
 
   use Membrane.Filter
