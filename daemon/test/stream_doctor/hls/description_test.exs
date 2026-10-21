@@ -33,6 +33,7 @@ defmodule StreamDoctor.HLS.DescriptionTest do
         "/a/master.m3u8" -> Req.Test.text(conn, master)
         "/a/sub/index.m3u8" -> Req.Test.text(conn, @media_ts)
         "/abs/index.m3u8" -> Req.Test.text(conn, @media_cmaf)
+        "/other/index.m3u8" -> Req.Test.text(conn, @media_ts)
         _other -> Plug.Conn.send_resp(conn, 404, "not found")
       end
     end)
@@ -97,11 +98,18 @@ defmodule StreamDoctor.HLS.DescriptionTest do
     #EXT-X-STREAM-INF:BANDWIDTH=200
     /abs/index.m3u8
     #EXT-X-STREAM-INF:BANDWIDTH=300
+    http://cdn.example/other/index.m3u8
+    #EXT-X-STREAM-INF:BANDWIDTH=400
     missing/index.m3u8
     """)
 
-    assert {:ok, [%{container: :mpeg_ts}, %{container: :cmaf}, %{container: nil}]} =
-             Description.variants(@base)
+    assert {:ok,
+            [
+              %{container: :mpeg_ts},
+              %{container: :cmaf},
+              %{uri: "http://cdn.example/other/index.m3u8", container: :mpeg_ts},
+              %{container: nil}
+            ]} = Description.variants(@base)
   end
 
   test "a malformed playlist reports an error" do

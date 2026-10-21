@@ -26,7 +26,28 @@ const routes: Record<string, (body: any) => object> = {
   "DELETE /streamer": () => ({ status: "stopped" }),
   "POST /viewers": ({ hls_url }) => {
     const id = `v${viewers.size + 1}`;
-    viewers.set(id, { id, hls_url, status: "ended", metrics: { av_drift: { drift_ms: 12 } } });
+    viewers.set(id, {
+      id,
+      hls_url,
+      status: "ended",
+      metrics: { av_drift: { drift_ms: 12 } },
+      playlist: {
+        variants: [
+          {
+            id: 0,
+            uri: hls_url,
+            bandwidth: 2_340_800,
+            resolution: { width: 1280, height: 720 },
+            codecs: "avc1.640020,mp4a.40.2",
+            tracks: [
+              { type: "video", codec: "h264", profile: "high", level: "3.2" },
+              { type: "audio", codec: "aac", profile: "LC", level: null },
+            ],
+          },
+        ],
+        error: null,
+      },
+    });
     return { id };
   },
 };
@@ -133,4 +154,20 @@ test("watch creates a viewer whose metrics and stop go through the API", async (
   assert.equal(done.hls_url, "http://cdn/index.m3u8");
   assert.deepEqual(await viewer.stop(), { av_drift: { drift_ms: 12 } });
   await assert.rejects(viewer.status(), /HTTP 404/);
+});
+
+test("a viewer reports what the playlist declares about the stream", async () => {
+  const s = await session({ daemonUrl: url });
+  const viewer = await s.watch("http://cdn/index.m3u8");
+  const { playlist } = await viewer.status();
+
+  assert.equal(playlist?.error, null);
+  const [variant] = playlist!.variants;
+  assert.deepEqual(variant.resolution, { width: 1280, height: 720 });
+  assert.deepEqual(variant.tracks[0], {
+    type: "video",
+    codec: "h264",
+    profile: "high",
+    level: "3.2",
+  });
 });
