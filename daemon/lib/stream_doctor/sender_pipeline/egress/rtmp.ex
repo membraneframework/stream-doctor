@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Sink.RTMP do
+defmodule StreamDoctor.SenderPipeline.Egress.RTMP do
   @moduledoc """
   The RTMP output of a sender pipeline.
   """

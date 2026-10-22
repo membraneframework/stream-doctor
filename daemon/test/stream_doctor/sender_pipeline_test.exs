@@ -5,15 +5,16 @@ defmodule StreamDoctor.SenderPipelineTest do
   import Membrane.Testing.Assertions
 
   alias Membrane.Testing
-  alias StreamDoctor.{Encoding, Input, Source}
+  alias StreamDoctor.OptionsParser.Input
+  alias StreamDoctor.SenderPipeline.{Ingest, Processing}
 
   defp start(settings) do
     {:ok, {:synthetic, config}} = Input.parse(%{"synthetic" => settings})
 
     spec =
       config
-      |> Source.Synthetic.tracks()
-      |> Encoding.tracks(config)
+      |> Ingest.Synthetic.tracks()
+      |> Processing.tracks(config)
       |> Enum.map(fn {kind, builder} -> child(builder, {:sink, kind}, Testing.Sink) end)
 
     pid = Testing.Pipeline.start_link_supervised!(spec: spec)

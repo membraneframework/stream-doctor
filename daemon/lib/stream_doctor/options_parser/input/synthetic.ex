@@ -1,11 +1,11 @@
-defmodule StreamDoctor.Input.Synthetic do
+defmodule StreamDoctor.OptionsParser.Input.Synthetic do
   @moduledoc """
   Parses the settings of a synthetic input.
   """
 
-  alias StreamDoctor.Input.Validate
+  alias StreamDoctor.OptionsParser.Validate
 
-  alias StreamDoctor.Input.Synthetic.{Audio, Video}
+  alias StreamDoctor.OptionsParser.Input.Synthetic.{Audio, Video}
 
   @type t :: %{video: Video.t(), audio: Audio.t(), duration: 1..86_400 | nil}
 

@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.Synthetic do
+defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic do
   @moduledoc """
   Sources that generate a mono video and audio stream, with `metadata.duration` on every
   video buffer.
@@ -8,8 +8,11 @@ defmodule StreamDoctor.Source.Synthetic do
 
   import Membrane.ChildrenSpec
 
-  alias StreamDoctor.Input.Synthetic, as: Config
-  alias StreamDoctor.Source.Synthetic.{AudioSource, VideoSource}
+  alias Membrane.RawAudio
+  alias StreamDoctor.OptionsParser.Input.Synthetic, as: Config
+  alias StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource
+
+  @frames_per_buffer 1024
 
   @spec tracks(Config.t()) :: %{
           video: Membrane.ChildrenSpec.t(),
@@ -28,10 +31,16 @@ defmodule StreamDoctor.Source.Synthetic do
     })
   end
 
+  # Silence is enough: the marker encoder replaces the payload with its tones.
   defp audio(config) do
-    child(:audio_source, %AudioSource{
-      sample_rate: config.audio.sample_rate,
-      duration: duration(config.duration)
+    child(:audio_source, %Membrane.SilenceGenerator{
+      stream_format: %RawAudio{
+        sample_format: :s16le,
+        channels: 1,
+        sample_rate: config.audio.sample_rate
+      },
+      duration: duration(config.duration) || :infinity,
+      frames_per_buffer: @frames_per_buffer
     })
   end
 

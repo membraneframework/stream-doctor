@@ -11,10 +11,10 @@ defmodule StreamDoctor.SenderPipeline do
   require Membrane.Pad
 
   alias Membrane.Pad
-  alias StreamDoctor.{Encoding, Source}
-  alias StreamDoctor.Sink.RTMP
+  alias StreamDoctor.SenderPipeline.Egress.RTMP
+  alias StreamDoctor.SenderPipeline.{Ingest, Processing}
 
-  @spec start_link(StreamDoctor.Input.t(), String.t(), keyword()) :: pid()
+  @spec start_link(StreamDoctor.OptionsParser.Input.t(), String.t(), keyword()) :: pid()
   def start_link(input, rtmp_url, opts \\ []) do
     {:ok, _supervisor, pipeline} =
       Membrane.Pipeline.start_link(__MODULE__, [input: input, rtmp_url: rtmp_url] ++ opts)
@@ -32,16 +32,16 @@ defmodule StreamDoctor.SenderPipeline do
 
     case Keyword.fetch!(opts, :input) do
       {:synthetic, config} ->
-        config |> Source.Synthetic.tracks() |> stream(config, state)
+        config |> Ingest.Synthetic.tracks() |> stream(config, state)
 
       {:file, path} ->
-        {[spec: Source.File.spec(path)], state}
+        {[spec: Ingest.File.spec(path)], state}
     end
   end
 
   @impl true
   def handle_child_notification({:new_tracks, tracks}, :demuxer, _ctx, state) do
-    tracks |> Source.File.tracks() |> stream(%{}, state)
+    tracks |> Ingest.File.tracks() |> stream(%{}, state)
   end
 
   @impl true
@@ -77,7 +77,7 @@ defmodule StreamDoctor.SenderPipeline do
   end
 
   defp stream(track_builders, config, state) do
-    spec = track_builders |> Encoding.tracks(config) |> RTMP.link(state.rtmp_url)
+    spec = track_builders |> Processing.tracks(config) |> RTMP.link(state.rtmp_url)
 
     {[spec: spec], %{state | awaiting_tracks: track_builders |> Map.keys() |> MapSet.new()}}
   end

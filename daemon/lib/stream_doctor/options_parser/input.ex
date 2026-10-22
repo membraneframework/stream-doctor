@@ -1,10 +1,10 @@
-defmodule StreamDoctor.Input do
+defmodule StreamDoctor.OptionsParser.Input do
   @moduledoc """
   Parses what a streamer should send: a file to read, or a synthetic source to generate.
   """
 
-  alias StreamDoctor.Input.Synthetic
-  alias StreamDoctor.Input.Validate
+  alias StreamDoctor.OptionsParser.Input.Synthetic
+  alias StreamDoctor.OptionsParser.Validate
 
   @type t :: {:file, String.t()} | {:synthetic, Synthetic.t()}
 

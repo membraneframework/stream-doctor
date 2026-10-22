@@ -7,8 +7,8 @@ defmodule StreamDoctor.Server do
 
   alias StreamDoctor.Collector
   alias StreamDoctor.HLS.Description
-  alias StreamDoctor.Input
   alias StreamDoctor.Metric
+  alias StreamDoctor.OptionsParser.Input
 
   @hls_timeout 120_000
   @metric_specs [{Metric.AvDrift, []}]

@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.DurationAdder do
+defmodule StreamDoctor.SenderPipeline.Ingest.DurationAdder do
   @moduledoc """
   Puts the time until the next buffer into each buffer's `metadata.duration`.
   """

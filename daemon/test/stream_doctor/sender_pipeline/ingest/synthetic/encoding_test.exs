@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.Synthetic.EncodingTest do
+defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.EncodingTest do
   use ExUnit.Case, async: true
 
   import Membrane.ChildrenSpec
@@ -6,7 +6,7 @@ defmodule StreamDoctor.Source.Synthetic.EncodingTest do
 
   alias Membrane.H264
   alias Membrane.Testing
-  alias StreamDoctor.Source.Synthetic.VideoSource
+  alias StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource
 
   defp encode(encoder_options) do
     spec =

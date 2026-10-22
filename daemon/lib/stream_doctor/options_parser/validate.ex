@@ -1,6 +1,6 @@
-defmodule StreamDoctor.Input.Validate do
+defmodule StreamDoctor.OptionsParser.Validate do
   @moduledoc """
-  Checks for the settings of a synthetic input.
+  Checks shared by the option parsers.
   """
 
   @spec known_keys(map(), [String.t()], String.t()) :: :ok | {:error, String.t()}
