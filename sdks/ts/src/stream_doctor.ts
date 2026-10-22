@@ -41,12 +41,64 @@ export interface Metrics {
   error?: string;
 }
 
+/** A track a variant declares in its CODECS attribute. */
+export type Track = VideoTrack | AudioTrack | UnknownTrack;
+
+export interface VideoTrack {
+  type: "video";
+  codec: "h264";
+  profile: string | null;
+  level: string | null;
+}
+
+export interface AudioTrack {
+  type: "audio";
+  codec: "aac";
+  profile: string | null;
+  level: null;
+}
+
+/** A codec string this SDK does not parse, kept verbatim. */
+export interface UnknownTrack {
+  type: "unknown";
+  raw: string;
+}
+
+/** Frame size a variant declares, in pixels. */
+export interface Resolution {
+  width: number;
+  height: number;
+}
+
+/** One variant of an HLS stream. Every field is declared by the packager, not measured. */
+export interface Variant {
+  id: number;
+  uri: string;
+  container: "mpeg_ts" | "cmaf" | null;
+  bandwidth: number | null;
+  average_bandwidth: number | null;
+  resolution: Resolution | null;
+  frame_rate: number | null;
+  name: string | null;
+  codecs: string | null;
+  /** "unknown" when the playlist declares no CODECS attribute. */
+  tracks: Track[] | "unknown";
+}
+
+/** What a stream declares about itself in its playlists, read once the playlist appears. */
+export interface PlaylistDescription {
+  variants: Variant[];
+  error: string | null;
+}
+
 /** State of a viewer, as reported by the daemon. */
 export interface ViewerStatus {
   id: string;
   hls_url: string;
   status: Status;
   error: string | null;
+  /** Null until the playlist has been read. */
+  playlist: PlaylistDescription | null;
   metrics: Metrics;
 }
 
