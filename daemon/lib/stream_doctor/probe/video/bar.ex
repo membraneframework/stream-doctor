@@ -21,8 +21,8 @@ defmodule StreamDoctor.Probe.Video.Bar do
   @spec geometry(pos_integer(), pos_integer()) :: geometry()
   def geometry(_width, _height), do: :erlang.nif_error(:nif_not_loaded)
 
-  @spec draw(binary(), geometry(), non_neg_integer()) :: binary()
-  def draw(_payload, _geometry, _frame_number), do: :erlang.nif_error(:nif_not_loaded)
+  @spec encode(binary(), geometry(), non_neg_integer()) :: binary()
+  def encode(_payload, _geometry, _frame_number), do: :erlang.nif_error(:nif_not_loaded)
 
   @spec decode(binary(), geometry()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}

@@ -20,7 +20,7 @@ fn geometry(width: u32, height: u32) -> ResourceArc<GeometryResource> {
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn draw<'a>(
+fn encode<'a>(
     env: Env<'a>,
     payload: Binary<'a>,
     geometry: ResourceArc<GeometryResource>,
