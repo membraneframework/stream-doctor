@@ -1,9 +1,9 @@
-defmodule StreamDoctor.Input.Synthetic.Video do
+defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
   @moduledoc """
   Parses the video settings of a synthetic input.
   """
 
-  alias StreamDoctor.Input.Validate
+  alias StreamDoctor.OptionsParser.Validate
 
   alias StreamDoctor.Probe.Video.Bar
 

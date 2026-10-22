@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.Synthetic.AudioSourceTest do
+defmodule StreamDoctor.SenderPipeline.Ingest.SyntheticTest do
   use ExUnit.Case, async: true
 
   import Membrane.ChildrenSpec
@@ -6,14 +6,20 @@ defmodule StreamDoctor.Source.Synthetic.AudioSourceTest do
 
   alias Membrane.RawAudio
   alias Membrane.Testing
+  alias StreamDoctor.OptionsParser.Input
   alias StreamDoctor.Probe.Audio.Tone
-  alias StreamDoctor.Source.Synthetic.AudioSource
+  alias StreamDoctor.SenderPipeline.Ingest.Synthetic
 
   @sample_rate 48_000
   @frames_per_buffer 1024
 
+  defp audio_track(settings) do
+    {:ok, {:synthetic, config}} = Input.parse(%{"synthetic" => settings})
+    config |> Synthetic.tracks() |> Map.fetch!(:audio)
+  end
+
   defp start(sample_rate, marked?) do
-    source = child(:source, %AudioSource{sample_rate: sample_rate})
+    source = audio_track(%{"audio" => %{"sample_rate" => sample_rate}})
 
     spec =
       if marked?, do: child(source, :marker, StreamDoctor.Probe.Audio.MarkerEncoder), else: source
@@ -55,12 +61,13 @@ defmodule StreamDoctor.Source.Synthetic.AudioSourceTest do
     end
   end
 
-  test "timestamps follow the cumulative frame count without drifting" do
+  test "timestamps advance by a whole buffer of samples" do
     pid = start(@sample_rate, false)
+    buffer_time = div(@frames_per_buffer * Membrane.Time.second(), @sample_rate)
 
     for n <- 0..9 do
       assert_sink_buffer(pid, :sink, buffer)
-      assert buffer.pts == div(n * @frames_per_buffer * Membrane.Time.second(), @sample_rate)
+      assert buffer.pts == n * buffer_time
     end
   end
 
@@ -80,9 +87,10 @@ defmodule StreamDoctor.Source.Synthetic.AudioSourceTest do
     assert [{:ok, 0}, {:ok, 1}, {:ok, 2}] = decoded
   end
 
-  test "a duration ends the stream once it is generated" do
+  test "a duration ends the audio track once it is generated" do
     spec =
-      child(:source, %AudioSource{sample_rate: @sample_rate, duration: Membrane.Time.second()})
+      %{"duration" => 1, "audio" => %{"sample_rate" => @sample_rate}}
+      |> audio_track()
       |> child(:sink, Testing.Sink)
 
     pid = Testing.Pipeline.start_link_supervised!(spec: spec)

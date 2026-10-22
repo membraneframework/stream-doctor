@@ -106,6 +106,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_h264_ffmpeg_plugin, "~> 0.32"},
       {:membrane_raw_video_format, "~> 0.4"},
       {:membrane_raw_audio_format, "~> 0.12"},
+      {:membrane_generator_plugin, "~> 0.10.3"},
       {:membrane_transcoder_plugin, "~> 0.3"},
       {:membrane_ffmpeg_swresample_plugin, "~> 0.20"},
       {:membrane_aac_format, "~> 0.8"},

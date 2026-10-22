@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.File do
+defmodule StreamDoctor.SenderPipeline.Ingest.File do
   @moduledoc """
   Reads an MP4 file and decodes its tracks to raw video and audio, with `metadata.duration`
   on every video buffer.
@@ -9,8 +9,8 @@ defmodule StreamDoctor.Source.File do
   require Membrane.Pad
 
   alias Membrane.{AAC, H264, H265, MP4, Pad, RawAudio, RawVideo, Transcoder}
-  alias StreamDoctor.Sink.RTMP
-  alias StreamDoctor.Source.DurationAdder
+  alias StreamDoctor.SenderPipeline.Egress.RTMP
+  alias StreamDoctor.SenderPipeline.Ingest.DurationAdder
 
   @spec spec(String.t()) :: Membrane.ChildrenSpec.t()
   def spec(path) do

@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.Synthetic.VideoSourceTest do
+defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSourceTest do
   use ExUnit.Case, async: true
 
   import Membrane.ChildrenSpec
@@ -7,7 +7,7 @@ defmodule StreamDoctor.Source.Synthetic.VideoSourceTest do
   alias Membrane.RawVideo
   alias Membrane.Testing
   alias StreamDoctor.Probe.Video.Bar
-  alias StreamDoctor.Source.Synthetic.VideoSource
+  alias StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource
 
   @width 640
   @height 360

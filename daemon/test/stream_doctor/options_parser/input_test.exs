@@ -1,7 +1,7 @@
-defmodule StreamDoctor.InputTest do
+defmodule StreamDoctor.OptionsParser.InputTest do
   use ExUnit.Case, async: true
 
-  alias StreamDoctor.Input
+  alias StreamDoctor.OptionsParser.Input
 
   describe "parse/1" do
     test "a file path passes through untouched" do

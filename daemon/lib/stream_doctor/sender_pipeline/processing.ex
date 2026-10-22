@@ -1,13 +1,13 @@
-defmodule StreamDoctor.Encoding do
+defmodule StreamDoctor.SenderPipeline.Processing do
   @moduledoc """
   Marks raw tracks with the marker a viewer decodes back, and encodes them.
   """
 
   import Membrane.ChildrenSpec
 
-  alias StreamDoctor.Input.Synthetic, as: Config
+  alias StreamDoctor.OptionsParser.Input.Synthetic, as: Config
   alias StreamDoctor.Probe
-  alias StreamDoctor.Sink.RTMP
+  alias StreamDoctor.SenderPipeline.Egress.RTMP
 
   @type track_builders :: %{optional(RTMP.kind()) => Membrane.ChildrenSpec.t()}
 

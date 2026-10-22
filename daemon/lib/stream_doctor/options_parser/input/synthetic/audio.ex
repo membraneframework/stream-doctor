@@ -1,9 +1,9 @@
-defmodule StreamDoctor.Input.Synthetic.Audio do
+defmodule StreamDoctor.OptionsParser.Input.Synthetic.Audio do
   @moduledoc """
   Parses the audio settings of a synthetic input.
   """
 
-  alias StreamDoctor.Input.Validate
+  alias StreamDoctor.OptionsParser.Validate
 
   @type profile :: :mpeg4_lc | :mpeg2_lc
 

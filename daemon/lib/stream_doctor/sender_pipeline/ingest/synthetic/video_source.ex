@@ -1,4 +1,4 @@
-defmodule StreamDoctor.Source.Synthetic.VideoSource do
+defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
   @moduledoc """
   Generates I420 frames: a square bouncing left to right over scrolling colour bars.
 
