@@ -28,8 +28,8 @@ defmodule StreamDoctor.HLS.Codecs do
     {244, [], :high_4_4_4_predictive}
   ]
 
-  @spec parse(String.t() | nil) :: [track()]
-  def parse(nil), do: []
+  @spec parse(String.t() | nil) :: [track()] | :unknown
+  def parse(nil), do: :unknown
 
   def parse(codecs) do
     codecs

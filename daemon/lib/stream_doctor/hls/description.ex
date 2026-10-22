@@ -13,7 +13,7 @@ defmodule StreamDoctor.HLS.Description do
     frame_rate: nil,
     name: nil,
     codecs: nil,
-    tracks: []
+    tracks: :unknown
   }
 
   @type variant :: %{
@@ -25,7 +25,7 @@ defmodule StreamDoctor.HLS.Description do
           frame_rate: float() | nil,
           name: String.t() | nil,
           codecs: String.t() | nil,
-          tracks: [Codecs.track()],
+          tracks: [Codecs.track()] | :unknown,
           container: :cmaf | :mpeg_ts | nil
         }
 

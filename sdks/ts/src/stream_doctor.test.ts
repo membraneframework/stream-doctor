@@ -164,10 +164,8 @@ test("a viewer reports what the playlist declares about the stream", async () =>
   assert.equal(playlist?.error, null);
   const [variant] = playlist!.variants;
   assert.deepEqual(variant.resolution, { width: 1280, height: 720 });
-  assert.deepEqual(variant.tracks[0], {
-    type: "video",
-    codec: "h264",
-    profile: "high",
-    level: "3.2",
-  });
+  assert.deepEqual(variant.tracks, [
+    { type: "video", codec: "h264", profile: "high", level: "3.2" },
+    { type: "audio", codec: "aac", profile: "LC", level: null },
+  ]);
 });

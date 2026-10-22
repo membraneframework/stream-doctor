@@ -60,7 +60,7 @@ defmodule StreamDoctor.HLS.CodecsTest do
     assert [%{type: :video, codec: :h264, profile: nil, level: nil}] = Codecs.parse("avc1.6400")
   end
 
-  test "an absent CODECS attribute yields no tracks" do
-    assert [] == Codecs.parse(nil)
+  test "an absent CODECS attribute leaves the tracks unknown" do
+    assert :unknown == Codecs.parse(nil)
   end
 end

@@ -81,7 +81,8 @@ export interface Variant {
   frame_rate: number | null;
   name: string | null;
   codecs: string | null;
-  tracks: Track[];
+  /** "unknown" when the playlist declares no CODECS attribute. */
+  tracks: Track[] | "unknown";
 }
 
 /** What a stream declares about itself in its playlists, read once the playlist appears. */

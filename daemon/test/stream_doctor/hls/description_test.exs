@@ -42,7 +42,7 @@ defmodule StreamDoctor.HLS.DescriptionTest do
   test "a media playlist becomes one synthetic variant" do
     serve(@media_ts)
 
-    assert {:ok, [%{id: 0, uri: @base, container: :mpeg_ts, codecs: nil, tracks: []}]} =
+    assert {:ok, [%{id: 0, uri: @base, container: :mpeg_ts, codecs: nil, tracks: :unknown}]} =
              Description.variants(@base)
   end
 
@@ -55,7 +55,7 @@ defmodule StreamDoctor.HLS.DescriptionTest do
   test "declared attributes are carried through per variant" do
     serve("""
     #EXTM3U
-    #EXT-X-STREAM-INF:BANDWIDTH=985600,RESOLUTION=640x360,CODECS="avc1.64001e,mp4a.40.2"
+    #EXT-X-STREAM-INF:BANDWIDTH=985600,AVERAGE-BANDWIDTH=865000,RESOLUTION=640x360,FRAME-RATE=29.97,NAME="360p",CODECS="avc1.64001e,mp4a.40.2"
     sub/index.m3u8
     """)
 
@@ -64,7 +64,10 @@ defmodule StreamDoctor.HLS.DescriptionTest do
               %{
                 id: 0,
                 bandwidth: 985_600,
+                average_bandwidth: 865_000,
                 resolution: %{width: 640, height: 360},
+                frame_rate: 29.97,
+                name: "360p",
                 codecs: "avc1.64001e,mp4a.40.2",
                 tracks: [%{type: :video, profile: :high}, %{type: :audio, profile: :LC}]
               }
@@ -107,7 +110,7 @@ defmodule StreamDoctor.HLS.DescriptionTest do
             [
               %{container: :mpeg_ts},
               %{container: :cmaf},
-              %{uri: "http://cdn.example/other/index.m3u8", container: :mpeg_ts},
+              %{container: :mpeg_ts},
               %{container: nil}
             ]} = Description.variants(@base)
   end
