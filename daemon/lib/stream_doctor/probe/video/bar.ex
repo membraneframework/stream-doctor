@@ -1,13 +1,13 @@
 defmodule StreamDoctor.Probe.Video.Bar do
   @moduledoc false
 
-  # Thin wrapper over `sdcore::bar` (sdcore/src/bar.rs), see native/sdcore_nif.
+  # Thin wrapper over `stream_doctor_core::bar` (stream_doctor_core/src/bar.rs), see native/stream_doctor_core_nif.
 
-  use Rustler, otp_app: :stream_doctor, crate: :sdcore_nif
+  use Rustler, otp_app: :stream_doctor, crate: :stream_doctor_core_nif
 
   import Bitwise
 
-  # mirrors DATA_BITS in sdcore/src/bar.rs, which is not exported
+  # mirrors DATA_BITS in stream_doctor_core/src/bar.rs, which is not exported
   @data_bits 14
   @max_frame 1 <<< @data_bits
 

@@ -1,5 +1,5 @@
 [package]
-name = "sdcore"
+name = "stream_doctor_core"
 version = "0.1.0"
 edition = "2024"
 

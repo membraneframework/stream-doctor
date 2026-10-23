@@ -1,5 +1,5 @@
 [package]
-name = "sdcore_nif"
+name = "stream_doctor_core_nif"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,4 +8,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustler = "0.38"
-sdcore = { path = "../../../sdcore" }
+stream_doctor_core = { path = "../../../stream_doctor_core" }

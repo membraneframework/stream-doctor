@@ -120,18 +120,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-name = "sdcore"
+name = "stream_doctor_core"
 version = "0.1.0"
 dependencies = [
  "bitvec",
 ]
 
 [[package]]
-name = "sdcore_nif"
+name = "stream_doctor_core_nif"
 version = "0.1.0"
 dependencies = [
  "rustler",
- "sdcore",
+ "stream_doctor_core",
 ]
 
 [[package]]

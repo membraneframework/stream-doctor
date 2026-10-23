@@ -1,5 +1,5 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
-use sdcore::bar::{DecodingError, Geometry};
+use stream_doctor_core::bar::{DecodingError, Geometry};
 
 mod atoms {
     rustler::atoms! {
