@@ -109,6 +109,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_transcoder_plugin, "~> 0.3"},
       {:membrane_ffmpeg_swresample_plugin, "~> 0.20"},
       {:membrane_aac_format, "~> 0.8"},
+      {:rustler, "~> 0.38.0", runtime: false},
       {:burrito, "~> 1.6", runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: :dev, runtime: false}

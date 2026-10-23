@@ -1,0 +1,11 @@
+[package]
+name = "stream_doctor_core_nif"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.38"
+stream_doctor_core = { path = "../../../stream_doctor_core" }

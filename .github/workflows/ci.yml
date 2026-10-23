@@ -26,6 +26,27 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stream_doctor_core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            stream_doctor_core
+            daemon/native/stream_doctor_core_nif
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo clippy --manifest-path ../daemon/native/stream_doctor_core_nif/Cargo.toml -- -D warnings
+      - run: cargo fmt --check --manifest-path ../daemon/native/stream_doctor_core_nif/Cargo.toml
+
   # the membraneframework/membrane_actions reusable workflows assume the mix
   # project at the repository root, so their steps are inlined here
   daemon:
@@ -42,6 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cp /root/.tool-versions .
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
           path: |
