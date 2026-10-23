@@ -1,4 +1,4 @@
-//! A black bar at the bottom of the frame with 17 squares. The first square is white, the
+//! A black bar at the bottom of the frame with `TOTAL_SQUARES` squares. The first square is white, the
 //! second is black. They show the decoder what white and black look like. The next 14 squares
 //! are the frame number, highest bit first. The last square is a parity bit.
 //! Works only with I420 frames.
@@ -15,11 +15,12 @@ const WHITE: u8 = 235;
 const BLACK: u8 = 16;
 const NEUTRAL_CHROMA: u8 = 128;
 
-const MIN_CONTRAST: u8 = 32;
+const MIN_CONTRAST: f32 = 32.0;
 
 /// Position and size of the bar and its squares for one resolution.
 ///
 /// Create it once with [`Geometry::new`] and use it for every frame.
+#[derive(Debug, PartialEq)]
 pub struct Geometry {
     width: u32,
     height: u32,
@@ -29,6 +30,15 @@ pub struct Geometry {
     square_xs: [u32; TOTAL_SQUARES as usize],
 }
 
+#[derive(Debug, PartialEq)]
+pub enum GeometryError {
+    /// The frame is too narrow to fit all squares. About 180 px is the minimum.
+    TooNarrow,
+    /// The frame is too short to fit the bar.
+    TooShort,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum DecodingError {
     /// There is no bar in this frame.
     MarkersNotFound,
@@ -43,32 +53,28 @@ pub fn max_frame() -> u32 {
 
 impl Geometry {
     /// Computes the bar layout for a frame of this size.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the frame is too narrow for 17 squares. About 180 px is the minimum.
-    pub fn new(width: u32, height: u32) -> Self {
-        let square_size = even((width / 24).max(8));
-        let gap = even((square_size / 4).max(2));
+    pub fn new(width: u32, height: u32) -> Result<Self, GeometryError> {
+        let square_size = round_to_even((width / 24).max(8));
+        let gap = round_to_even((square_size / 4).max(2));
         let pad_width = gap;
 
         let needed_width = pad_width + TOTAL_SQUARES * (square_size + gap);
         if needed_width > width {
-            panic!(
-                "Video is too narrow for the frame-number bar: \n\
-                {width}px available, #{needed_width}px needed"
-            );
+            return Err(GeometryError::TooNarrow);
         }
         let bar_height = square_size + 2 * pad_width;
+        if bar_height > height {
+            return Err(GeometryError::TooShort);
+        }
 
-        Geometry {
+        Ok(Geometry {
             width,
             height,
             square_size,
-            bar_top_y: height.wrapping_sub(bar_height),
-            square_top_y: height.wrapping_sub(gap).wrapping_sub(square_size),
+            bar_top_y: height - bar_height,
+            square_top_y: height - gap - square_size,
             square_xs: from_fn(|i| pad_width + i as u32 * (square_size + gap)),
-        }
+        })
     }
 
     /// Draws the bar with `frame_number` on the frame. Changes `binary` in place.
@@ -85,19 +91,17 @@ impl Geometry {
         let background_row = vec![BLACK; self.width as usize];
         let squares_row = self.squares_row(&bits);
 
-        let bar_rows: Vec<&[u8]> = (self.bar_top_y..self.height)
-            .map(|row| {
+        for row in self.bar_top_y..self.height {
+            let slice_to_copy =
                 if self.square_top_y <= row && row < self.square_top_y + self.square_size {
                     &squares_row[..]
                 } else {
                     &background_row[..]
-                }
-            })
-            .collect();
+                };
 
-        let bar_rows: Vec<u8> = bar_rows.concat();
-
-        y[(self.bar_top_y * self.width) as usize..].copy_from_slice(&bar_rows);
+            y[(row * self.width) as usize..(row * self.width + self.width) as usize]
+                .copy_from_slice(slice_to_copy);
+        }
 
         let chroma_width = self.width / 2;
         let chroma_bar_top_y = self.bar_top_y / 2;
@@ -119,7 +123,7 @@ impl Geometry {
         let white_reference = square_luma_averages[0];
         let black_reference = square_luma_averages[1];
 
-        if white_reference - black_reference < MIN_CONTRAST as f32 {
+        if white_reference - black_reference < MIN_CONTRAST {
             return Err(DecodingError::MarkersNotFound);
         }
 
@@ -184,7 +188,7 @@ fn generate_bits(frame_number: u32) -> BitVec {
     bits
 }
 
-fn even(n: u32) -> u32 {
+fn round_to_even(n: u32) -> u32 {
     n & !1
 }
 
@@ -195,7 +199,7 @@ mod tests {
     #[test]
     fn encodes_and_decodes() {
         let (width, height) = (640, 360);
-        let geometry = Geometry::new(width, height);
+        let geometry = Geometry::new(width, height).unwrap();
         let frame_size = (width * height * 3 / 2) as usize;
 
         for frame_number in [0, 1, 42, 12_345, MAX_FRAME - 1, MAX_FRAME + 7] {
@@ -205,5 +209,11 @@ mod tests {
         }
 
         assert!(geometry.decode(&vec![128; frame_size]).is_err());
+    }
+
+    #[test]
+    fn rejects_frames_too_small_for_the_bar() {
+        assert_eq!(Geometry::new(100, 360).err(), Some(GeometryError::TooNarrow));
+        assert_eq!(Geometry::new(640, 10).err(), Some(GeometryError::TooShort));
     }
 }

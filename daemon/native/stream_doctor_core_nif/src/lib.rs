@@ -1,6 +1,6 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
 use stream_doctor_core::bar::max_frame as bar_max_frame;
-use stream_doctor_core::bar::{DecodingError, Geometry};
+use stream_doctor_core::bar::{DecodingError, Geometry, GeometryError};
 
 mod atoms {
     rustler::atoms! {
@@ -14,9 +14,14 @@ struct GeometryResource(Geometry);
 #[rustler::resource_impl]
 impl Resource for GeometryResource {}
 
-#[rustler::nif]
-fn geometry(width: u32, height: u32) -> ResourceArc<GeometryResource> {
-    ResourceArc::new(GeometryResource(Geometry::new(width, height)))
+#[rustler::nif(name = "geometry_native")]
+fn geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, String> {
+    Geometry::new(width, height)
+        .map(|g| ResourceArc::new(GeometryResource(g)))
+        .map_err(|e| match e {
+            GeometryError::TooNarrow => format!("video is too narrow for the frame-number bar: {width}px"),
+            GeometryError::TooShort => format!("video is too short for the frame-number bar: {height}px"),
+        })
 }
 
 #[rustler::nif]
