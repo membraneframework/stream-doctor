@@ -1,3 +1,8 @@
+//! A black bar at the bottom of the frame with 17 squares. The first square is white, the
+//! second is black. They show the decoder what white and black look like. The next 14 squares
+//! are the frame number, highest bit first. The last square is a parity bit.
+//! Works only with I420 frames.
+
 use std::{array::from_fn, iter::zip};
 
 use bitvec::prelude::*;
@@ -12,6 +17,9 @@ const NEUTRAL_CHROMA: u8 = 128;
 
 const MIN_CONTRAST: u8 = 32;
 
+/// Position and size of the bar and its squares for one resolution.
+///
+/// Create it once with [`Geometry::new`] and use it for every frame.
 pub struct Geometry {
     width: u32,
     height: u32,
@@ -22,15 +30,23 @@ pub struct Geometry {
 }
 
 pub enum DecodingError {
+    /// There is no bar in this frame.
     MarkersNotFound,
+    /// There is a bar, but the parity bit does not match. The frame is probably damaged.
     ParityMismatch,
 }
 
+/// The frame number starts from zero again when it reaches this value.
 pub fn max_frame() -> u32 {
     MAX_FRAME
 }
 
 impl Geometry {
+    /// Computes the bar layout for a frame of this size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the frame is too narrow for 17 squares. About 180 px is the minimum.
     pub fn new(width: u32, height: u32) -> Self {
         let square_size = even((width / 24).max(8));
         let gap = even((square_size / 4).max(2));
@@ -55,6 +71,9 @@ impl Geometry {
         }
     }
 
+    /// Draws the bar with `frame_number` on the frame. Changes `binary` in place.
+    ///
+    /// Numbers bigger than [`max_frame`] wrap around.
     pub fn encode(&self, binary: &mut [u8], frame_number: u32) {
         let y_size = (self.width * self.height) as usize;
         let chroma_size = y_size / 4;
@@ -91,6 +110,7 @@ impl Geometry {
         v[chroma_kept as usize..].copy_from_slice(&chroma_fill);
     }
 
+    /// Reads the frame number from the bar on the frame.
     pub fn decode(&self, binary: &[u8]) -> Result<u32, DecodingError> {
         let y_size = (self.width * self.height) as usize;
         let y_plane = &binary[..y_size];
