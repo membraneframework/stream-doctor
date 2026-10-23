@@ -19,7 +19,7 @@ pub struct Geometry {
     pad_width: u32,
     bar_top_y: u32,
     square_top_y: u32,
-    xs: [u32; TOTAL_SQUARES as usize],
+    square_xs: [u32; TOTAL_SQUARES as usize],
 }
 
 pub enum DecodingError {
@@ -49,7 +49,7 @@ impl Geometry {
             pad_width,
             bar_top_y: height.wrapping_sub(bar_height),
             square_top_y: height.wrapping_sub(gap).wrapping_sub(square_size),
-            xs: from_fn(|i| pad_width + i as u32 * (square_size + gap)),
+            square_xs: from_fn(|i| pad_width + i as u32 * (square_size + gap)),
         }
     }
 
@@ -96,7 +96,7 @@ impl Geometry {
     fn squares_row(&self, bits: &BitVec) -> Vec<u8> {
         let mut row = vec![BLACK; self.width as usize];
 
-        for (x, bit) in zip(self.xs, bits) {
+        for (x, bit) in zip(self.square_xs, bits) {
             if *bit {
                 row[x as usize..(x + self.square_size) as usize].fill(WHITE);
             }
@@ -105,12 +105,11 @@ impl Geometry {
     }
 
     fn square_luma_average(&self, y_plane: &[u8], x: u32) -> f32 {
-        // let margin = self.square / 4;
-        // let x0 = x + margin;
-        // let y0 = self.square_top + margin;
-        // let side = self.square - 2 * margin;
+        let margin = self.square_size / 4;
+        let x0 = x + margin;
+        let y0 = self.square_top_y + margin;
+        let side = self.square_size - 2 * margin;
 
-        // 0.0
         todo!()
     }
 }
@@ -141,4 +140,12 @@ fn generate_bits(frame_number: u32) -> BitVec {
 
 fn even(n: u32) -> u32 {
     n & !1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encodes_bar() {}
 }
