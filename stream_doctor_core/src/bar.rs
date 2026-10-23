@@ -4,7 +4,7 @@ use bitvec::prelude::*;
 
 const DATA_BITS: u32 = 14;
 const TOTAL_SQUARES: u32 = 2 + DATA_BITS + 1;
-const MAX_FRAMES: u32 = 1 << DATA_BITS;
+const MAX_FRAME: u32 = 1 << DATA_BITS;
 
 const WHITE: u8 = 235;
 const BLACK: u8 = 16;
@@ -24,6 +24,10 @@ pub struct Geometry {
 pub enum DecodingError {
     MarkersNotFound,
     ParityMismatch,
+}
+
+pub fn max_frame() -> u32 {
+    MAX_FRAME
 }
 
 impl Geometry {
@@ -148,7 +152,7 @@ impl Geometry {
 }
 
 fn generate_bits(frame_number: u32) -> BitVec {
-    let n = frame_number % MAX_FRAMES;
+    let n = frame_number % MAX_FRAME;
 
     //calibration bits
     let mut bits = bitvec![1, 0];
@@ -174,13 +178,10 @@ mod tests {
         let geometry = Geometry::new(width, height);
         let frame_size = (width * height * 3 / 2) as usize;
 
-        for frame_number in [0, 1, 42, 12_345, MAX_FRAMES - 1, MAX_FRAMES + 7] {
+        for frame_number in [0, 1, 42, 12_345, MAX_FRAME - 1, MAX_FRAME + 7] {
             let mut frame = vec![128; frame_size];
             geometry.encode(&mut frame, frame_number);
-            assert_eq!(
-                geometry.decode(&frame).ok(),
-                Some(frame_number % MAX_FRAMES)
-            );
+            assert_eq!(geometry.decode(&frame).ok(), Some(frame_number % MAX_FRAME));
         }
 
         assert!(geometry.decode(&vec![128; frame_size]).is_err());

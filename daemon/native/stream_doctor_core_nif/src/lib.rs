@@ -1,4 +1,5 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
+use stream_doctor_core::bar::max_frame as bar_max_frame;
 use stream_doctor_core::bar::{DecodingError, Geometry};
 
 mod atoms {
@@ -8,7 +9,6 @@ mod atoms {
     }
 }
 
-// orphan rule: `Resource` cannot be implemented for a type from another crate
 struct GeometryResource(Geometry);
 
 #[rustler::resource_impl]
@@ -17,6 +17,11 @@ impl Resource for GeometryResource {}
 #[rustler::nif]
 fn geometry(width: u32, height: u32) -> ResourceArc<GeometryResource> {
     ResourceArc::new(GeometryResource(Geometry::new(width, height)))
+}
+
+#[rustler::nif]
+fn max_frame() -> u32 {
+    bar_max_frame()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
