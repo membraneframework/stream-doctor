@@ -16,7 +16,6 @@ pub struct Geometry {
     width: u32,
     height: u32,
     square_size: u32,
-    pad_width: u32,
     bar_top_y: u32,
     square_top_y: u32,
     square_xs: [u32; TOTAL_SQUARES as usize],
@@ -46,7 +45,6 @@ impl Geometry {
             width,
             height,
             square_size,
-            pad_width,
             bar_top_y: height.wrapping_sub(bar_height),
             square_top_y: height.wrapping_sub(gap).wrapping_sub(square_size),
             square_xs: from_fn(|i| pad_width + i as u32 * (square_size + gap)),
@@ -89,8 +87,33 @@ impl Geometry {
         v[chroma_kept as usize..].copy_from_slice(&chroma_fill);
     }
 
-    pub fn decode(&self, payload: &[u8]) -> Result<u32, DecodingError> {
-        todo!()
+    pub fn decode(&self, binary: &[u8]) -> Result<u32, DecodingError> {
+        let y_size = (self.width * self.height) as usize;
+        let y_plane = &binary[..y_size];
+
+        let square_luma_averages = self.square_xs.map(|x| self.square_luma_average(y_plane, x));
+        let white_reference = square_luma_averages[0];
+        let black_reference = square_luma_averages[1];
+
+        if white_reference - black_reference < MIN_CONTRAST as f32 {
+            return Err(DecodingError::MarkersNotFound);
+        }
+
+        let threshold = (white_reference + black_reference) / 2.0;
+        let bits: BitVec = square_luma_averages
+            .iter()
+            .map(|&v| v > threshold)
+            .collect();
+
+        let parity_bit = bits.last().unwrap();
+
+        let data_bits = &bits[2..(TOTAL_SQUARES - 1) as usize];
+
+        if (data_bits.count_ones() % 2 != 0) != *parity_bit {
+            Err(DecodingError::ParityMismatch)
+        } else {
+            Ok(data_bits.iter().fold(0, |n, bit| (n << 1) | *bit as u32))
+        }
     }
 
     fn squares_row(&self, bits: &BitVec) -> Vec<u8> {
@@ -110,30 +133,29 @@ impl Geometry {
         let y0 = self.square_top_y + margin;
         let side = self.square_size - 2 * margin;
 
-        todo!()
+        (y0..y0 + side)
+            .map(|row| {
+                let start = row * self.width + x0;
+                let sum: u32 = y_plane[start as usize..(start + side) as usize]
+                    .iter()
+                    .map(|x| *x as u32)
+                    .sum();
+                sum as f32 / side as f32
+            })
+            .sum::<f32>()
+            / side as f32
     }
 }
 
 fn generate_bits(frame_number: u32) -> BitVec {
-    let n = frame_number & MAX_FRAMES;
-    let mut bits = bitvec![0; TOTAL_SQUARES as usize];
+    let n = frame_number % MAX_FRAMES;
 
-    // callibration bits
-    bits.set(0, true);
-    bits.set(1, false);
-
-    // actual data
-    let sum = (0..DATA_BITS)
-        .rev()
-        .reduce(|sum, i| {
-            let value = (n >> i) & 1;
-            bits.set(i as usize, value != 0);
-            i + sum
-        })
-        .unwrap();
-
-    // parity
-    bits.set((DATA_BITS - 1) as usize, (sum % 2) != 0);
+    //calibration bits
+    let mut bits = bitvec![1, 0];
+    // data bits, MSB first
+    bits.extend((0..DATA_BITS).rev().map(|i| (n >> i) & 1 == 1));
+    // parity bit
+    bits.push(n.count_ones() % 2 == 1);
 
     bits
 }
@@ -147,5 +169,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encodes_bar() {}
+    fn encodes_and_decodes() {
+        let (width, height) = (640, 360);
+        let geometry = Geometry::new(width, height);
+        let frame_size = (width * height * 3 / 2) as usize;
+
+        for frame_number in [0, 1, 42, 12_345, MAX_FRAMES - 1, MAX_FRAMES + 7] {
+            let mut frame = vec![128; frame_size];
+            geometry.encode(&mut frame, frame_number);
+            assert_eq!(
+                geometry.decode(&frame).ok(),
+                Some(frame_number % MAX_FRAMES)
+            );
+        }
+
+        assert!(geometry.decode(&vec![128; frame_size]).is_err());
+    }
 }
