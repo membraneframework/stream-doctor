@@ -50,13 +50,19 @@ defmodule StreamDoctor.Probe.Video.Bar do
     end
 
     bar_height = square + 2 * pad
+    bar_top = height - bar_height
+
+    if bar_top < square do
+      raise "Video too short for the frame-number bar: " <>
+              "#{height}px available, #{bar_height + square}px needed"
+    end
 
     %{
       width: width,
       height: height,
       square: square,
       pad: pad,
-      bar_top: height - bar_height,
+      bar_top: bar_top,
       square_top: height - pad - square,
       xs: Enum.map(0..(@total_squares - 1), &(pad + &1 * (square + gap)))
     }

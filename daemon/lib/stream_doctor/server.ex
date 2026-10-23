@@ -8,6 +8,7 @@ defmodule StreamDoctor.Server do
   alias StreamDoctor.Collector
   alias StreamDoctor.HLS.Description
   alias StreamDoctor.Metric
+  alias StreamDoctor.OptionsParser.Input
 
   @hls_timeout 120_000
   @metric_specs [{Metric.AvDrift, []}]
@@ -16,7 +17,8 @@ defmodule StreamDoctor.Server do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec start_streamer(String.t(), String.t()) :: {:ok, map()} | {:error, :already_streaming}
+  @spec start_streamer(term(), String.t()) ::
+          {:ok, map()} | {:error, :already_streaming | {:invalid_input, String.t()}}
   def start_streamer(input, rtmp_url) do
     GenServer.call(__MODULE__, {:start_streamer, input, rtmp_url})
   end
@@ -59,17 +61,15 @@ defmodule StreamDoctor.Server do
 
   @impl true
   def handle_call({:start_streamer, input, rtmp_url}, _from, state) do
-    if state.streamer != nil and state.streamer.status == :streaming do
-      {:reply, {:error, :already_streaming}, state}
-    else
-      pid =
-        StreamDoctor.SenderPipeline.start_link(input, rtmp_url, on_live: self())
+    with :ok <- idle(state),
+         {:ok, parsed} <- parse_input(input) do
+      pid = StreamDoctor.SenderPipeline.start_link(parsed, rtmp_url, on_live: self())
 
       Process.monitor(pid)
 
       streamer = %{
         pid: pid,
-        input: input,
+        input: Input.summary(parsed),
         rtmp_url: rtmp_url,
         status: :streaming,
         error: nil,
@@ -77,6 +77,8 @@ defmodule StreamDoctor.Server do
       }
 
       {:reply, {:ok, streamer_summary(streamer)}, %{state | streamer: streamer}}
+    else
+      error -> {:reply, error, state}
     end
   end
 
@@ -267,6 +269,16 @@ defmodule StreamDoctor.Server do
 
   defp terminate_pipeline(entity) do
     %{entity | status: :stopped}
+  end
+
+  defp idle(%{streamer: %{status: :streaming}}), do: {:error, :already_streaming}
+  defp idle(_state), do: :ok
+
+  defp parse_input(input) do
+    case Input.parse(input) do
+      {:ok, parsed} -> {:ok, parsed}
+      {:error, reason} -> {:error, {:invalid_input, reason}}
+    end
   end
 
   defp streamer_summary(streamer) do
