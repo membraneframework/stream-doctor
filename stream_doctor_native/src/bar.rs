@@ -213,7 +213,10 @@ mod tests {
 
     #[test]
     fn rejects_frames_too_small_for_the_bar() {
-        assert_eq!(Geometry::new(100, 360).err(), Some(GeometryError::TooNarrow));
+        assert_eq!(
+            Geometry::new(100, 360).err(),
+            Some(GeometryError::TooNarrow)
+        );
         assert_eq!(Geometry::new(640, 10).err(), Some(GeometryError::TooShort));
     }
 }

@@ -19,8 +19,12 @@ fn geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, St
     Geometry::new(width, height)
         .map(|g| ResourceArc::new(GeometryResource(g)))
         .map_err(|e| match e {
-            GeometryError::TooNarrow => format!("video is too narrow for the frame-number bar: {width}px"),
-            GeometryError::TooShort => format!("video is too short for the frame-number bar: {height}px"),
+            GeometryError::TooNarrow => {
+                format!("video is too narrow for the frame-number bar: {width}px")
+            }
+            GeometryError::TooShort => {
+                format!("video is too short for the frame-number bar: {height}px")
+            }
         })
 }
 
