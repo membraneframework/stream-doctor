@@ -178,7 +178,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-stream_doctor_core/target
+stream_doctor_native/target
 daemon/native/*/target
 
 # End of https://www.gitignore.io/api/c,vim,linux,macos,elixir,windows,visualstudiocode

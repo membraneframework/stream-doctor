@@ -1,6 +1,6 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
-use stream_doctor_core::bar::max_frame as bar_max_frame;
-use stream_doctor_core::bar::{DecodingError, Geometry, GeometryError};
+use stream_doctor_native::bar::max_frame as bar_max_frame;
+use stream_doctor_native::bar::{DecodingError, Geometry, GeometryError};
 
 mod atoms {
     rustler::atoms! {

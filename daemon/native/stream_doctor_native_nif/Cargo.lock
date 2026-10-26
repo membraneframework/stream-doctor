@@ -120,18 +120,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-name = "stream_doctor_core"
+name = "stream_doctor_native"
 version = "0.1.0"
 dependencies = [
  "bitvec",
 ]
 
 [[package]]
-name = "stream_doctor_core_nif"
+name = "stream_doctor_native_nif"
 version = "0.1.0"
 dependencies = [
  "rustler",
- "stream_doctor_core",
+ "stream_doctor_native",
 ]
 
 [[package]]

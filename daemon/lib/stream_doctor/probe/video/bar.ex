@@ -1,7 +1,7 @@
 defmodule StreamDoctor.Probe.Video.Bar do
   @moduledoc false
 
-  use Rustler, otp_app: :stream_doctor, crate: :stream_doctor_core_nif
+  use Rustler, otp_app: :stream_doctor, crate: :stream_doctor_native_nif
 
   @opaque geometry :: reference()
 
