@@ -3,6 +3,7 @@
 //! are the frame number, highest bit first. The last square is a parity bit.
 //! Works only with I420 frames.
 
+use crate::DecodingError;
 use std::{array::from_fn, iter::zip};
 
 use bitvec::prelude::*;
@@ -36,14 +37,6 @@ pub enum GeometryError {
     TooNarrow(u32),
     /// The frame is too short to fit the bar. Carries the height it would need.
     TooShort(u32),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DecodingError {
-    /// There is no bar in this frame.
-    MarkersNotFound,
-    /// There is a bar, but the parity bit does not match. The frame is probably damaged.
-    ParityMismatch,
 }
 
 /// The frame number starts from zero again when it reaches this value.

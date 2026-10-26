@@ -1,5 +1,6 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
-use stream_doctor_native::bar::{self, DecodingError, Geometry, GeometryError};
+use stream_doctor_native::DecodingError;
+use stream_doctor_native::bar::{self, Geometry, GeometryError};
 use stream_doctor_native::tone::Tone;
 
 mod atoms {
