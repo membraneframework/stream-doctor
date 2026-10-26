@@ -20,6 +20,18 @@ defmodule StreamDoctor.Probe.ToneTest do
     end
   end
 
+  test "native encode round-trips through decode_window" do
+    tone = Tone.new(@sample_rate)
+    silence = :binary.copy(<<0::16>>, Tone.symbol_length(@sample_rate))
+
+    for symbol_number <- [0, 1, 42, 127, 130] do
+      window = silence |> Tone.encode(tone, symbol_number) |> to_floats()
+
+      assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
+               Tone.decode_window(window, @sample_rate)
+    end
+  end
+
   test "silence reports missing marker" do
     n = Tone.symbol_length(@sample_rate)
     silence = :binary.copy(<<0.0::float-64-little>>, n)

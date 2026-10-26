@@ -1,6 +1,6 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
-use stream_doctor_native::bar::max_frame as bar_max_frame;
-use stream_doctor_native::bar::{DecodingError, Geometry, GeometryError};
+use stream_doctor_native::bar::{self, DecodingError, Geometry, GeometryError};
+use stream_doctor_native::tone::Tone;
 
 mod atoms {
     rustler::atoms! {
@@ -14,8 +14,26 @@ struct GeometryResource(Geometry);
 #[rustler::resource_impl]
 impl Resource for GeometryResource {}
 
-#[rustler::nif(name = "geometry_native")]
-fn geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, String> {
+struct ToneResource(Tone);
+
+#[rustler::resource_impl]
+impl Resource for ToneResource {}
+
+fn copy<'a>(env: Env<'a>, payload: Binary<'a>) -> NewBinary<'a> {
+    let mut out = NewBinary::new(env, payload.len());
+    out.as_mut_slice().copy_from_slice(payload.as_slice());
+    out
+}
+
+fn decoding_error(error: DecodingError) -> Atom {
+    match error {
+        DecodingError::MarkersNotFound => atoms::markers_not_found(),
+        DecodingError::ParityMismatch => atoms::parity_mismatch(),
+    }
+}
+
+#[rustler::nif]
+fn bar_geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, String> {
     match Geometry::new(width, height) {
         Ok(g) => Ok(ResourceArc::new(GeometryResource(g))),
         Err(GeometryError::TooNarrow(needed)) => Err(format!(
@@ -28,29 +46,47 @@ fn geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, St
 }
 
 #[rustler::nif]
-fn max_frame() -> u32 {
-    bar_max_frame()
+fn bar_max_frame() -> u32 {
+    bar::max_frame()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn encode<'a>(
+fn bar_encode<'a>(
     env: Env<'a>,
     payload: Binary<'a>,
     geometry: &GeometryResource,
     frame_number: u32,
 ) -> Binary<'a> {
-    let mut out = NewBinary::new(env, payload.len());
-    out.as_mut_slice().copy_from_slice(payload.as_slice());
+    let mut out = copy(env, payload);
     geometry.0.encode(out.as_mut_slice(), frame_number);
     out.into()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn decode(payload: Binary, geometry: &GeometryResource) -> Result<u32, Atom> {
-    geometry.0.decode(payload.as_slice()).map_err(|e| match e {
-        DecodingError::MarkersNotFound => atoms::markers_not_found(),
-        DecodingError::ParityMismatch => atoms::parity_mismatch(),
-    })
+fn bar_decode(payload: Binary, geometry: &GeometryResource) -> Result<u32, Atom> {
+    geometry
+        .0
+        .decode(payload.as_slice())
+        .map_err(decoding_error)
 }
 
-rustler::init!("Elixir.StreamDoctor.Probe.Video.Bar");
+#[rustler::nif]
+fn tone_new(sample_rate: u32) -> ResourceArc<ToneResource> {
+    ResourceArc::new(ToneResource(Tone::new(sample_rate)))
+}
+
+#[rustler::nif(schedule = "DirtyCpu")]
+fn tone_encode<'a>(
+    env: Env<'a>,
+    payload: Binary<'a>,
+    tone: &ToneResource,
+    symbol_number: u32,
+) -> Binary<'a> {
+    let mut out = copy(env, payload);
+    // NewBinary is VM-allocated and word aligned, so the i16 view has no leftovers.
+    let (_, samples, _) = unsafe { out.as_mut_slice().align_to_mut::<i16>() };
+    tone.0.encode(samples, symbol_number);
+    out.into()
+}
+
+rustler::init!("Elixir.StreamDoctor.Native");

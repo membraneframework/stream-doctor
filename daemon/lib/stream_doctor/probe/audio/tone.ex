@@ -12,6 +12,17 @@ defmodule StreamDoctor.Probe.Audio.Tone do
 
   import Bitwise
 
+  alias StreamDoctor.Native
+
+  @opaque tone :: reference()
+
+  @spec new(pos_integer()) :: tone()
+  defdelegate new(sample_rate), to: Native, as: :tone_new
+
+  @doc "Mixes one symbol into a symbol-length buffer of mono s16le samples."
+  @spec encode(binary(), tone(), non_neg_integer()) :: binary()
+  defdelegate encode(payload, tone, symbol_number), to: Native, as: :tone_encode
+
   @symbol_ms 30
   @data_bits 7
   @max_symbol 1 <<< @data_bits
