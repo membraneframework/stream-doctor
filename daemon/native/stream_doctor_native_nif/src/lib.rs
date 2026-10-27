@@ -36,7 +36,7 @@ fn max_frame() -> u32 {
 fn encode<'a>(
     env: Env<'a>,
     payload: Binary<'a>,
-    geometry: ResourceArc<GeometryResource>,
+    geometry: &GeometryResource,
     frame_number: u32,
 ) -> Binary<'a> {
     let mut out = NewBinary::new(env, payload.len());
@@ -46,7 +46,7 @@ fn encode<'a>(
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn decode(payload: Binary, geometry: ResourceArc<GeometryResource>) -> Result<u32, Atom> {
+fn decode(payload: Binary, geometry: &GeometryResource) -> Result<u32, Atom> {
     geometry.0.decode(payload.as_slice()).map_err(|e| match e {
         DecodingError::MarkersNotFound => atoms::markers_not_found(),
         DecodingError::ParityMismatch => atoms::parity_mismatch(),

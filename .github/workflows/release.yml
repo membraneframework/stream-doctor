@@ -60,8 +60,6 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install erlang elixir xz
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: mlugg/setup-zig@v2
         with:
           version: ${{ env.ZIG_VERSION }}
