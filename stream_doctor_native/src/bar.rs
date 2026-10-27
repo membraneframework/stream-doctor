@@ -1,5 +1,5 @@
 //! A black bar at the bottom of the frame with `TOTAL_SQUARES` squares. The first square is white, the
-//! second is black. They show the decoder what white and black look like. The next 14 squares
+//! second is black. They show the decoder what white and black look like. The next `DATA_BITS` squares
 //! are the frame number, highest bit first. The last square is a parity bit.
 //! Works only with I420 frames.
 
@@ -32,10 +32,10 @@ pub struct Geometry {
 
 #[derive(Debug, PartialEq)]
 pub enum GeometryError {
-    /// The frame is too narrow to fit all squares. About 180 px is the minimum.
-    TooNarrow,
-    /// The frame is too short to fit the bar.
-    TooShort,
+    /// The frame is too narrow to fit all squares. Carries the width it would need.
+    TooNarrow(u32),
+    /// The frame is too short to fit the bar. Carries the height it would need.
+    TooShort(u32),
 }
 
 #[derive(Debug, PartialEq)]
@@ -60,11 +60,11 @@ impl Geometry {
 
         let needed_width = pad_width + TOTAL_SQUARES * (square_size + gap);
         if needed_width > width {
-            return Err(GeometryError::TooNarrow);
+            return Err(GeometryError::TooNarrow(needed_width));
         }
         let bar_height = square_size + 2 * pad_width;
         if bar_height > height {
-            return Err(GeometryError::TooShort);
+            return Err(GeometryError::TooShort(bar_height));
         }
 
         Ok(Geometry {
@@ -140,7 +140,7 @@ impl Geometry {
         if (data_bits.count_ones() % 2 != 0) != *parity_bit {
             Err(DecodingError::ParityMismatch)
         } else {
-            Ok(data_bits.iter().fold(0, |n, bit| (n << 1) | *bit as u32))
+            Ok(data_bits.load_be::<u32>())
         }
     }
 
@@ -179,11 +179,13 @@ fn generate_bits(frame_number: u32) -> BitVec {
     let n = frame_number % MAX_FRAME;
 
     //calibration bits
-    let mut bits = bitvec![1, 0];
+    let mut bits = bitvec![0; TOTAL_SQUARES as usize];
+    bits.set(0, true);
+    bits.set(1, false);
     // data bits, MSB first
-    bits.extend((0..DATA_BITS).rev().map(|i| (n >> i) & 1 == 1));
+    bits[2..(TOTAL_SQUARES - 2) as usize].store_be(n);
     // parity bit
-    bits.push(n.count_ones() % 2 == 1);
+    bits.set((TOTAL_SQUARES - 1) as usize, n.count_ones() % 2 == 1);
 
     bits
 }
@@ -213,10 +215,13 @@ mod tests {
 
     #[test]
     fn rejects_frames_too_small_for_the_bar() {
-        assert_eq!(
-            Geometry::new(100, 360).err(),
-            Some(GeometryError::TooNarrow)
-        );
-        assert_eq!(Geometry::new(640, 10).err(), Some(GeometryError::TooShort));
+        assert!(matches!(
+            Geometry::new(100, 360),
+            Err(GeometryError::TooNarrow(needed)) if needed > 100
+        ));
+        assert!(matches!(
+            Geometry::new(640, 10),
+            Err(GeometryError::TooShort(needed)) if needed > 10
+        ));
     }
 }

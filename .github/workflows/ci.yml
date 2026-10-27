@@ -28,14 +28,12 @@ jobs:
 
   rust:
     runs-on: ubuntu-latest
+    container: rust:latest
     defaults:
       run:
         working-directory: stream_doctor_native
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |

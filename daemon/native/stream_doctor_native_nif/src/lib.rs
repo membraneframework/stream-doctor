@@ -16,16 +16,15 @@ impl Resource for GeometryResource {}
 
 #[rustler::nif(name = "geometry_native")]
 fn geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, String> {
-    Geometry::new(width, height)
-        .map(|g| ResourceArc::new(GeometryResource(g)))
-        .map_err(|e| match e {
-            GeometryError::TooNarrow => {
-                format!("video is too narrow for the frame-number bar: {width}px")
-            }
-            GeometryError::TooShort => {
-                format!("video is too short for the frame-number bar: {height}px")
-            }
-        })
+    match Geometry::new(width, height) {
+        Ok(g) => Ok(ResourceArc::new(GeometryResource(g))),
+        Err(GeometryError::TooNarrow(needed)) => Err(format!(
+            "video is too narrow for the frame-number bar: {width}px, needs {needed}px"
+        )),
+        Err(GeometryError::TooShort(needed)) => Err(format!(
+            "video is too short for the frame-number bar: {height}px, needs {needed}px"
+        )),
+    }
 }
 
 #[rustler::nif]
