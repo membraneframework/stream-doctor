@@ -33,6 +33,7 @@ const routes: Record<string, (body: any) => object> = {
       metrics: {
         av_drift: { drift_ms: 12 },
         time_to_first_frame: { status: "measured", ms: 1_800 },
+        frame_order: { out_of_order: 0, max_depth: null, permutations: [] },
       },
       playlist: {
         variants: [
@@ -155,12 +156,14 @@ test("watch creates a viewer whose metrics and stop go through the API", async (
   assert.deepEqual(await viewer.metrics(), {
     av_drift: { drift_ms: 12 },
     time_to_first_frame: { status: "measured", ms: 1_800 },
+    frame_order: { out_of_order: 0, max_depth: null, permutations: [] },
   } as object);
   const done = await viewer.waitUntilDone({ intervalMs: 1 });
   assert.equal(done.hls_url, "http://cdn/index.m3u8");
   assert.deepEqual(await viewer.stop(), {
     av_drift: { drift_ms: 12 },
     time_to_first_frame: { status: "measured", ms: 1_800 },
+    frame_order: { out_of_order: 0, max_depth: null, permutations: [] },
   });
   await assert.rejects(viewer.status(), /HTTP 404/);
 });

@@ -41,10 +41,18 @@ export interface TimeToFirstFrame {
   ms: number | null;
 }
 
+/** How often decoded frame numbers went backwards, with the arrival order of the first few; meaningful only at a constant frame rate. */
+export interface FrameOrder {
+  out_of_order: number | null;
+  max_depth: number | null;
+  permutations: number[][];
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
   time_to_first_frame?: TimeToFirstFrame;
+  frame_order?: FrameOrder;
   error?: string;
 }
 

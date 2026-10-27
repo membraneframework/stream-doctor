@@ -10,7 +10,7 @@ defmodule StreamDoctor.Server do
   alias StreamDoctor.Metric
 
   @hls_timeout 120_000
-  @metric_specs [{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}]
+  @metric_specs [{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}, {Metric.FrameOrder, []}]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)

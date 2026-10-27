@@ -6,7 +6,11 @@ defmodule StreamDoctor.CollectorTest do
 
   test "folds reported events and serves reports" do
     {:ok, collector} =
-      Collector.start_link([{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}])
+      Collector.start_link([
+        {Metric.AvDrift, []},
+        {Metric.TimeToFirstFrame, []},
+        {Metric.FrameOrder, []}
+      ])
 
     for i <- 0..2 do
       Collector.event(
@@ -20,7 +24,10 @@ defmodule StreamDoctor.CollectorTest do
     Collector.event(collector, {:streamer_started, {:watching, 500}})
     Collector.event(collector, {:first_segment_seen, 1_700})
 
-    assert %{av_drift: %{drift_ms: 0}, time_to_first_frame: %{status: :measured, ms: 1_200}} =
-             Collector.report(collector)
+    assert %{
+             av_drift: %{drift_ms: 0},
+             time_to_first_frame: %{status: :measured, ms: 1_200},
+             frame_order: %{out_of_order: 0, permutations: []}
+           } = Collector.report(collector)
   end
 end
