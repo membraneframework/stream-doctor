@@ -3,27 +3,33 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic do
   Parses the settings of a synthetic input.
   """
 
-  alias StreamDoctor.OptionsParser.Validate
-
   alias StreamDoctor.OptionsParser.Input.Synthetic.{Audio, Video}
+  alias StreamDoctor.OptionsParser.Options
 
-  @type t :: %{video: Video.t(), audio: Audio.t(), duration: 1..86_400 | nil}
+  @type t :: %{video: Video.t(), audio: Audio.t(), duration: pos_integer() | nil}
 
-  @keys ~w(video audio duration)
+  @scope "synthetic"
 
-  @max_duration 86_400
+  @spec schema() :: keyword()
+  def schema do
+    [
+      video: [type: {:custom, __MODULE__, :object, []}, default: %{}],
+      audio: [type: {:custom, __MODULE__, :object, []}, default: %{}],
+      duration: [type: :pos_integer]
+    ]
+  end
 
-  @spec parse(map()) :: {:ok, t()} | {:error, String.t()}
+  @spec parse(term()) :: {:ok, t()} | {:error, String.t()}
   def parse(config) do
-    with :ok <- Validate.known_keys(config, @keys, "synthetic"),
-         {:ok, video} <- Video.parse(Map.get(config, "video", %{})),
-         {:ok, audio} <- Audio.parse(Map.get(config, "audio", %{})),
-         {:ok, duration} <-
-           Validate.optional_int(config, "duration", 1..@max_duration, "synthetic") do
-      {:ok, %{video: video, audio: audio, duration: duration}}
+    with {:ok, synthetic} <- Options.validate(config, schema(), @scope),
+         {:ok, video} <- Video.parse(synthetic.video),
+         {:ok, audio} <- Audio.parse(synthetic.audio) do
+      {:ok, %{video: video, audio: audio, duration: Map.get(synthetic, :duration)}}
     end
   end
 
-  @spec summary(t()) :: map()
-  def summary(config), do: put_in(config, [:video, :fps], Video.encode_fps(config.video.fps))
+  @doc false
+  @spec object(term()) :: {:ok, map()} | {:error, String.t()}
+  def object(value) when is_map(value), do: {:ok, value}
+  def object(value), do: {:error, "must be an object, got #{inspect(value)}"}
 end

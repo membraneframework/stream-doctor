@@ -26,7 +26,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic do
     child(:video_source, %VideoSource{
       width: config.video.width,
       height: config.video.height,
-      framerate: config.video.fps,
+      framerate: List.to_tuple(config.video.fps),
       duration: duration(config.duration)
     })
   end

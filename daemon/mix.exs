@@ -98,6 +98,7 @@ defmodule StreamDoctor.MixProject do
       {:membrane_http_adaptive_stream_plugin, "~> 0.21.3"},
       {:ex_m3u8, "~> 0.15.4"},
       {:membrane_aac_fdk_plugin, "~> 0.19.0", override: true},
+      {:nimble_options, "~> 1.1"},
       {:req, "~> 0.5"},
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.5"},

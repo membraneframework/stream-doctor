@@ -3,7 +3,7 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Audio do
   Parses the audio settings of a synthetic input.
   """
 
-  alias StreamDoctor.OptionsParser.Validate
+  alias StreamDoctor.OptionsParser.Options
 
   @type profile :: :mpeg4_lc | :mpeg2_lc
 
@@ -15,34 +15,25 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Audio do
           profile: profile()
         }
 
+  @scope "synthetic.audio"
+
   @profiles ~w(mpeg4_lc mpeg2_lc)a
 
   @sample_rates [12_000, 16_000, 24_000, 32_000, 44_100, 48_000, 64_000, 88_200]
 
-  @keys ~w(sample_rate bitrate profile)
-
-  @spec parse(term()) :: {:ok, t()} | {:error, String.t()}
-  def parse(config) when is_map(config) do
-    with :ok <- Validate.known_keys(config, @keys, "synthetic.audio"),
-         {:ok, sample_rate} <- sample_rate(config),
-         {:ok, bitrate} <-
-           Validate.optional_int(config, "bitrate", 8_000..512_000, "synthetic.audio"),
-         {:ok, profile} <- Validate.member(config, "profile", @profiles, "synthetic.audio") do
-      {:ok, %{sample_rate: sample_rate, bitrate: bitrate, profile: profile || :mpeg4_lc}}
-    end
+  @spec schema() :: keyword()
+  def schema do
+    [
+      sample_rate: [type: {:in, @sample_rates}, default: 48_000],
+      bitrate: [type: {:in, 8_000..512_000}],
+      profile: [type: {:in, @profiles}, default: :mpeg4_lc]
+    ]
   end
 
-  def parse(_other), do: {:error, "synthetic.audio must be an object"}
-
-  defp sample_rate(config) do
-    case Map.get(config, "sample_rate", 48_000) do
-      value when value in @sample_rates ->
-        {:ok, value}
-
-      value ->
-        {:error,
-         "synthetic.audio.sample_rate must be one of #{Validate.list(@sample_rates)}, " <>
-           "got #{inspect(value)}"}
+  @spec parse(term()) :: {:ok, t()} | {:error, String.t()}
+  def parse(config) do
+    with {:ok, audio} <- Options.validate(config, schema(), @scope) do
+      {:ok, Map.merge(%{bitrate: nil}, audio)}
     end
   end
 end

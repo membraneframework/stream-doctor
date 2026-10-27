@@ -31,7 +31,7 @@ defmodule StreamDoctor.Api do
         end
 
       _params ->
-        send_json(conn, 400, %{error: ~s(expected body {"input": "...", "rtmp_url": "..."})})
+        send_json(conn, 400, %{error: ~s(expected body {"input": {...}, "rtmp_url": "..."})})
     end
   end
 

@@ -124,7 +124,7 @@ then nothing is spawned.
 The TypeScript client above starts the binary for you. If you prefer to drive
 it directly, it listens on port 4040 (`PORT` to change it) and speaks JSON:
 
-* `POST /streamer` `{"input": "test.mp4", "rtmp_url": "rtmp://..."}`,
+* `POST /streamer` `{"input": {"file": "test.mp4"}, "rtmp_url": "rtmp://..."}`,
   `GET /streamer`, `DELETE /streamer`,
 * `POST /viewers` `{"hls_url": "https://....m3u8"}`, `GET /viewers/:id`,
   `DELETE /viewers/:id`,

@@ -1,28 +1,48 @@
 defmodule StreamDoctor.OptionsParser.Input do
   @moduledoc """
-  Parses what a streamer should send: a file to read, or a synthetic source to generate.
+  Turns the `input` field of a streamer request into what the sender pipeline needs to build
+  its ingest, rejecting anything it cannot honour before the pipeline starts.
   """
 
   alias StreamDoctor.OptionsParser.Input.Synthetic
-  alias StreamDoctor.OptionsParser.Validate
 
   @type t :: {:file, String.t()} | {:synthetic, Synthetic.t()}
 
+  @keys ~w(file synthetic)
+
   @spec parse(term()) :: {:ok, t()} | {:error, String.t()}
-  def parse(path) when is_binary(path), do: {:ok, {:file, path}}
+  def parse(%{"file" => _path, "synthetic" => _config}) do
+    {:error, "input takes either file or synthetic, not both"}
+  end
+
+  def parse(%{"file" => path} = input) when is_binary(path) do
+    with :ok <- known_keys(input) do
+      {:ok, {:file, path}}
+    end
+  end
 
   def parse(%{"synthetic" => config} = input) when is_map(config) do
-    with :ok <- Validate.known_keys(input, ["synthetic"], "input"),
+    with :ok <- known_keys(input),
          {:ok, synthetic} <- Synthetic.parse(config) do
       {:ok, {:synthetic, synthetic}}
     end
   end
 
   def parse(_other) do
-    {:error, ~s(input must be a file path or an object like {"synthetic": {}})}
+    {:error, ~s(input must be an object like {"file": "clip.mp4"} or {"synthetic": {}})}
   end
 
-  @spec summary(t()) :: String.t() | %{synthetic: Synthetic.t()}
-  def summary({:file, path}), do: path
-  def summary({:synthetic, config}), do: %{synthetic: Synthetic.summary(config)}
+  defp known_keys(input) do
+    case Map.keys(input) -- @keys do
+      [] ->
+        :ok
+
+      [key | _] ->
+        {:error, "input.#{key} is not a known setting; expected #{Enum.join(@keys, ", ")}"}
+    end
+  end
+
+  @spec summary(t()) :: %{file: String.t()} | %{synthetic: Synthetic.t()}
+  def summary({:file, path}), do: %{file: path}
+  def summary({:synthetic, config}), do: %{synthetic: config}
 end
