@@ -34,6 +34,7 @@ jobs:
         working-directory: stream_doctor_native
     steps:
       - uses: actions/checkout@v4
+      - run: rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
