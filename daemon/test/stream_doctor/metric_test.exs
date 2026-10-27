@@ -75,6 +75,97 @@ defmodule StreamDoctor.MetricTest do
     end
   end
 
+  describe "FrameOrder" do
+    defp frames(numbers) do
+      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      Enum.map(numbers, &{:video_frame_received, rem(&1, max), milliseconds(0)})
+    end
+
+    defp order(events), do: Metric.FrameOrder.report(run(Metric.FrameOrder, [], events))
+
+    test "frames arriving in order report no reordering" do
+      assert %{out_of_order: 0, max_depth: nil, permutations: []} = order(frames(0..99))
+    end
+
+    test "a swapped pair counts once" do
+      assert %{out_of_order: 1, max_depth: 1, permutations: [[12, 11, 13]]} =
+               order(frames([10, 12, 11, 13]))
+    end
+
+    test "a frame displaced over several others counts once, not once per frame it passed" do
+      assert %{out_of_order: 1, max_depth: 2, permutations: [[13, 11, 12, 14]]} =
+               order(frames([10, 13, 11, 12, 14]))
+    end
+
+    test "gaps are not reordering" do
+      assert %{out_of_order: 0, permutations: []} = order(frames([0, 1, 2, 50, 51]))
+    end
+
+    test "repeated numbers are not reordering" do
+      assert %{out_of_order: 0, permutations: []} = order(frames([5, 5, 6, 6, 7]))
+    end
+
+    test "an in-order run across the counter wrap reports nothing" do
+      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+
+      assert %{out_of_order: 0, max_depth: nil, permutations: []} = order(frames(0..(max + 500)))
+    end
+
+    test "reordering across the counter wrap is still detected" do
+      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+
+      unwrapped = [max, max - 1, max + 1]
+
+      assert %{out_of_order: 1, max_depth: 1, permutations: [^unwrapped]} =
+               order(frames([max - 2, max, max - 1, max + 1]))
+    end
+
+    test "decode order instead of display order shows up as a repeating permutation" do
+      assert %{
+               out_of_order: 3,
+               max_depth: 2,
+               permutations: [[3, 1, 2, 6], [6, 4, 5, 9], [9, 7, 8]]
+             } =
+               order(frames([0, 3, 1, 2, 6, 4, 5, 9, 7, 8]))
+    end
+
+    test "a reordering still open when the stream ends is still reported" do
+      assert %{permutations: [[13, 12]]} = order(frames([10, 11, 13, 12]))
+    end
+
+    test "a frame that jumped far ahead does not drag its distance into the permutation" do
+      assert %{max_depth: 99, permutations: [[102, 3, 103]]} =
+               order(frames([100, 101, 102, 3, 103, 104]))
+    end
+
+    test "the deepest descent is the one reported" do
+      assert %{out_of_order: 2, max_depth: 50} = order(frames([100, 90, 200, 150, 210]))
+    end
+
+    test "a frame without a pts still counts" do
+      events = [{:video_frame_received, 7, nil}, {:video_frame_received, 5, nil}]
+
+      assert %{out_of_order: 1, max_depth: 2} = order(events)
+    end
+
+    test "nothing is reported before the first frame" do
+      assert %{out_of_order: nil, max_depth: nil, permutations: []} = order([])
+      assert %{out_of_order: nil} = order([{:streamer_started, :missed}])
+    end
+
+    test "audio and lifecycle events leave the report alone" do
+      events = [
+        {:video_frame_received, 1, nil},
+        {:audio_symbol_received, 9, milliseconds(0)},
+        {:streamer_started, :missed},
+        {:first_segment_seen, 1},
+        {:video_frame_received, 2, nil}
+      ]
+
+      assert %{out_of_order: 0, permutations: []} = order(events)
+    end
+  end
+
   describe "TimeToFirstFrame" do
     defp ttff(events),
       do: Metric.TimeToFirstFrame.report(run(Metric.TimeToFirstFrame, [], events))

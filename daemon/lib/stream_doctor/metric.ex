@@ -19,6 +19,25 @@ defmodule StreamDoctor.Metric do
     System.monotonic_time(:millisecond)
   end
 
+  @doc """
+  Lifts a wrapped counter into the epoch of the previous value, assuming consecutive values
+  differ by less than half of `max`.
+  """
+  @spec unwrap(non_neg_integer(), integer() | nil, pos_integer()) :: integer()
+  def unwrap(value, nil, _max) do
+    value
+  end
+
+  def unwrap(value, last, max) do
+    candidate = Integer.floor_div(last, max) * max + value
+
+    cond do
+      candidate < last - div(max, 2) -> candidate + max
+      candidate > last + div(max, 2) -> candidate - max
+      true -> candidate
+    end
+  end
+
   @doc "Key under which `report/1` results appear in summaries."
   @callback name() :: atom()
 
