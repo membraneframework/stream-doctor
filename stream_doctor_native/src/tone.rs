@@ -92,7 +92,12 @@ impl Tone {
         parity_score + 2 * sequence_score
     }
 
-    pub fn decode(&self, window: &[u8]) -> Result<u32, DecodingError> {}
+    pub fn decode(&self, window: &[u8]) -> Result<u32, DecodingError> {
+        let margin = self.symbol_length / 6;
+        let inner_n = self.symbol_length - 2 * margin;
+        let inner = &window[(margin * 8) as usize..((margin + inner_n) * 8) as usize];
+        let power = |freq| goertzel_power(inner, inner_n, freq, self.sample_rate);
+    }
 }
 
 fn generate_bits(symbol_number: u32) -> BitVec {
@@ -108,9 +113,8 @@ fn generate_bits(symbol_number: u32) -> BitVec {
     bits
 }
 fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
-    let is_best = |&(_, score_value)| score_value == best_score_value;
+    let is_best = |&(_, score_value): &(u32, u32)| score_value == best_score_value;
     let rotation = scores.iter().position(|score| !is_best(score)).unwrap_or(0);
-
     scores.rotate_left(rotation);
     let plateau = scores
         .chunk_by(|a, b| is_best(a) == is_best(b))
@@ -120,3 +124,5 @@ fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
 
     plateau[plateau.len() / 2].0
 }
+
+fn groetzel_power(samples: &[u8], n: u32, freq: u32, sample_rate: u32) {}
