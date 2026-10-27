@@ -19,7 +19,7 @@ Automated end-to-end testing for video infrastructure.
 > **Status: early proof of concept.** This repository shows the core idea
 > working on a single RTMP to HLS scenario with a single metric, the
 > audio/video drift. It is a preview of the approach, not a finished product.
-> The planned scope, including synthetic sources, a wider set of metrics,
+> The planned scope, including a wider set of metrics,
 > chaos testing (packet loss, bandwidth limits, jitter), more ingest and
 > playback protocols, and SDKs for popular test runners, is described in
 > [issue #1](https://github.com/membraneframework/stream-doctor/issues/1).
@@ -85,7 +85,7 @@ playback URL your product exposes:
 import * as stream_doc from "stream-doctor";
 
 const session = await stream_doc.session(); // spawns the bundled daemon on a free port
-const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
+const streamer = session.publish(rtmpUrl, { synthetic: {} }); // or { file: "clip.mp4" }
 await streamer.waitUntilLive();
 
 const viewer = await session.watch(hlsUrl);
@@ -98,6 +98,24 @@ expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50); // any test runner
 The stream carries markers in both audio and video that identify each moment
 of the source. Because a viewer can recover the original position from what
 it receives, it can measure exactly what the pipeline did to the stream.
+
+A synthetic source needs no media of your own: the daemon generates both tracks
+and marks them. `{ synthetic: {} }` gives 640x360 at 30 fps, 48 kHz mono AAC,
+and a stream that never ends. Every setting below is optional:
+
+* `video`: `width` and `height` (even, 2..7680 and 2..4320, together large
+  enough to carry the frame-number bar), `fps` (1..240, or
+  `[numerator, denominator]` for rates like `[30000, 1001]`), `gop_size`
+  (defaults to two seconds' worth), `profile` (`baseline`, `main`, `high`),
+  `crf` (0..63) and `bitrate` in bit/s (1000..50000000, applied as whole
+  kbit/s). Passing both `crf` and `bitrate` lets the bitrate win.
+* `audio`: `sample_rate` (12000, 16000, 24000, 32000, 44100, 48000, 64000 or
+  88200), `bitrate` in bit/s (8000..512000) and `profile` (`mpeg4_lc` or
+  `mpeg2_lc`).
+* `duration`: seconds to stream; omitted means it never ends.
+
+A `GET /streamer` reports the settings as the daemon resolved them, with every
+default filled in, so a test can assert on what it actually got.
 
 To try it against a local pipeline, start one of the examples (they need
 ffmpeg and python3):
@@ -124,7 +142,8 @@ then nothing is spawned.
 The TypeScript client above starts the binary for you. If you prefer to drive
 it directly, it listens on port 4040 (`PORT` to change it) and speaks JSON:
 
-* `POST /streamer` `{"input": {"file": "test.mp4"}, "rtmp_url": "rtmp://..."}`,
+* `POST /streamer` `{"input": {"synthetic": {}}, "rtmp_url": "rtmp://..."}` or
+  `{"input": {"file": "clip.mp4"}, ...}`,
   `GET /streamer`, `DELETE /streamer`,
 * `POST /viewers` `{"hls_url": "https://....m3u8"}`, `GET /viewers/:id`,
   `DELETE /viewers/:id`,
