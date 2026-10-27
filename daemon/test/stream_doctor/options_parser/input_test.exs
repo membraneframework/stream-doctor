@@ -112,9 +112,34 @@ defmodule StreamDoctor.OptionsParser.InputTest do
       assert message =~ "invalid value for :duration option: expected positive integer"
     end
 
+    test "a string in a numeric setting is rejected without walking its range" do
+      bad = %{"synthetic" => %{"video" => %{"bitrate" => "4M"}}}
+      Input.parse(bad)
+
+      {microseconds, {:error, message}} = :timer.tc(fn -> Input.parse(bad) end)
+
+      assert message =~ "invalid value for :bitrate option"
+      assert microseconds < 50_000
+    end
+
+    test "gop size is bounded by what the encoder NIF takes as a C int" do
+      assert {:ok, {:synthetic, %{video: %{gop_size: 2_147_483_647}}}} =
+               Input.parse(%{"synthetic" => %{"video" => %{"gop_size" => 2_147_483_647}}})
+
+      assert {:error, message} =
+               Input.parse(%{"synthetic" => %{"video" => %{"gop_size" => 2_147_483_648}}})
+
+      assert message =~ "invalid value for :gop_size option: expected one of 1..2147483647"
+    end
+
     test "crf and bitrate may both be given" do
       assert {:ok, {:synthetic, %{video: %{crf: 23, bitrate: 400_000}}}} =
                Input.parse(%{"synthetic" => %{"video" => %{"crf" => 23, "bitrate" => 400_000}}})
+    end
+
+    test "a wrong type names the field that is wrong, not the whole input" do
+      assert {:error, "synthetic must be an object"} = Input.parse(%{"synthetic" => true})
+      assert {:error, "input.file must be a string"} = Input.parse(%{"file" => 42})
     end
 
     test "anything that names neither a file nor a synthetic config is rejected" do

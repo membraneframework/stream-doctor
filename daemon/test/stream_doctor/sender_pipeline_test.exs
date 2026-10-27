@@ -22,6 +22,26 @@ defmodule StreamDoctor.SenderPipelineTest do
     pid
   end
 
+  defp video_encoder(settings) do
+    {:ok, {:synthetic, config}} = Input.parse(%{"synthetic" => %{"video" => settings}})
+
+    %{video: %Membrane.ChildrenSpec.Builder{children: children}} =
+      config |> Ingest.Synthetic.tracks() |> Processing.tracks(config)
+
+    Enum.find_value(children, fn {name, struct, _opts} -> name == :encoder && struct end)
+  end
+
+  test "video settings reach the encoder, with the bitrate rounded to whole kbit/s" do
+    assert %{crf: 18, gop_size: 15, ffmpeg_params: %{"x264-params" => "bitrate=2"}} =
+             video_encoder(%{"crf" => 18, "gop_size" => 15, "bitrate" => 1_500})
+
+    assert %{ffmpeg_params: %{"x264-params" => "bitrate=400"}} =
+             video_encoder(%{"bitrate" => 400_000})
+
+    assert %{ffmpeg_params: params} = video_encoder(%{})
+    assert params == %{}
+  end
+
   test "a synthetic source reaches the sink as encoded video and audio" do
     pid = start(%{"video" => %{"width" => 320, "height" => 240}})
 

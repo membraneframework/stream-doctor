@@ -57,7 +57,7 @@ defmodule StreamDoctor.SenderPipeline.Processing do
 
   # the element always sets crf, which outranks a plain bitrate; x264-params is applied after it
   defp x264_params(nil), do: %{}
-  defp x264_params(bitrate), do: %{"x264-params" => "bitrate=#{div(bitrate, 1000)}"}
+  defp x264_params(bitrate), do: %{"x264-params" => "bitrate=#{round(bitrate / 1000)}"}
 
   defp override(struct, _key, nil), do: struct
   defp override(struct, key, value), do: Map.put(struct, key, value)

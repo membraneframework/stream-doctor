@@ -12,7 +12,7 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
           width: 2..7680,
           height: 2..4320,
           fps: [pos_integer()],
-          gop_size: pos_integer(),
+          gop_size: 1..2_147_483_647,
           profile: profile() | nil,
           crf: 0..63 | nil,
           bitrate: 1_000..50_000_000 | nil
@@ -26,8 +26,8 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
 
   @gop_seconds 2
 
-  # the H264 encoder passes the framerate to the NIF as a pair of C ints
-  @max_timebase 2_147_483_647
+  # the H264 encoder passes gop_size and the framerate pair to the NIF as C ints
+  @nif_int_max 2_147_483_647
 
   # the generator emits 8-bit I420, so the 10-bit and 4:2:2/4:4:4 profiles would encode as high
   @profiles ~w(baseline main high)a
@@ -38,7 +38,7 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
       width: [type: {:custom, __MODULE__, :dimension, [@max_width]}, default: 640],
       height: [type: {:custom, __MODULE__, :dimension, [@max_height]}, default: 360],
       fps: [type: {:custom, __MODULE__, :framerate, []}, default: 30],
-      gop_size: [type: :pos_integer],
+      gop_size: [type: {:in, 1..@nif_int_max}],
       profile: [type: {:in, @profiles}],
       crf: [type: {:in, 0..63}],
       bitrate: [type: {:in, 1_000..50_000_000}]
@@ -72,8 +72,8 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
   end
 
   def framerate([num, den]) when is_integer(num) and is_integer(den) do
-    if den > 0 and num >= den and num <= @max_fps * den and num <= @max_timebase and
-         den <= @max_timebase,
+    if den > 0 and num >= den and num <= @max_fps * den and num <= @nif_int_max and
+         den <= @nif_int_max,
        do: {:ok, [num, den]},
        else: framerate_error([num, den])
   end

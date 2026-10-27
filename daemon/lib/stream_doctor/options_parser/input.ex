@@ -21,12 +21,14 @@ defmodule StreamDoctor.OptionsParser.Input do
     end
   end
 
-  def parse(%{"synthetic" => config} = input) when is_map(config) do
+  def parse(%{"synthetic" => config} = input) do
     with :ok <- known_keys(input),
          {:ok, synthetic} <- Synthetic.parse(config) do
       {:ok, {:synthetic, synthetic}}
     end
   end
+
+  def parse(%{"file" => _other}), do: {:error, "input.file must be a string"}
 
   def parse(_other) do
     {:error, ~s(input must be an object like {"file": "clip.mp4"} or {"synthetic": {}})}

@@ -33,7 +33,7 @@ defmodule StreamDoctor.OptionsParser.Options do
 
   defp known(schema), do: Enum.map_join(schema, ", ", &elem(&1, 0))
 
-  defp coerce(value, {:in, choices}) when is_binary(value) do
+  defp coerce(value, {:in, choices}) when is_binary(value) and is_list(choices) do
     Enum.find(choices, value, &(is_atom(&1) and Atom.to_string(&1) == value))
   end
 
