@@ -47,12 +47,16 @@ pub enum DecodingError {
 }
 
 /// The frame number starts from zero again when it reaches this value.
+#[must_use]
 pub fn max_frame() -> u32 {
     MAX_FRAME
 }
 
 impl Geometry {
     /// Computes the bar layout for a frame of this size.
+    ///
+    /// # Errors
+    /// Fails when the frame is too small to fit the bar.
     pub fn new(width: u32, height: u32) -> Result<Self, GeometryError> {
         let square_size = round_to_even((width / 24).max(8));
         let gap = round_to_even((square_size / 4).max(2));
@@ -115,6 +119,9 @@ impl Geometry {
     }
 
     /// Reads the frame number from the bar on the frame.
+    ///
+    /// # Errors
+    /// Fails when the markers are missing or the parity bit does not match.
     pub fn decode(&self, binary: &[u8]) -> Result<u32, DecodingError> {
         let y_size = (self.width * self.height) as usize;
         let y_plane = &binary[..y_size];
@@ -127,20 +134,20 @@ impl Geometry {
             return Err(DecodingError::MarkersNotFound);
         }
 
-        let threshold = (white_reference + black_reference) / 2.0;
+        let threshold = f32::midpoint(white_reference, black_reference);
         let bits: BitVec = square_luma_averages
             .iter()
             .map(|&v| v > threshold)
             .collect();
 
-        let parity_bit = bits.last().unwrap();
+        let parity_bit = bits[(TOTAL_SQUARES - 1) as usize];
 
         let data_bits = &bits[2..(TOTAL_SQUARES - 1) as usize];
 
-        if (data_bits.count_ones() % 2 != 0) != *parity_bit {
-            Err(DecodingError::ParityMismatch)
-        } else {
+        if (data_bits.count_ones() % 2 != 0) == parity_bit {
             Ok(data_bits.load_be::<u32>())
+        } else {
+            Err(DecodingError::ParityMismatch)
         }
     }
 
@@ -166,7 +173,7 @@ impl Geometry {
                 let start = row * self.width + x0;
                 let sum: u32 = y_plane[start as usize..(start + side) as usize]
                     .iter()
-                    .map(|x| *x as u32)
+                    .map(|x| u32::from(*x))
                     .sum();
                 sum as f32 / side as f32
             })
@@ -183,7 +190,7 @@ fn generate_bits(frame_number: u32) -> BitVec {
     bits.set(0, true);
     bits.set(1, false);
     // data bits, MSB first
-    bits[2..(TOTAL_SQUARES - 2) as usize].store_be(n);
+    bits[2..(TOTAL_SQUARES - 1) as usize].store_be(n);
     // parity bit
     bits.set((TOTAL_SQUARES - 1) as usize, n.count_ones() % 2 == 1);
 
