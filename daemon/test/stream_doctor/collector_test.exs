@@ -5,7 +5,8 @@ defmodule StreamDoctor.CollectorTest do
   alias StreamDoctor.Metric
 
   test "folds reported events and serves reports" do
-    {:ok, collector} = Collector.start_link([{Metric.AvDrift, []}])
+    {:ok, collector} =
+      Collector.start_link([{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}])
 
     for i <- 0..2 do
       Collector.event(
@@ -16,6 +17,10 @@ defmodule StreamDoctor.CollectorTest do
 
     Collector.event(collector, {:audio_symbol_received, 1, Membrane.Time.milliseconds(30)})
 
-    assert %{av_drift: %{drift_ms: 0}} = Collector.report(collector)
+    Collector.event(collector, {:streamer_started, {:watching, 500}})
+    Collector.event(collector, {:first_segment_seen, 1_700})
+
+    assert %{av_drift: %{drift_ms: 0}, time_to_first_frame: %{status: :measured, ms: 1_200}} =
+             Collector.report(collector)
   end
 end

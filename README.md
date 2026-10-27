@@ -17,8 +17,8 @@
 Automated end-to-end testing for video infrastructure.
 
 > **Status: early proof of concept.** This repository shows the core idea
-> working on a single RTMP to HLS scenario with a single metric, the
-> audio/video drift. It is a preview of the approach, not a finished product.
+> working on a single RTMP to HLS scenario with a handful of metrics. It is a
+> preview of the approach, not a finished product.
 > The planned scope, including synthetic sources, a wider set of metrics,
 > chaos testing (packet loss, bandwidth limits, jitter), more ingest and
 > playback protocols, and SDKs for popular test runners, is described in
@@ -85,15 +85,26 @@ playback URL your product exposes:
 import * as stream_doc from "stream-doctor";
 
 const session = await stream_doc.session(); // spawns the bundled daemon on a free port
+const viewer = await session.watch(hlsUrl); // returns at once, then waits for the playlist
+
 const streamer = session.publish(rtmpUrl, { file: "test.mp4" });
 await streamer.waitUntilLive();
-
-const viewer = await session.watch(hlsUrl);
 // ... let it measure ...
 const metrics = await viewer.stop();
 
-expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50); // any test runner's assertion
+expect(metrics.av_drift.drift_ms).not.toBeNull(); // any test runner's assertion
+expect(metrics.time_to_first_frame.status).toBe("measured");
+
+expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50);
+expect(metrics.time_to_first_frame.ms).toBeLessThan(5000);
 ```
+
+Both metrics report null until they have something to say, so the checks above
+ask whether there is a measurement before comparing it.
+
+Watching before publishing is what lets `time_to_first_frame` be measured: the
+moment a segment becomes available leaves no trace to read afterwards, so a
+viewer attached later reports `attached_late` instead of a number.
 
 The stream carries markers in both audio and video that identify each moment
 of the source. Because a viewer can recover the original position from what
