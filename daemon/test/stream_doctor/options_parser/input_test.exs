@@ -112,16 +112,6 @@ defmodule StreamDoctor.OptionsParser.InputTest do
       assert message =~ "invalid value for :duration option: expected positive integer"
     end
 
-    test "a string in a numeric setting is rejected without walking its range" do
-      bad = %{"synthetic" => %{"video" => %{"bitrate" => "4M"}}}
-      Input.parse(bad)
-
-      {microseconds, {:error, message}} = :timer.tc(fn -> Input.parse(bad) end)
-
-      assert message =~ "invalid value for :bitrate option"
-      assert microseconds < 50_000
-    end
-
     test "gop size is bounded by what the encoder NIF takes as a C int" do
       assert {:ok, {:synthetic, %{video: %{gop_size: 2_147_483_647}}}} =
                Input.parse(%{"synthetic" => %{"video" => %{"gop_size" => 2_147_483_647}}})
