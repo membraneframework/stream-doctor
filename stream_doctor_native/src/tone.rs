@@ -1,6 +1,5 @@
 use crate::DecodingError;
-use itertools::Itertools;
-use std::{collections, f32::consts::PI};
+use std::f32::consts::PI;
 
 use bitvec::prelude::*;
 
@@ -13,6 +12,10 @@ const FREQS: [u32; 9] = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500];
 
 const AMPLITUDE: f32 = 3000.0;
 const SOURCE_GAIN: f32 = 0.5;
+
+const GUARD_OFFSET: u32 = 250;
+const LOCAL_CONTRAST: f64 = 8.0;
+const REF_FLOOR: f64 = 0.01;
 
 const MIN_SCORE: u32 = 10;
 const SCAN_SYMBOLS: u32 = 6;
@@ -73,7 +76,7 @@ impl Tone {
 
     fn alignment_score(&self, samples: &[u8], offset: u32) -> u32 {
         let symbol_bytes = (self.symbol_length * 8) as usize;
-        let results: Vec<Result<u32, DecodingError>> = (&samples)[(offset * 8) as usize..]
+        let results: Vec<Result<u32, DecodingError>> = samples[(offset * 8) as usize..]
             .chunks_exact(symbol_bytes)
             .take(SCAN_SYMBOLS as usize)
             .map(|window| self.decode(window))
@@ -97,6 +100,28 @@ impl Tone {
         let inner_n = self.symbol_length - 2 * margin;
         let inner = &window[(margin * 8) as usize..((margin + inner_n) * 8) as usize];
         let power = |freq| goertzel_power(inner, inner_n, freq, self.sample_rate);
+        let local_noise = |freq: u32| power(freq - GUARD_OFFSET).max(power(freq + GUARD_OFFSET));
+
+        let ref_power = power(FREQS[0]);
+        if ref_power < LOCAL_CONTRAST * local_noise(FREQS[0]).max(1.0e-9) {
+            return Err(DecodingError::MarkersNotFound);
+        }
+
+        let bits: Vec<u32> = FREQS[1..]
+            .iter()
+            .map(|&freq| {
+                let tone_power = power(freq);
+                let on = tone_power > LOCAL_CONTRAST * local_noise(freq)
+                    && tone_power > REF_FLOOR * ref_power;
+                on as u32
+            })
+            .collect();
+        let (data, parity) = bits.split_at(DATA_BITS as usize);
+
+        if data.iter().sum::<u32>() % 2 != parity[0] {
+            return Err(DecodingError::ParityMismatch);
+        }
+        Ok(data.iter().fold(0, |acc, bit| acc * 2 + bit))
     }
 }
 
@@ -125,4 +150,48 @@ fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
     plateau[plateau.len() / 2].0
 }
 
-fn groetzel_power(samples: &[u8], n: u32, freq: u32, sample_rate: u32) {}
+fn goertzel_power(samples: &[u8], n: u32, freq: u32, sample_rate: u32) -> f64 {
+    let k = ((freq * n) as f64 / sample_rate as f64).round();
+    let omega: f64 = 2.0 * PI as f64 * k / n as f64;
+    let coeff = 2.0 * f64::cos(omega);
+    let (s1, s2) = goertzel_loop(samples, coeff);
+    s1 * s1 + s2 * s2 - coeff * s1 * s2
+}
+
+fn goertzel_loop(samples: &[u8], coeff: f64) -> (f64, f64) {
+    let mut s1 = 0.0;
+    let mut s2 = 0.0;
+    for sample in samples.as_chunks::<8>().0 {
+        let sample = f64::from_le_bytes(*sample);
+        let tmp = s1;
+        s1 = sample + coeff * s1 - s2;
+        s2 = tmp;
+    }
+    (s1, s2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_round_trip() {
+        let tone = Tone::new(48_000);
+        for symbol in [0, 1, 42, 127] {
+            let mut samples = vec![0i16; tone.symbol_length as usize];
+            tone.encode(&mut samples, symbol);
+            let window: Vec<u8> = samples
+                .iter()
+                .flat_map(|s| (*s as f64).to_le_bytes())
+                .collect();
+            assert_eq!(tone.decode(&window), Ok(symbol));
+        }
+    }
+
+    #[test]
+    fn decode_silence_is_not_a_marker() {
+        let tone = Tone::new(48_000);
+        let window = vec![0u8; tone.symbol_length as usize * 8];
+        assert_eq!(tone.decode(&window), Err(DecodingError::MarkersNotFound));
+    }
+}
