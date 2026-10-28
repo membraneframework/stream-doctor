@@ -91,20 +91,6 @@ fn tone_symbol_length(tone: &ToneResource) -> u32 {
     tone.0.symbol_length()
 }
 
-#[rustler::nif(schedule = "DirtyCpu")]
-fn tone_encode<'a>(
-    env: Env<'a>,
-    payload: Binary<'a>,
-    tone: &ToneResource,
-    symbol_number: u32,
-) -> Binary<'a> {
-    let mut out = copy(env, payload);
-    // NewBinary is VM-allocated and word aligned, so the i16 view has no leftovers.
-    let (_, samples, _) = unsafe { out.as_mut_slice().align_to_mut::<i16>() };
-    tone.0.encode(samples, symbol_number);
-    out.into()
-}
-
 // Erlang sub-binaries are not guaranteed to be aligned, so copy instead of align_to.
 fn i16_samples(payload: Binary) -> Vec<i16> {
     payload
@@ -114,6 +100,28 @@ fn i16_samples(payload: Binary) -> Vec<i16> {
         .iter()
         .map(|bytes| i16::from_le_bytes(*bytes))
         .collect()
+}
+
+#[rustler::nif(schedule = "DirtyCpu")]
+fn tone_encode<'a>(
+    env: Env<'a>,
+    payload: Binary<'a>,
+    tone: &ToneResource,
+    symbol_number: u32,
+) -> Binary<'a> {
+    let mut samples = i16_samples(payload);
+    tone.0.encode(&mut samples, symbol_number);
+    let mut out = NewBinary::new(env, payload.len());
+    for (bytes, sample) in out
+        .as_mut_slice()
+        .as_chunks_mut::<2>()
+        .0
+        .iter_mut()
+        .zip(&samples)
+    {
+        *bytes = sample.to_le_bytes();
+    }
+    out.into()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
