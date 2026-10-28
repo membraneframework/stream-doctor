@@ -1,12 +1,6 @@
 defmodule StreamDoctor.Probe.Audio.Tone do
   @moduledoc false
 
-  # Audio marker: 30 ms symbols, number wraps at 128. 500 Hz = always-on ref,
-  # 1000..4000 Hz = 7 bits MSB first, 4500 Hz = parity. All multiples of
-  # 33.3 Hz so symbols toggle without clicks. Decoding = Goertzel over the
-  # inner 2/3 of the window, each tone judged against the guard bins ±250 Hz
-  # around it (local SNR, survives spectral tilt from codecs).
-
   alias StreamDoctor.Native
 
   @opaque tone :: reference()
