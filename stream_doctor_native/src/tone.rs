@@ -33,6 +33,10 @@ impl Tone {
         }
     }
 
+    pub fn symbol_length(&self) -> u32 {
+        self.symbol_length
+    }
+
     pub fn encode(&self, samples: &mut [i16], symbol_number: u32) {
         let bits = generate_bits(symbol_number);
         let active_freqs: Vec<f32> = FREQS
@@ -122,6 +126,14 @@ impl Tone {
         }
         Ok(data.iter().fold(0, |acc, bit| acc * 2 + bit))
     }
+}
+
+pub fn max_symbol() -> u32 {
+    MAX_SYMBOL
+}
+
+pub fn symbol_ms() -> u32 {
+    SYMBOL_MS
 }
 
 fn generate_bits(symbol_number: u32) -> BitVec {

@@ -1,7 +1,7 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
 use stream_doctor_native::DecodingError;
 use stream_doctor_native::bar::{self, Geometry, GeometryError};
-use stream_doctor_native::tone::Tone;
+use stream_doctor_native::tone::{self, Tone};
 
 mod atoms {
     rustler::atoms! {
@@ -74,6 +74,21 @@ fn bar_decode(payload: Binary, geometry: &GeometryResource) -> Result<u32, Atom>
 #[rustler::nif]
 fn tone_new(sample_rate: u32) -> ResourceArc<ToneResource> {
     ResourceArc::new(ToneResource(Tone::new(sample_rate)))
+}
+
+#[rustler::nif]
+fn tone_max_symbol() -> u32 {
+    tone::max_symbol()
+}
+
+#[rustler::nif]
+fn tone_symbol_ms() -> u32 {
+    tone::symbol_ms()
+}
+
+#[rustler::nif]
+fn tone_symbol_length(tone: &ToneResource) -> u32 {
+    tone.0.symbol_length()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
