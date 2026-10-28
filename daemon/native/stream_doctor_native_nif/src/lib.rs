@@ -90,4 +90,17 @@ fn tone_encode<'a>(
     out.into()
 }
 
+#[rustler::nif(schedule = "DirtyCpu")]
+fn tone_find_alignment(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
+    // Erlang sub-binaries are not guaranteed to be 8-byte aligned, so copy instead of align_to.
+    let samples: Vec<f64> = payload
+        .as_slice()
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|bytes| f64::from_le_bytes(*bytes))
+        .collect();
+    tone.0.find_alignment(&samples).map_err(decoding_error)
+}
+
 rustler::init!("Elixir.StreamDoctor.Native");

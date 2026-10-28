@@ -32,6 +32,29 @@ defmodule StreamDoctor.Probe.ToneTest do
     end
   end
 
+  test "find_alignment recovers the symbol boundary" do
+    symbol_length = Tone.symbol_length(@sample_rate)
+    offset = div(symbol_length, 3)
+    silence = :binary.copy(<<0::16>>, offset)
+
+    symbols =
+      Enum.map(
+        100..(100 + Tone.alignment_buffer_symbols()),
+        &Tone.symbol_samples(&1, @sample_rate)
+      )
+
+    buffer = to_floats(IO.iodata_to_binary([silence | symbols]))
+
+    assert {:ok, found} = Tone.find_alignment(buffer, @sample_rate)
+    assert abs(found - offset) <= div(symbol_length, 16)
+
+    assert :error ==
+             Tone.find_alignment(
+               to_floats(:binary.copy(<<0::16>>, div(byte_size(buffer), 8))),
+               @sample_rate
+             )
+  end
+
   test "silence reports missing marker" do
     n = Tone.symbol_length(@sample_rate)
     silence = :binary.copy(<<0.0::float-64-little>>, n)
