@@ -78,7 +78,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   end
 
   defp process(state) do
-    symbol_bytes = Tone.symbol_length(state.format.sample_rate) * 2
+    symbol_bytes =
+      RawAudio.frames_to_bytes(Tone.symbol_length(state.format.sample_rate), state.format)
 
     cond do
       not state.synced? and
@@ -97,8 +98,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     case Tone.find_alignment(state.buffer, state.format.sample_rate) do
       {:ok, offset} ->
         Membrane.Logger.debug("Audio marker alignment found at offset #{offset}")
-        rest_size = byte_size(state.buffer) - offset * 2
-        %{state | buffer: binary_part(state.buffer, offset * 2, rest_size), synced?: true}
+        offset_bytes = RawAudio.frames_to_bytes(offset, state.format)
+        rest_size = byte_size(state.buffer) - offset_bytes
+        %{state | buffer: binary_part(state.buffer, offset_bytes, rest_size), synced?: true}
 
       :error ->
         rest_size = byte_size(state.buffer) - symbol_bytes
