@@ -1,0 +1,3 @@
+[workspace]
+resolver = "3"
+members = ["stream_doctor_native", "daemon/native/stream_doctor_native_nif"]

@@ -29,22 +29,13 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     container: rust:latest
-    defaults:
-      run:
-        working-directory: stream_doctor_native
     steps:
       - uses: actions/checkout@v4
       - run: rustup component add rustfmt clippy
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            stream_doctor_native
-            daemon/native/stream_doctor_native_nif
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
-      - run: cargo clippy --manifest-path ../daemon/native/stream_doctor_native_nif/Cargo.toml -- -D warnings
-      - run: cargo fmt --check --manifest-path ../daemon/native/stream_doctor_native_nif/Cargo.toml
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
 
   # the membraneframework/membrane_actions reusable workflows assume the mix
   # project at the repository root, so their steps are inlined here
