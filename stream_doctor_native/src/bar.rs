@@ -84,10 +84,14 @@ impl Geometry {
     /// Draws the bar with `frame_number` on the frame. Changes `binary` in place.
     ///
     /// Numbers bigger than [`max_frame`] wrap around.
+    ///
+    /// # Panics
+    /// When `binary` is not an I420 frame of this geometry's size.
     pub fn encode(&self, binary: &mut [u8], frame_number: u32) {
         let width = self.width as usize;
         let y_size = width * self.height as usize;
         let chroma_size = y_size / 4;
+        self.check_frame_size(binary);
 
         let (y, chroma) = binary.split_at_mut(y_size);
         let (u, v) = chroma.split_at_mut(chroma_size);
@@ -105,11 +109,27 @@ impl Geometry {
         v[chroma_kept..].fill(NEUTRAL_CHROMA);
     }
 
+    fn check_frame_size(&self, binary: &[u8]) {
+        let expected = (self.width * self.height * 3 / 2) as usize;
+        assert_eq!(
+            binary.len(),
+            expected,
+            "expected an I420 frame of {}x{} ({expected} bytes), got {} bytes",
+            self.width,
+            self.height,
+            binary.len()
+        );
+    }
+
     /// Reads the frame number from the bar on the frame.
     ///
     /// # Errors
     /// Fails when the markers are missing or the parity bit does not match.
+    ///
+    /// # Panics
+    /// When `binary` is not an I420 frame of this geometry's size.
     pub fn decode(&self, binary: &[u8]) -> Result<u32, DecodingError> {
+        self.check_frame_size(binary);
         let y_size = (self.width * self.height) as usize;
         let y_plane = &binary[..y_size];
 
@@ -205,6 +225,12 @@ mod tests {
         }
 
         assert!(geometry.decode(&vec![128; frame_size]).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "expected an I420 frame of 640x360")]
+    fn panics_on_a_frame_of_the_wrong_size() {
+        Geometry::new(640, 360).unwrap().decode(&[128; 1000]).ok();
     }
 
     #[test]
