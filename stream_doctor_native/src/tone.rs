@@ -189,6 +189,40 @@ mod tests {
     }
 
     #[test]
+    fn find_alignment_recovers_symbol_offset() {
+        let tone = Tone::new(48_000);
+        let symbol_length = tone.symbol_length as usize;
+        let offset = symbol_length / 3;
+        let mut samples = vec![0i16; symbol_length * (SCAN_SYMBOLS as usize + 2)];
+        for (i, chunk) in samples[offset..]
+            .chunks_exact_mut(symbol_length)
+            .enumerate()
+        {
+            tone.encode(chunk, 100 + i as u32);
+        }
+        let bytes: Vec<u8> = samples
+            .iter()
+            .flat_map(|s| (*s as f64).to_le_bytes())
+            .collect();
+        let found = tone.find_alignment(&bytes).unwrap() as usize;
+        let step = symbol_length / 16;
+        assert!(
+            found.abs_diff(offset) <= step,
+            "found {found}, expected {offset}"
+        );
+    }
+
+    #[test]
+    fn find_alignment_in_silence_is_not_a_marker() {
+        let tone = Tone::new(48_000);
+        let bytes = vec![0u8; tone.symbol_length as usize * 8 * 8];
+        assert_eq!(
+            tone.find_alignment(&bytes),
+            Err(DecodingError::MarkersNotFound)
+        );
+    }
+
+    #[test]
     fn decode_silence_is_not_a_marker() {
         let tone = Tone::new(48_000);
         let window = vec![0u8; tone.symbol_length as usize * 8];
