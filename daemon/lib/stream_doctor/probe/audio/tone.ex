@@ -30,12 +30,8 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @ref_freq 500
   @data_freqs Enum.map(1..@data_bits, &(500 + &1 * 500))
   @parity_freq 4500
-  @guard_offset 250
 
   @amplitude 3000
-
-  @local_contrast 8.0
-  @ref_floor 0.01
 
   @scan_symbols 6
 
@@ -100,47 +96,9 @@ defmodule StreamDoctor.Probe.Audio.Tone do
 
   @doc "Window = symbol-length binary of f64le mono samples."
   @spec decode_window(binary(), pos_integer()) ::
-          {:ok, non_neg_integer()} | {:error, :marker_not_found | :parity_mismatch}
+          {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}
   def decode_window(window, sample_rate) do
-    n = symbol_length(sample_rate)
-    margin = div(n, 6)
-    inner_n = n - 2 * margin
-    inner = binary_part(window, margin * 8, inner_n * 8)
-
-    power = fn freq -> goertzel_power(inner, inner_n, freq, sample_rate) end
-
-    tone_freqs = [@ref_freq | @data_freqs] ++ [@parity_freq]
-
-    guard_powers =
-      tone_freqs
-      |> Enum.flat_map(&[&1 - @guard_offset, &1 + @guard_offset])
-      |> Enum.uniq()
-      |> Map.new(&{&1, power.(&1)})
-
-    local_noise = fn freq ->
-      max(guard_powers[freq - @guard_offset], guard_powers[freq + @guard_offset])
-    end
-
-    ref_power = power.(@ref_freq)
-
-    if ref_power < @local_contrast * max(local_noise.(@ref_freq), 1.0e-9) do
-      {:error, :marker_not_found}
-    else
-      bits = Enum.map(@data_freqs ++ [@parity_freq], &tone_bit(&1, power, local_noise, ref_power))
-      {data, [parity]} = Enum.split(bits, @data_bits)
-
-      if rem(Enum.sum(data), 2) == parity,
-        do: {:ok, Integer.undigits(data, 2)},
-        else: {:error, :parity_mismatch}
-    end
-  end
-
-  defp tone_bit(freq, power, local_noise, ref_power) do
-    tone_power = power.(freq)
-
-    if tone_power > @local_contrast * local_noise.(freq) and tone_power > @ref_floor * ref_power,
-      do: 1,
-      else: 0
+    Native.tone_decode(window, new(sample_rate))
   end
 
   @spec encode(non_neg_integer()) :: [0 | 1]
@@ -149,21 +107,5 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     data = for i <- (@data_bits - 1)..0//-1, do: n >>> i &&& 1
     parity = rem(Enum.sum(data), 2)
     data ++ [parity]
-  end
-
-  defp goertzel_power(samples, n, freq, sample_rate) do
-    k = round(freq * n / sample_rate)
-    omega = 2 * :math.pi() * k / n
-    coeff = 2 * :math.cos(omega)
-    {s1, s2} = goertzel_loop(samples, coeff, 0.0, 0.0)
-    s1 * s1 + s2 * s2 - coeff * s1 * s2
-  end
-
-  defp goertzel_loop(<<sample::float-64-little, rest::binary>>, coeff, s1, s2) do
-    goertzel_loop(rest, coeff, sample + coeff * s1 - s2, s1)
-  end
-
-  defp goertzel_loop(<<>>, _coeff, s1, s2) do
-    {s1, s2}
   end
 end

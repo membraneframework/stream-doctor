@@ -58,7 +58,7 @@ defmodule StreamDoctor.Probe.ToneTest do
   test "silence reports missing marker" do
     n = Tone.symbol_length(@sample_rate)
     silence = :binary.copy(<<0.0::float-64-little>>, n)
-    assert {:error, :marker_not_found} == Tone.decode_window(silence, @sample_rate)
+    assert {:error, :markers_not_found} == Tone.decode_window(silence, @sample_rate)
   end
 
   test "decode survives spectral tilt attenuating high frequencies" do
