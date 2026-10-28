@@ -35,9 +35,16 @@ export interface AvDrift {
   latest_samples: number[];
 }
 
+/** Time from the streamer starting to the first segment appearing; needs `watch()` before `publish()`. */
+export interface TimeToFirstFrame {
+  status: "waiting" | "measured" | "attached_late" | "no_streamer";
+  ms: number | null;
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
+  time_to_first_frame?: TimeToFirstFrame;
   error?: string;
 }
 

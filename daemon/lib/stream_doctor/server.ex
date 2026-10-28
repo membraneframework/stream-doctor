@@ -10,7 +10,7 @@ defmodule StreamDoctor.Server do
   alias StreamDoctor.Metric
 
   @hls_timeout 120_000
-  @metric_specs [{Metric.AvDrift, []}]
+  @metric_specs [{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -62,10 +62,11 @@ defmodule StreamDoctor.Server do
     if state.streamer != nil and state.streamer.status == :streaming do
       {:reply, {:error, :already_streaming}, state}
     else
-      pid =
-        StreamDoctor.SenderPipeline.start_link(input, rtmp_url, on_live: self())
+      started_at = Metric.now_ms()
+      pid = StreamDoctor.SenderPipeline.start_link(input, rtmp_url, on_live: self())
 
       Process.monitor(pid)
+      broadcast(state.viewers, {:streamer_started, {:watching, started_at}})
 
       streamer = %{
         pid: pid,
@@ -106,21 +107,28 @@ defmodule StreamDoctor.Server do
     id = "viewer-#{state.next_id}"
     server = self()
 
-    spawn_link(fn ->
-      try do
-        __MODULE__.HLS.await_playlist(hls_url, @hls_timeout)
-        send(server, {:playlist_ready, id})
-      rescue
-        e -> send(server, {:viewer_failed, id, Exception.message(e)})
-      end
-    end)
-
     {:ok, collector} = Collector.start_link(@metric_specs)
+
+    if state.streamer != nil do
+      Collector.event(collector, {:streamer_started, :missed})
+    end
+
+    poller =
+      spawn_link(fn ->
+        try do
+          at = __MODULE__.HLS.await_first_segment(hls_url, @hls_timeout)
+          Collector.event(collector, {:first_segment_seen, at})
+          send(server, {:playlist_ready, id})
+        rescue
+          e -> send(server, {:viewer_failed, id, Exception.message(e)})
+        end
+      end)
 
     viewer = %{
       id: id,
       hls_url: hls_url,
       pid: nil,
+      poller: poller,
       status: :waiting_for_playlist,
       error: nil,
       playlist: nil,
@@ -138,6 +146,7 @@ defmodule StreamDoctor.Server do
         {:reply, {:error, :not_found}, state}
 
       viewer ->
+        Process.exit(viewer.poller, :kill)
         viewer = terminate_pipeline(viewer)
         state = put_in(state.viewers[id], viewer)
         {:reply, {:ok, viewer_summary(viewer)}, state}
@@ -267,6 +276,12 @@ defmodule StreamDoctor.Server do
 
   defp terminate_pipeline(entity) do
     %{entity | status: :stopped}
+  end
+
+  defp broadcast(viewers, event) do
+    viewers
+    |> Enum.filter(fn {_id, viewer} -> viewer.status in [:waiting_for_playlist, :receiving] end)
+    |> Enum.each(fn {_id, viewer} -> Collector.event(viewer.collector, event) end)
   end
 
   defp streamer_summary(streamer) do
