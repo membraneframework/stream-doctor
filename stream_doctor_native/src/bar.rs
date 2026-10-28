@@ -48,7 +48,7 @@ pub enum DecodingError {
 
 /// The frame number starts from zero again when it reaches this value.
 #[must_use]
-pub fn max_frame() -> u32 {
+pub const fn max_frame() -> u32 {
     MAX_FRAME
 }
 
@@ -85,37 +85,24 @@ impl Geometry {
     ///
     /// Numbers bigger than [`max_frame`] wrap around.
     pub fn encode(&self, binary: &mut [u8], frame_number: u32) {
-        let y_size = (self.width * self.height) as usize;
+        let width = self.width as usize;
+        let y_size = width * self.height as usize;
         let chroma_size = y_size / 4;
 
-        let y = &mut binary[..y_size];
+        let (y, chroma) = binary.split_at_mut(y_size);
+        let (u, v) = chroma.split_at_mut(chroma_size);
 
-        let bits = generate_bits(frame_number);
+        y[self.bar_top_y as usize * width..].fill(BLACK);
 
-        let background_row = vec![BLACK; self.width as usize];
-        let squares_row = self.squares_row(&bits);
-
-        for row in self.bar_top_y..self.height {
-            let slice_to_copy =
-                if self.square_top_y <= row && row < self.square_top_y + self.square_size {
-                    &squares_row[..]
-                } else {
-                    &background_row[..]
-                };
-
-            y[(row * self.width) as usize..(row * self.width + self.width) as usize]
-                .copy_from_slice(slice_to_copy);
+        let squares_row = self.squares_row(&generate_bits(frame_number));
+        for row in self.square_top_y..self.square_top_y + self.square_size {
+            let start = row as usize * width;
+            y[start..start + width].copy_from_slice(&squares_row);
         }
 
-        let chroma_width = self.width / 2;
-        let chroma_bar_top_y = self.bar_top_y / 2;
-        let chroma_kept = chroma_bar_top_y * chroma_width;
-        let chroma_fill = vec![NEUTRAL_CHROMA; chroma_size - chroma_kept as usize];
-
-        let u = &mut binary[y_size..y_size + chroma_size];
-        u[chroma_kept as usize..].copy_from_slice(&chroma_fill);
-        let v = &mut binary[y_size + chroma_size..];
-        v[chroma_kept as usize..].copy_from_slice(&chroma_fill);
+        let chroma_kept = (self.bar_top_y / 2 * (self.width / 2)) as usize;
+        u[chroma_kept..].fill(NEUTRAL_CHROMA);
+        v[chroma_kept..].fill(NEUTRAL_CHROMA);
     }
 
     /// Reads the frame number from the bar on the frame.
