@@ -28,7 +28,7 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
     frame_number = round(buffer.pts / buffer.metadata.duration)
-    buffer = %{buffer | payload: Bar.draw(buffer.payload, state.geometry, frame_number)}
+    buffer = %{buffer | payload: Bar.encode(buffer.payload, state.geometry, frame_number)}
     {[buffer: {:output, buffer}], state}
   end
 end

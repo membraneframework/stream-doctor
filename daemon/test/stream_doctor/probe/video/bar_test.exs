@@ -12,11 +12,11 @@ defmodule StreamDoctor.Probe.BarTest do
     y <> chroma <> chroma
   end
 
-  test "draw/decode round-trip" do
+  test "encode/decode round-trip" do
     geometry = Bar.geometry(@width, @height)
 
     for frame_number <- [0, 1, 42, 12_345, Bar.max_frame() - 1, Bar.max_frame() + 7] do
-      payload = Bar.draw(grey_frame(), geometry, frame_number)
+      payload = Bar.encode(grey_frame(), geometry, frame_number)
       assert byte_size(payload) == byte_size(grey_frame())
       assert {:ok, rem(frame_number, Bar.max_frame())} == Bar.decode(payload, geometry)
     end
@@ -29,7 +29,7 @@ defmodule StreamDoctor.Probe.BarTest do
 
   test "decode survives mild compression noise" do
     geometry = Bar.geometry(@width, @height)
-    payload = Bar.draw(grey_frame(), geometry, 1234)
+    payload = Bar.encode(grey_frame(), geometry, 1234)
 
     noisy =
       payload

@@ -26,6 +26,17 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  rust:
+    runs-on: ubuntu-latest
+    container: rust:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
   # the membraneframework/membrane_actions reusable workflows assume the mix
   # project at the repository root, so their steps are inlined here
   daemon:
@@ -42,6 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cp /root/.tool-versions .
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
           path: |
