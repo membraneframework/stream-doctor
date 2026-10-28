@@ -58,7 +58,7 @@ impl Tone {
         }
     }
 
-    pub fn find_alignment(&self, samples: &[f64]) -> Result<u32, DecodingError> {
+    pub fn find_alignment(&self, samples: &[i16]) -> Result<u32, DecodingError> {
         let step = (self.symbol_length / 16).max(1) as usize;
 
         let mut scores: Vec<(u32, u32)> = (0..self.symbol_length)
@@ -78,7 +78,7 @@ impl Tone {
         }
     }
 
-    fn alignment_score(&self, samples: &[f64], offset: u32) -> u32 {
+    fn alignment_score(&self, samples: &[i16], offset: u32) -> u32 {
         let results: Vec<Result<u32, DecodingError>> = samples[offset as usize..]
             .chunks_exact(self.symbol_length as usize)
             .take(SCAN_SYMBOLS as usize)
@@ -98,7 +98,7 @@ impl Tone {
         parity_score + 2 * sequence_score
     }
 
-    pub fn decode(&self, window: &[f64]) -> Result<u32, DecodingError> {
+    pub fn decode(&self, window: &[i16]) -> Result<u32, DecodingError> {
         let margin = self.symbol_length / 6;
         let inner_n = self.symbol_length - 2 * margin;
         let inner = &window[margin as usize..(margin + inner_n) as usize];
@@ -161,7 +161,7 @@ fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
     plateau[plateau.len() / 2].0
 }
 
-fn goertzel_power(samples: &[f64], n: u32, freq: u32, sample_rate: u32) -> f64 {
+fn goertzel_power(samples: &[i16], n: u32, freq: u32, sample_rate: u32) -> f64 {
     let k = ((freq * n) as f64 / sample_rate as f64).round();
     let omega: f64 = 2.0 * PI as f64 * k / n as f64;
     let coeff = 2.0 * f64::cos(omega);
@@ -169,10 +169,11 @@ fn goertzel_power(samples: &[f64], n: u32, freq: u32, sample_rate: u32) -> f64 {
     s1 * s1 + s2 * s2 - coeff * s1 * s2
 }
 
-fn goertzel_loop(samples: &[f64], coeff: f64) -> (f64, f64) {
+fn goertzel_loop(samples: &[i16], coeff: f64) -> (f64, f64) {
     let mut s1 = 0.0;
     let mut s2 = 0.0;
     for &sample in samples {
+        let sample = f64::from(sample);
         let tmp = s1;
         s1 = sample + coeff * s1 - s2;
         s2 = tmp;
@@ -190,8 +191,7 @@ mod tests {
         for symbol in [0, 1, 42, 127] {
             let mut samples = vec![0i16; tone.symbol_length as usize];
             tone.encode(&mut samples, symbol);
-            let window: Vec<f64> = samples.iter().map(|&s| s as f64).collect();
-            assert_eq!(tone.decode(&window), Ok(symbol));
+            assert_eq!(tone.decode(&samples), Ok(symbol));
         }
     }
 
@@ -207,7 +207,6 @@ mod tests {
         {
             tone.encode(chunk, 100 + i as u32);
         }
-        let samples: Vec<f64> = samples.iter().map(|&s| s as f64).collect();
         let found = tone.find_alignment(&samples).unwrap() as usize;
         let step = symbol_length / 16;
         assert!(
@@ -219,7 +218,7 @@ mod tests {
     #[test]
     fn find_alignment_in_silence_is_not_a_marker() {
         let tone = Tone::new(48_000);
-        let samples = vec![0.0; tone.symbol_length as usize * 8];
+        let samples = vec![0i16; tone.symbol_length as usize * 8];
         assert_eq!(
             tone.find_alignment(&samples),
             Err(DecodingError::MarkersNotFound)
@@ -229,7 +228,7 @@ mod tests {
     #[test]
     fn decode_silence_is_not_a_marker() {
         let tone = Tone::new(48_000);
-        let window = vec![0.0; tone.symbol_length as usize];
+        let window = vec![0i16; tone.symbol_length as usize];
         assert_eq!(tone.decode(&window), Err(DecodingError::MarkersNotFound));
     }
 }

@@ -5,15 +5,9 @@ defmodule StreamDoctor.Probe.ToneTest do
 
   @sample_rate 44_100
 
-  defp to_floats(s16_binary) do
-    for <<sample::16-signed-little <- s16_binary>>, into: <<>> do
-      <<sample * 1.0::float-64-little>>
-    end
-  end
-
   test "symbol round-trip" do
     for symbol_number <- [0, 1, 42, 127, 130] do
-      window = symbol_number |> Tone.symbol_samples(@sample_rate) |> to_floats()
+      window = symbol_number |> Tone.symbol_samples(@sample_rate)
 
       assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
                Tone.decode_window(window, @sample_rate)
@@ -25,7 +19,7 @@ defmodule StreamDoctor.Probe.ToneTest do
     silence = :binary.copy(<<0::16>>, Tone.symbol_length(@sample_rate))
 
     for symbol_number <- [0, 1, 42, 127, 130] do
-      window = silence |> Tone.encode(tone, symbol_number) |> to_floats()
+      window = silence |> Tone.encode(tone, symbol_number)
 
       assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
                Tone.decode_window(window, @sample_rate)
@@ -43,21 +37,21 @@ defmodule StreamDoctor.Probe.ToneTest do
         &Tone.symbol_samples(&1, @sample_rate)
       )
 
-    buffer = to_floats(IO.iodata_to_binary([silence | symbols]))
+    buffer = IO.iodata_to_binary([silence | symbols])
 
     assert {:ok, found} = Tone.find_alignment(buffer, @sample_rate)
     assert abs(found - offset) <= div(symbol_length, 16)
 
     assert :error ==
              Tone.find_alignment(
-               to_floats(:binary.copy(<<0::16>>, div(byte_size(buffer), 8))),
+               :binary.copy(<<0::16>>, div(byte_size(buffer), 2)),
                @sample_rate
              )
   end
 
   test "silence reports missing marker" do
     n = Tone.symbol_length(@sample_rate)
-    silence = :binary.copy(<<0.0::float-64-little>>, n)
+    silence = :binary.copy(<<0::16>>, n)
     assert {:error, :markers_not_found} == Tone.decode_window(silence, @sample_rate)
   end
 
@@ -77,7 +71,7 @@ defmodule StreamDoctor.Probe.ToneTest do
           end)
           |> Enum.sum()
 
-        <<value::float-64-little>>
+        <<round(value)::16-signed-little>>
       end
 
     assert {:ok, 42} == Tone.decode_window(window, @sample_rate)
@@ -90,16 +84,15 @@ defmodule StreamDoctor.Probe.ToneTest do
       [41, 42, 43]
       |> Enum.map(&Tone.symbol_samples(&1, @sample_rate))
       |> IO.iodata_to_binary()
-      |> to_floats()
 
-    symbol_bytes = Tone.symbol_length(@sample_rate) * 8
+    symbol_bytes = Tone.symbol_length(@sample_rate) * 2
 
     noisy_window =
       stream
-      |> binary_part(symbol_bytes + shift * 8, symbol_bytes)
+      |> binary_part(symbol_bytes + shift * 2, symbol_bytes)
       |> then(fn window ->
-        for <<sample::float-64-little <- window>>, into: <<>> do
-          <<sample + 200.0 * :math.sin(sample)::float-64-little>>
+        for <<sample::16-signed-little <- window>>, into: <<>> do
+          <<round(sample + 200.0 * :math.sin(sample))::16-signed-little>>
         end
       end)
 

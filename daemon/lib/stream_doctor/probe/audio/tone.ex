@@ -56,7 +56,7 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     end
   end
 
-  @doc "Window = symbol-length binary of f64le mono samples."
+  @doc "Window = symbol-length binary of s16le mono samples."
   @spec decode_window(binary(), pos_integer()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}
   def decode_window(window, sample_rate) do
