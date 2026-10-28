@@ -79,7 +79,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   defp process(state) do
     symbol_bytes =
-      RawAudio.frames_to_bytes(Tone.symbol_length(state.format.sample_rate), state.format)
+      state.format.sample_rate |> Tone.symbol_length() |> RawAudio.frames_to_bytes(state.format)
 
     cond do
       not state.synced? and
