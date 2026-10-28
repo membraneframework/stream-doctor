@@ -1,8 +1,7 @@
 //! An audio marker made of `SYMBOL_MS` long symbols. Each symbol is a mix of sine tones from
 //! `FREQS`: the first one is always on and gives the decoder a reference level, the next
 //! `DATA_BITS` carry the symbol number with the highest bit first, and the last one is a parity
-//! bit. The symbol number wraps at `MAX_SYMBOL`. Every frequency is a multiple of the symbol rate,
-//! so a symbol holds whole periods and the signal does not click when the next symbol starts.
+//! bit. The symbol number wraps at `MAX_SYMBOL`.
 //!
 //! The decoder runs a Goertzel filter over the inner two thirds of the window, which makes it
 //! tolerant to a few ms of misalignment. A tone counts as on when its power clearly beats the
