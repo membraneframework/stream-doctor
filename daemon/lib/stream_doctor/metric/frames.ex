@@ -192,6 +192,5 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   defp keep(kept, nil), do: kept
-  defp keep(kept, _entry) when length(kept) >= @evidence, do: kept
-  defp keep(kept, entry), do: kept ++ [entry]
+  defp keep(kept, entry), do: Enum.take(kept ++ [entry], -@evidence)
 end
