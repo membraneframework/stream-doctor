@@ -71,7 +71,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       state
       | buffer: state.buffer <> buffer.payload,
         anchor_pts: anchor_pts,
-        appended_samples: state.appended_samples + div(byte_size(buffer.payload), 8)
+        appended_samples:
+          state.appended_samples +
+            RawAudio.bytes_to_frames(byte_size(buffer.payload), state.format)
     }
 
     {[], process(state)}
@@ -152,7 +154,9 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   end
 
   defp symbol_pts(state) do
-    consumed_samples = state.appended_samples - div(byte_size(state.buffer), 8)
+    consumed_samples =
+      state.appended_samples - RawAudio.bytes_to_frames(byte_size(state.buffer), state.format)
+
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
 end

@@ -25,7 +25,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
     sample_rate = state.format.sample_rate
-    frames = div(byte_size(buffer.payload), 2)
+    frames = RawAudio.bytes_to_frames(byte_size(buffer.payload), state.format)
 
     position = state.position || round(buffer.pts * sample_rate / Membrane.Time.second())
 

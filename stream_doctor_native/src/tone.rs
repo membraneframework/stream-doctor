@@ -78,7 +78,7 @@ impl Tone {
 
         let best_score = scores
             .iter()
-            .filter(|(_, score)| *score > MIN_SCORE)
+            .filter(|(_, score)| *score >= MIN_SCORE)
             .max_by_key(|(_, score)| score)
             .map(|&(_, score)| score);
 
