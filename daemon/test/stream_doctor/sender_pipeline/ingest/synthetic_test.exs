@@ -6,7 +6,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.SyntheticTest do
 
   alias Membrane.RawAudio
   alias Membrane.Testing
-  alias StreamDoctor.OptionsParser.Input
+  alias StreamDoctor.OptionsParser.Publisher
   alias StreamDoctor.Probe.Audio.Tone
   alias StreamDoctor.SenderPipeline.Ingest.Synthetic
 
@@ -14,7 +14,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.SyntheticTest do
   @frames_per_buffer 1024
 
   defp audio_track(settings) do
-    {:ok, {:synthetic, config}} = Input.parse(%{"synthetic" => settings})
+    {:ok, {:synthetic, config}} = Publisher.parse(%{"synthetic" => settings})
     config |> Synthetic.tracks() |> Map.fetch!(:audio)
   end
 

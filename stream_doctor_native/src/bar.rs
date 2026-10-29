@@ -81,12 +81,6 @@ impl Geometry {
         })
     }
 
-    /// Y of the bar's top edge: everything above it survives encoding.
-    #[must_use]
-    pub const fn bar_top(&self) -> u32 {
-        self.bar_top_y
-    }
-
     /// Draws the bar with `frame_number` on the frame. Changes `binary` in place.
     ///
     /// Numbers bigger than [`max_frame`] wrap around.

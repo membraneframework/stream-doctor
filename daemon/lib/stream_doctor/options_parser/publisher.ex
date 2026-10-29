@@ -1,10 +1,10 @@
-defmodule StreamDoctor.OptionsParser.Input do
+defmodule StreamDoctor.OptionsParser.Publisher do
   @moduledoc """
   Turns the `input` field of a streamer request into what the sender pipeline needs to build
   its ingest, rejecting anything it cannot honour before the pipeline starts.
   """
 
-  alias StreamDoctor.OptionsParser.Input.Synthetic
+  alias StreamDoctor.OptionsParser.Publisher.Synthetic
 
   @type t :: {:file, String.t()} | {:synthetic, Synthetic.t()}
 

@@ -25,6 +25,9 @@ export type VideoProfile = "baseline" | "main" | "high";
 /** AAC profiles the generator encodes to. */
 export type AudioProfile = "mpeg4_lc" | "mpeg2_lc";
 
+/** Sample rates the AAC encoder accepts. */
+export type SampleRate = 12000 | 16000 | 24000 | 32000 | 44100 | 48000 | 64000 | 88200;
+
 /** Settings for a synthetic source; anything left out keeps the daemon default. */
 export interface SyntheticSource {
   video?: {
@@ -37,7 +40,7 @@ export interface SyntheticSource {
     crf?: number;
     bitrate?: number;
   };
-  audio?: { sample_rate?: number; bitrate?: number; profile?: AudioProfile };
+  audio?: { sample_rate?: SampleRate; bitrate?: number; profile?: AudioProfile };
   /** Seconds to stream; omitted means the stream never ends. */
   duration?: number;
 }
@@ -53,7 +56,7 @@ export interface ResolvedSyntheticSource {
     crf: number | null;
     bitrate: number | null;
   };
-  audio: { sample_rate: number; bitrate: number | null; profile: AudioProfile };
+  audio: { sample_rate: SampleRate; bitrate: number | null; profile: AudioProfile };
   duration: number | null;
 }
 

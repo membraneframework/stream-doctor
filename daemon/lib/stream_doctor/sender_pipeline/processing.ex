@@ -5,14 +5,14 @@ defmodule StreamDoctor.SenderPipeline.Processing do
 
   import Membrane.ChildrenSpec
 
-  alias StreamDoctor.OptionsParser.Input.Synthetic, as: Config
+  alias StreamDoctor.OptionsParser.Publisher.Synthetic, as: Config
   alias StreamDoctor.Probe
   alias StreamDoctor.SenderPipeline.Egress.RTMP
 
   @type track_builders :: %{optional(RTMP.kind()) => Membrane.ChildrenSpec.t()}
 
   # a raw frame is megabytes, so every hop that can hold one is capped
-  @raw_demand 3
+  @raw_video_frames_autodemand_size 3
 
   @spec tracks(track_builders(), Config.t() | %{}) :: track_builders()
   def tracks(track_builders, config) do
@@ -21,9 +21,9 @@ defmodule StreamDoctor.SenderPipeline.Processing do
 
   defp track(:video, builder, config) do
     builder
-    |> via_in(:input, auto_demand_size: @raw_demand)
+    |> via_in(:input, auto_demand_size: @raw_video_frames_autodemand_size)
     |> child(:video_marker_encoder, Probe.Video.MarkerEncoder)
-    |> via_in(:input, auto_demand_size: @raw_demand)
+    |> via_in(:input, auto_demand_size: @raw_video_frames_autodemand_size)
     |> child(:encoder, video_encoder(settings(config, :video)))
   end
 

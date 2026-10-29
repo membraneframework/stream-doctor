@@ -8,7 +8,7 @@ defmodule StreamDoctor.Server do
   alias StreamDoctor.Collector
   alias StreamDoctor.HLS.Description
   alias StreamDoctor.Metric
-  alias StreamDoctor.OptionsParser.Input
+  alias StreamDoctor.OptionsParser.Publisher
 
   @hls_timeout 120_000
   @metric_specs [{Metric.AvDrift, []}]
@@ -69,7 +69,7 @@ defmodule StreamDoctor.Server do
 
       streamer = %{
         pid: pid,
-        input: Input.summary(parsed),
+        input: Publisher.summary(parsed),
         rtmp_url: rtmp_url,
         status: :streaming,
         error: nil,
@@ -275,7 +275,7 @@ defmodule StreamDoctor.Server do
   defp idle(_state), do: :ok
 
   defp parse_input(input) do
-    case Input.parse(input) do
+    case Publisher.parse(input) do
       {:ok, parsed} -> {:ok, parsed}
       {:error, reason} -> {:error, {:invalid_input, reason}}
     end

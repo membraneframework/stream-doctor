@@ -1,6 +1,6 @@
 defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic do
   @moduledoc """
-  Sources that generate a mono video and audio stream, with `metadata.duration` on every
+  Sources that generate a video and a mono audio stream, with `metadata.duration` on every
   video buffer.
 
   Without a `duration` they never end; they run until the pipeline is terminated.
@@ -9,7 +9,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic do
   import Membrane.ChildrenSpec
 
   alias Membrane.RawAudio
-  alias StreamDoctor.OptionsParser.Input.Synthetic, as: Config
+  alias StreamDoctor.OptionsParser.Publisher.Synthetic, as: Config
   alias StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource
 
   @frames_per_buffer 1024
@@ -39,11 +39,11 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic do
         channels: 1,
         sample_rate: config.audio.sample_rate
       },
-      duration: duration(config.duration) || :infinity,
+      duration: duration(config.duration),
       frames_per_buffer: @frames_per_buffer
     })
   end
 
-  defp duration(nil), do: nil
+  defp duration(nil), do: :infinity
   defp duration(seconds), do: Membrane.Time.seconds(seconds)
 end

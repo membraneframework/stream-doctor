@@ -1,4 +1,4 @@
-defmodule StreamDoctor.OptionsParser.Input.Synthetic.Audio do
+defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Audio do
   @moduledoc """
   Parses the audio settings of a synthetic input.
   """
@@ -21,8 +21,7 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Audio do
 
   @sample_rates [12_000, 16_000, 24_000, 32_000, 44_100, 48_000, 64_000, 88_200]
 
-  @spec schema() :: keyword()
-  def schema do
+  defp schema do
     [
       sample_rate: [type: {:in, @sample_rates}, default: 48_000],
       bitrate: [type: {:in, 8_000..512_000}],

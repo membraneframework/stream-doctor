@@ -14,7 +14,7 @@ defmodule StreamDoctor.SenderPipeline do
   alias StreamDoctor.SenderPipeline.Egress.RTMP
   alias StreamDoctor.SenderPipeline.{Ingest, Processing}
 
-  @spec start_link(StreamDoctor.OptionsParser.Input.t(), String.t(), keyword()) :: pid()
+  @spec start_link(StreamDoctor.OptionsParser.Publisher.t(), String.t(), keyword()) :: pid()
   def start_link(input, rtmp_url, opts \\ []) do
     {:ok, _supervisor, pipeline} =
       Membrane.Pipeline.start_link(__MODULE__, [input: input, rtmp_url: rtmp_url] ++ opts)

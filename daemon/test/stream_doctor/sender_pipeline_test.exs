@@ -5,11 +5,11 @@ defmodule StreamDoctor.SenderPipelineTest do
   import Membrane.Testing.Assertions
 
   alias Membrane.Testing
-  alias StreamDoctor.OptionsParser.Input
+  alias StreamDoctor.OptionsParser.Publisher
   alias StreamDoctor.SenderPipeline.{Ingest, Processing}
 
   defp start(settings) do
-    {:ok, {:synthetic, config}} = Input.parse(%{"synthetic" => settings})
+    {:ok, {:synthetic, config}} = Publisher.parse(%{"synthetic" => settings})
 
     spec =
       config
@@ -23,7 +23,7 @@ defmodule StreamDoctor.SenderPipelineTest do
   end
 
   defp video_encoder(settings) do
-    {:ok, {:synthetic, config}} = Input.parse(%{"synthetic" => %{"video" => settings}})
+    {:ok, {:synthetic, config}} = Publisher.parse(%{"synthetic" => %{"video" => settings}})
 
     %{video: %Membrane.ChildrenSpec.Builder{children: children}} =
       config |> Ingest.Synthetic.tracks() |> Processing.tracks(config)

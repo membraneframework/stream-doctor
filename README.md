@@ -103,8 +103,9 @@ A synthetic source needs no media of your own: the daemon generates both tracks
 and marks them. `{ synthetic: {} }` gives 640x360 at 30 fps, 48 kHz mono AAC,
 and a stream that never ends. Every setting below is optional:
 
-* `video`: `width` and `height` (even, 2..7680 and 2..4320, together large
-  enough to carry the frame-number bar), `fps` (1..240, or
+* `video`: `width` and `height` (even, 2..7680 and 2..4320; the frame-number
+  bar needs at least 172x12, and a smaller frame fails once the stream
+  starts), `fps` (1..240, or
   `[numerator, denominator]` for rates like `[30000, 1001]`), `gop_size`
   (defaults to two seconds' worth), `profile` (`baseline`, `main`, `high`),
   `crf` (0..63) and `bitrate` in bit/s (1000..50000000, applied as whole

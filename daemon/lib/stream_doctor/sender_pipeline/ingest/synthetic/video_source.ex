@@ -1,20 +1,16 @@
 defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
   @moduledoc """
   Generates I420 frames: a square bouncing left to right over scrolling colour bars.
-
-  The frame-number bar is left to `StreamDoctor.Probe.Video.MarkerEncoder`, so the square
-  stays above the strip that marker overwrites.
   """
 
   use Membrane.Source
 
   alias Membrane.{Buffer, RawVideo}
-  alias StreamDoctor.Probe.Video.Bar
 
   def_options width: [spec: pos_integer()],
               height: [spec: pos_integer()],
               framerate: [spec: {pos_integer(), pos_integer()}],
-              duration: [spec: Membrane.Time.t() | nil, default: nil]
+              duration: [spec: Membrane.Time.t() | :infinity, default: :infinity]
 
   def_output_pad :output,
     accepted_format: %RawVideo{pixel_format: :I420},
@@ -34,9 +30,8 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
 
   @impl true
   def handle_init(_ctx, opts) do
-    bar_top = opts.width |> Bar.geometry(opts.height) |> Bar.bar_top()
     {num, den} = opts.framerate
-    side = even(max(8, min(div(bar_top, 4), div(opts.width, 4))))
+    side = even(max(2, min(div(opts.width, 4), div(opts.height, 4))))
 
     state = %{
       format: %RawVideo{
@@ -47,11 +42,12 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
         aligned: true
       },
       frame: 0,
+      ended: false,
       frame_duration: div(Membrane.Time.second() * den, num),
       frames: frames(opts.duration, num, den),
       rows: rows(opts.width),
       side: side,
-      top: even(div(bar_top - side, 2)),
+      top: even(div(opts.height - side, 2)),
       span: opts.width - side
     }
 
@@ -64,9 +60,14 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
   end
 
   @impl true
+  def handle_demand(:output, _size, :buffers, _ctx, %{ended: true} = state) do
+    {[], state}
+  end
+
+  @impl true
   def handle_demand(:output, _size, :buffers, _ctx, state) do
     if over?(state) do
-      {[end_of_stream: :output], state}
+      {[end_of_stream: :output], %{state | ended: true}}
     else
       buffer = %Buffer{
         payload: frame(state),
@@ -78,10 +79,10 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
     end
   end
 
-  defp frames(nil, _num, _den), do: nil
+  defp frames(:infinity, _num, _den), do: :infinity
   defp frames(duration, num, den), do: div(duration * num, den * Membrane.Time.second())
 
-  defp over?(%{frames: nil}), do: false
+  defp over?(%{frames: :infinity}), do: false
   defp over?(%{frames: frames, frame: frame}), do: frame >= frames
 
   defp rows(width) do

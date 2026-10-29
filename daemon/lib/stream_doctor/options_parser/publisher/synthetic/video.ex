@@ -1,10 +1,9 @@
-defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
+defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
   @moduledoc """
   Parses the video settings of a synthetic input.
   """
 
   alias StreamDoctor.OptionsParser.Options
-  alias StreamDoctor.Probe.Video.Bar
 
   @type profile :: :baseline | :main | :high
 
@@ -32,8 +31,7 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
   # the generator emits 8-bit I420, so the 10-bit and 4:2:2/4:4:4 profiles would encode as high
   @profiles ~w(baseline main high)a
 
-  @spec schema() :: keyword()
-  def schema do
+  defp schema do
     [
       width: [type: {:custom, __MODULE__, :dimension, [@max_width]}, default: 640],
       height: [type: {:custom, __MODULE__, :dimension, [@max_height]}, default: 360],
@@ -47,8 +45,7 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
 
   @spec parse(term()) :: {:ok, t()} | {:error, String.t()}
   def parse(config) do
-    with {:ok, video} <- Options.validate(config, schema(), @scope),
-         :ok <- bar_fits(video.width, video.height) do
+    with {:ok, video} <- Options.validate(config, schema(), @scope) do
       {:ok,
        Map.merge(%{gop_size: default_gop(video.fps), profile: nil, crf: nil, bitrate: nil}, video)}
     end
@@ -84,20 +81,6 @@ defmodule StreamDoctor.OptionsParser.Input.Synthetic.Video do
     {:error,
      "must be an integer in 1..#{@max_fps}, or [numerator, denominator] whose ratio is in " <>
        "1..#{@max_fps} and whose parts fit in 32 bits, got #{inspect(value)}"}
-  end
-
-  defp bar_fits(width, height) do
-    bar_height = height - Bar.bar_top(Bar.geometry(width, height))
-
-    if height >= 2 * bar_height do
-      :ok
-    else
-      {:error,
-       "synthetic.video: the picture above the frame-number bar is too short: " <>
-         "#{height}px, needs #{2 * bar_height}px"}
-    end
-  rescue
-    error in RuntimeError -> {:error, "#{@scope}: #{Exception.message(error)}"}
   end
 
   defp default_gop([num, den]), do: max(1, round(@gop_seconds * num / den))

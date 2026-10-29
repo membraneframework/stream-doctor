@@ -1,17 +1,16 @@
-defmodule StreamDoctor.OptionsParser.Input.Synthetic do
+defmodule StreamDoctor.OptionsParser.Publisher.Synthetic do
   @moduledoc """
   Parses the settings of a synthetic input.
   """
 
-  alias StreamDoctor.OptionsParser.Input.Synthetic.{Audio, Video}
+  alias StreamDoctor.OptionsParser.Publisher.Synthetic.{Audio, Video}
   alias StreamDoctor.OptionsParser.Options
 
   @type t :: %{video: Video.t(), audio: Audio.t(), duration: pos_integer() | nil}
 
   @scope "synthetic"
 
-  @spec schema() :: keyword()
-  def schema do
+  defp schema do
     [
       video: [type: {:custom, __MODULE__, :object, []}, default: %{}],
       audio: [type: {:custom, __MODULE__, :object, []}, default: %{}],

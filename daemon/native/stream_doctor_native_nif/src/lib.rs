@@ -28,11 +28,6 @@ fn geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, St
 }
 
 #[rustler::nif]
-fn bar_top(geometry: &GeometryResource) -> u32 {
-    geometry.0.bar_top()
-}
-
-#[rustler::nif]
 fn max_frame() -> u32 {
     bar_max_frame()
 }
