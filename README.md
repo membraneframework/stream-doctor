@@ -97,7 +97,9 @@ expect(metrics.time_to_first_frame.status).toBe("measured");
 
 expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50);
 expect(metrics.time_to_first_frame.ms).toBeLessThan(5000);
-expect(metrics.frame_order.out_of_order).toBe(0);
+expect(metrics.frames.reordered.count).toBe(0);
+expect(metrics.frames.missing.count).toBe(0);
+expect(metrics.frames.duplicated.count).toBe(0);
 ```
 
 Every metric reports null until it can say something. A null compares below any
