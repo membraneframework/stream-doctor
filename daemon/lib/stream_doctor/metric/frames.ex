@@ -13,12 +13,10 @@ defmodule StreamDoctor.Metric.Frames do
   alias StreamDoctor.Metric
   alias StreamDoctor.Probe.Video.MarkerDecoder
 
-  # H.264 reorders by at most 16 frames, so a longer run is not the codec, and its tail says
-  # nothing max_depth does not already carry.
+  # H.264 reorders by at most this, so a longer run is not the codec, and a number that has not
+  # arrived within twice it is lost rather than late.
   @reorder_depth 16
   @frames_per_permutation 2 * @reorder_depth
-
-  # Twice the reorder depth is past anything the codec buffer can still deliver.
   @settle_lag 2 * @reorder_depth
 
   @evidence 10
@@ -54,6 +52,7 @@ defmodule StreamDoctor.Metric.Frames do
     |> count_descent(number)
     |> account(number)
     |> regroup(number)
+    |> advance(number)
     |> Map.put(:previous, number)
   end
 
@@ -85,6 +84,14 @@ defmodule StreamDoctor.Metric.Frames do
     }
   end
 
+  defp advance(%{peak: peak} = state, number) when peak == nil or number > peak do
+    %{state | peak: number}
+  end
+
+  defp advance(state, _number) do
+    state
+  end
+
   defp count_descent(%{previous: previous} = state, number)
        when previous != nil and number < previous do
     %{
@@ -103,7 +110,7 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   defp account(%{peak: peak} = state, number) when number > peak do
-    state |> open_hole(peak + 1, number - 1) |> settle(number - @settle_lag)
+    state |> owe(peak + 1, number - 1) |> settle(number - @settle_lag)
   end
 
   defp account(%{first: first} = state, number)
@@ -112,21 +119,21 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   defp account(state, number) do
-    case fill(state.holes, number) do
+    case claim(state.holes, number) do
       {:ok, holes} -> %{state | holes: holes}
       :absent -> duplicate(state, number)
     end
   end
 
-  defp open_hole(state, from, to) when from > to do
+  defp owe(state, from, to) when from > to do
     state
   end
 
-  defp open_hole(state, from, to) do
+  defp owe(state, from, to) do
     %{state | holes: state.holes ++ [{from, to}]}
   end
 
-  # Disjoint runs above the horizon need a frame between them, so the list stays bounded.
+  # Runs above the horizon are disjoint and need a frame between them, so the list stays bounded.
   defp settle(%{holes: [{from, to} | rest]} = state, horizon) when to < horizon do
     %{
       state
@@ -141,15 +148,15 @@ defmodule StreamDoctor.Metric.Frames do
     state
   end
 
-  defp fill([{from, to} | rest], number) when from <= number and number <= to do
+  defp claim([{from, to} | rest], number) when from <= number and number <= to do
     {:ok, split(from, to, number) ++ rest}
   end
 
-  defp fill([hole | rest], number) do
-    with {:ok, holes} <- fill(rest, number), do: {:ok, [hole | holes]}
+  defp claim([hole | rest], number) do
+    with {:ok, holes} <- claim(rest, number), do: {:ok, [hole | holes]}
   end
 
-  defp fill([], _number) do
+  defp claim([], _number) do
     :absent
   end
 
@@ -175,7 +182,7 @@ defmodule StreamDoctor.Metric.Frames do
   defp regroup(%{peak: peak} = state, number) when peak == nil or number > peak do
     permutation = state.group && Enum.reverse([number | state.group])
 
-    %{state | peak: number, group: nil, permutations: keep(state.permutations, permutation)}
+    %{state | group: nil, permutations: keep(state.permutations, permutation)}
   end
 
   defp regroup(%{group: nil, peak: peak} = state, number) when number < peak do
