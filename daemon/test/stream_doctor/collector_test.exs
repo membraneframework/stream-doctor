@@ -9,7 +9,7 @@ defmodule StreamDoctor.CollectorTest do
       Collector.start_link([
         {Metric.AvDrift, []},
         {Metric.TimeToFirstFrame, []},
-        {Metric.FrameOrder, []}
+        {Metric.Frames, []}
       ])
 
     for i <- 0..2 do
@@ -27,7 +27,7 @@ defmodule StreamDoctor.CollectorTest do
     assert %{
              av_drift: %{drift_ms: 0},
              time_to_first_frame: %{status: :measured, ms: 1_200},
-             frame_order: %{out_of_order: 0, permutations: []}
+             frames: %{reordered: %{count: 0}, missing: %{count: 0}, duplicated: %{count: 0}}
            } = Collector.report(collector)
   end
 end
