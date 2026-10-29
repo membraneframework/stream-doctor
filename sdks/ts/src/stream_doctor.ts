@@ -22,6 +22,22 @@ export type Status =
 /** H.264 profiles the generator encodes to; the generator emits 8-bit I420, so 10-bit and 4:2:2 are out. */
 export type VideoProfile = "baseline" | "main" | "high";
 
+/** x264 presets, from fastest to smallest. */
+export type Preset =
+  | "ultrafast"
+  | "superfast"
+  | "veryfast"
+  | "faster"
+  | "fast"
+  | "medium"
+  | "slow"
+  | "slower"
+  | "veryslow"
+  | "placebo";
+
+/** x264 tunings. */
+export type Tune = "film" | "animation" | "grain" | "stillimage" | "fastdecode" | "zerolatency";
+
 /** AAC profiles the generator encodes to. */
 export type AudioProfile = "mpeg4_lc" | "mpeg2_lc";
 
@@ -36,6 +52,8 @@ export interface SyntheticSource {
     /** A whole number of frames per second, or [numerator, denominator] for rates like 30000/1001. */
     fps?: number | [number, number];
     gop_size?: number;
+    preset?: Preset;
+    tune?: Tune;
     profile?: VideoProfile;
     crf?: number;
     bitrate?: number;
@@ -52,6 +70,8 @@ export interface ResolvedSyntheticSource {
     height: number;
     fps: [number, number];
     gop_size: number;
+    preset: Preset;
+    tune: Tune;
     profile: VideoProfile | null;
     crf: number | null;
     bitrate: number | null;

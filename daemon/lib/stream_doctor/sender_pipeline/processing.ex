@@ -14,6 +14,9 @@ defmodule StreamDoctor.SenderPipeline.Processing do
   # a raw frame is megabytes, so every hop that can hold one is capped
   @raw_video_frames_autodemand_size 3
 
+  # a file input carries no encoder settings, so its gop size is fixed here
+  @file_gop_size 60
+
   @spec tracks(track_builders(), Config.t() | %{}) :: track_builders()
   def tracks(track_builders, config) do
     Map.new(track_builders, fn {kind, builder} -> {kind, track(kind, builder, config)} end)
@@ -37,16 +40,14 @@ defmodule StreamDoctor.SenderPipeline.Processing do
 
   defp video_encoder(config) do
     encoder = %Membrane.H264.FFmpeg.Encoder{
-      preset: :veryfast,
-      tune: :zerolatency,
-      gop_size: 60,
+      preset: config[:preset] || :veryfast,
+      tune: config[:tune] || :zerolatency,
+      gop_size: config[:gop_size] || @file_gop_size,
       profile: config[:profile],
       ffmpeg_params: x264_params(config[:bitrate])
     }
 
-    encoder
-    |> override(:gop_size, config[:gop_size])
-    |> override(:crf, config[:crf])
+    override(encoder, :crf, config[:crf])
   end
 
   defp audio_encoder(config) do

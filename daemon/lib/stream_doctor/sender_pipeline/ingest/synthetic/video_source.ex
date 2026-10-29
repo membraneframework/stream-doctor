@@ -120,6 +120,8 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
       :binary.copy(background, height - top - side)
   end
 
+  defp bounce(%{span: 0}), do: 0
+
   defp bounce(%{frame: frame, span: span}) do
     position = rem(frame * @scroll, 2 * span)
     even(if position <= span, do: position, else: 2 * span - position)

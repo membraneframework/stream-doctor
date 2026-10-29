@@ -107,7 +107,10 @@ and a stream that never ends. Every setting below is optional:
   bar needs at least 172x12, and a smaller frame fails once the stream
   starts), `fps` (1..240, or
   `[numerator, denominator]` for rates like `[30000, 1001]`), `gop_size`
-  (defaults to two seconds' worth), `profile` (`baseline`, `main`, `high`),
+  (defaults to two seconds' worth), `preset` (`ultrafast` .. `placebo`,
+  defaults to `veryfast`), `tune` (`film`, `animation`, `grain`,
+  `stillimage`, `fastdecode` or `zerolatency`, defaults to `zerolatency`),
+  `profile` (`baseline`, `main`, `high`),
   `crf` (0..63) and `bitrate` in bit/s (1000..50000000, applied as whole
   kbit/s). Passing both `crf` and `bitrate` lets the bitrate win.
 * `audio`: `sample_rate` (12000, 16000, 24000, 32000, 44100, 48000, 64000 or

@@ -112,6 +112,21 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSourceTest do
     end
   end
 
+  test "a frame as wide as the square leaves it nowhere to bounce" do
+    spec =
+      child(:source, struct!(VideoSource, source_opts(width: 2, height: 2)))
+      |> child(:sink, Testing.Sink)
+
+    pid = Testing.Pipeline.start_link_supervised!(spec: spec)
+    on_exit(fn -> Testing.Pipeline.terminate(pid) end)
+    {:ok, expected} = RawVideo.frame_size(:I420, 2, 2)
+
+    for _n <- 0..9 do
+      assert_sink_buffer(pid, :sink, buffer)
+      assert byte_size(buffer.payload) == expected
+    end
+  end
+
   test "a duration ends the stream once it is generated" do
     pid = start(source_opts(duration: Membrane.Time.seconds(1)))
 

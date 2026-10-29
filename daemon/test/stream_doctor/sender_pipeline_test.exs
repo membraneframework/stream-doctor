@@ -42,6 +42,13 @@ defmodule StreamDoctor.SenderPipelineTest do
     assert params == %{}
   end
 
+  test "the encoder keeps its low-latency defaults until the settings say otherwise" do
+    assert %{preset: :veryfast, tune: :zerolatency} = video_encoder(%{})
+
+    assert %{preset: :slow, tune: :film} =
+             video_encoder(%{"preset" => "slow", "tune" => "film"})
+  end
+
   test "a synthetic source reaches the sink as encoded video and audio" do
     pid = start(%{"video" => %{"width" => 320, "height" => 240}})
 

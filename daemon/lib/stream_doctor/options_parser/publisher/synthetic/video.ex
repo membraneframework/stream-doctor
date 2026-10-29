@@ -7,11 +7,27 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
 
   @type profile :: :baseline | :main | :high
 
+  @type preset ::
+          :ultrafast
+          | :superfast
+          | :veryfast
+          | :faster
+          | :fast
+          | :medium
+          | :slow
+          | :slower
+          | :veryslow
+          | :placebo
+
+  @type tune :: :film | :animation | :grain | :stillimage | :fastdecode | :zerolatency
+
   @type t :: %{
           width: 2..7680,
           height: 2..4320,
           fps: [pos_integer()],
           gop_size: 1..2_147_483_647,
+          preset: preset(),
+          tune: tune(),
           profile: profile() | nil,
           crf: 0..63 | nil,
           bitrate: 1_000..50_000_000 | nil
@@ -31,12 +47,18 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
   # the generator emits 8-bit I420, so the 10-bit and 4:2:2/4:4:4 profiles would encode as high
   @profiles ~w(baseline main high)a
 
+  @presets ~w(ultrafast superfast veryfast faster fast medium slow slower veryslow placebo)a
+
+  @tunes ~w(film animation grain stillimage fastdecode zerolatency)a
+
   defp schema do
     [
       width: [type: {:custom, __MODULE__, :dimension, [@max_width]}, default: 640],
       height: [type: {:custom, __MODULE__, :dimension, [@max_height]}, default: 360],
       fps: [type: {:custom, __MODULE__, :framerate, []}, default: 30],
       gop_size: [type: {:in, 1..@nif_int_max}],
+      preset: [type: {:in, @presets}, default: :veryfast],
+      tune: [type: {:in, @tunes}, default: :zerolatency],
       profile: [type: {:in, @profiles}],
       crf: [type: {:in, 0..63}],
       bitrate: [type: {:in, 1_000..50_000_000}]

@@ -73,6 +73,18 @@ defmodule StreamDoctor.OptionsParser.PublisherTest do
                Publisher.parse(%{"synthetic" => %{"video" => %{"fps" => [30_000, 1001]}}})
     end
 
+    test "the encoder tuning is checked against what x264 knows" do
+      assert {:ok, {:synthetic, %{video: %{preset: :placebo, tune: :grain}}}} =
+               Publisher.parse(%{
+                 "synthetic" => %{"video" => %{"preset" => "placebo", "tune" => "grain"}}
+               })
+
+      assert {:error, message} =
+               Publisher.parse(%{"synthetic" => %{"video" => %{"preset" => "turbo"}}})
+
+      assert message =~ "invalid value for :preset option"
+    end
+
     test "an unknown setting is rejected rather than ignored" do
       assert {:error, message} =
                Publisher.parse(%{"synthetic" => %{"video" => %{"frame_rate" => 30}}})
@@ -118,13 +130,17 @@ defmodule StreamDoctor.OptionsParser.PublisherTest do
     end
 
     test "a wrong type names the field that is wrong, not the whole input" do
-      assert {:error, "synthetic must be an object"} = Publisher.parse(%{"synthetic" => true})
-      assert {:error, "input.file must be a string"} = Publisher.parse(%{"file" => 42})
+      assert {:error, synthetic} = Publisher.parse(%{"synthetic" => true})
+      assert synthetic =~ "input: invalid value for :synthetic option: must be an object"
+
+      assert {:error, file} = Publisher.parse(%{"file" => 42})
+      assert file =~ "input: invalid value for :file option: expected string"
     end
 
     test "anything that names neither a file nor a synthetic config is rejected" do
-      assert {:error, "input must be an object" <> _} = Publisher.parse(%{"blah" => 1})
-      assert {:error, "input must be an object" <> _} = Publisher.parse("test.mp4")
+      assert {:error, "input.blah is not a known setting" <> _} = Publisher.parse(%{"blah" => 1})
+      assert {:error, "input must name either file or synthetic" <> _} = Publisher.parse(%{})
+      assert {:error, "input must be an object"} = Publisher.parse("test.mp4")
     end
   end
 
