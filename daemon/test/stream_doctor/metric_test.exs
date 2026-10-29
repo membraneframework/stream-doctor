@@ -167,12 +167,14 @@ defmodule StreamDoctor.MetricTest do
                order(frames([0, 40, 80, 1]))
     end
 
-    test "a truncated list still totals correctly in count" do
+    test "a truncated list keeps the newest entries and still totals correctly" do
       assert %{missing: %{count: 88, gaps: gaps}} =
                order(frames(Enum.flat_map(0..11, &[&1 * 10, &1 * 10 + 1])))
 
       assert length(gaps) == 10
       assert Enum.sum(Enum.map(gaps, fn [from, to] -> to - from + 1 end)) < 88
+      assert List.last(gaps) == [102, 109]
+      refute [2, 9] in gaps
     end
 
     test "an in-order run across the counter wrap reports nothing" do
