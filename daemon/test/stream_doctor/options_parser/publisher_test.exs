@@ -122,6 +122,16 @@ defmodule StreamDoctor.OptionsParser.PublisherTest do
       assert message =~ "invalid value for :gop_size option: expected one of 1..2147483647"
     end
 
+    test "crf stops where 8-bit x264 stops" do
+      assert {:ok, {:synthetic, %{video: %{crf: 51}}}} =
+               Publisher.parse(%{"synthetic" => %{"video" => %{"crf" => 51}}})
+
+      assert {:error, message} =
+               Publisher.parse(%{"synthetic" => %{"video" => %{"crf" => 52}}})
+
+      assert message =~ "expected one of 0..51"
+    end
+
     test "crf and bitrate may both be given" do
       assert {:ok, {:synthetic, %{video: %{crf: 23, bitrate: 400_000}}}} =
                Publisher.parse(%{

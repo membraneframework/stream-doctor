@@ -29,7 +29,7 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
           preset: preset(),
           tune: tune(),
           profile: profile() | nil,
-          crf: 0..63 | nil,
+          crf: 0..51 | nil,
           bitrate: 1_000..50_000_000 | nil
         }
 
@@ -47,6 +47,9 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
   # the generator emits 8-bit I420, so the 10-bit and 4:2:2/4:4:4 profiles would encode as high
   @profiles ~w(baseline main high)a
 
+  # x264 caps crf at 51 for 8-bit samples and silently clamps anything above it
+  @max_crf 51
+
   @presets ~w(ultrafast superfast veryfast faster fast medium slow slower veryslow placebo)a
 
   @tunes ~w(film animation grain stillimage fastdecode zerolatency)a
@@ -60,7 +63,7 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
       preset: [type: {:in, @presets}, default: :veryfast],
       tune: [type: {:in, @tunes}, default: :zerolatency],
       profile: [type: {:in, @profiles}],
-      crf: [type: {:in, 0..63}],
+      crf: [type: {:in, 0..@max_crf}],
       bitrate: [type: {:in, 1_000..50_000_000}]
     ]
   end
