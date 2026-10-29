@@ -97,10 +97,14 @@ expect(metrics.time_to_first_frame.status).toBe("measured");
 
 expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50);
 expect(metrics.time_to_first_frame.ms).toBeLessThan(5000);
+expect(metrics.frames.reordered.count).toBe(0);
+expect(metrics.frames.missing.count).toBe(0);
+expect(metrics.frames.duplicated.count).toBe(0);
 ```
 
-Both metrics report null until they have something to say, so the checks above
-ask whether there is a measurement before comparing it.
+Every metric reports null until it can say something. A null compares below any
+threshold, so the first two lines ask whether there is a measurement at all
+before the comparisons below them.
 
 Watching before publishing is what lets `time_to_first_frame` be measured: the
 moment a segment becomes available leaves no trace to read afterwards, so a
