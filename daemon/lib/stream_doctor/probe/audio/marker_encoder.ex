@@ -40,7 +40,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
   end
 
   defp marker_frames(position, frames, sample_rate, state, acc) do
-    symbol_length = Tone.symbol_length(sample_rate)
+    symbol_length = RawAudio.bytes_to_frames(Tone.symbol_bytes(sample_rate), state.format)
     symbol_number = Integer.mod(Integer.floor_div(position, symbol_length), Tone.max_symbol())
     offset = Integer.mod(position, symbol_length)
     span = min(frames, symbol_length - offset)

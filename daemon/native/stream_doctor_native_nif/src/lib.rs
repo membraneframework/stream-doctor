@@ -92,19 +92,8 @@ fn tone_scan_symbols() -> u32 {
 }
 
 #[rustler::nif]
-fn tone_symbol_length(tone: &ToneResource) -> u32 {
-    tone.0.symbol_length()
-}
-
-// Erlang sub-binaries are not guaranteed to be aligned, so copy instead of align_to.
-fn i16_samples(payload: Binary) -> Vec<i16> {
-    payload
-        .as_slice()
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|bytes| i16::from_le_bytes(*bytes))
-        .collect()
+fn tone_symbol_bytes(tone: &ToneResource) -> u32 {
+    tone.0.symbol_bytes()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
@@ -114,23 +103,21 @@ fn tone_encode<'a>(
     tone: &ToneResource,
     symbol_number: u32,
 ) -> Binary<'a> {
-    let mut samples = i16_samples(payload);
-    tone.0.encode(&mut samples, symbol_number);
-
-    let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
-    copy(env, &bytes).into()
+    let mut out = copy(env, payload.as_slice());
+    tone.0.encode(out.as_mut_slice(), symbol_number);
+    out.into()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
 fn tone_find_alignment(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
     tone.0
-        .find_alignment(&i16_samples(payload))
+        .find_alignment(payload.as_slice())
         .map_err(decoding_error)
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
 fn tone_decode(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
-    tone.0.decode(&i16_samples(payload)).map_err(decoding_error)
+    tone.0.decode(payload.as_slice()).map_err(decoding_error)
 }
 
 rustler::init!("Elixir.StreamDoctor.Native");

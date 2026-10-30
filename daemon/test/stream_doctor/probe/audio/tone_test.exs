@@ -15,9 +15,9 @@ defmodule StreamDoctor.Probe.ToneTest do
   end
 
   test "find_alignment recovers the symbol boundary" do
-    symbol_length = Tone.symbol_length(@sample_rate)
-    offset = div(symbol_length, 3)
-    silence = :binary.copy(<<0::16>>, offset)
+    symbol_bytes = Tone.symbol_bytes(@sample_rate)
+    offset = div(symbol_bytes, 3)
+    silence = :binary.copy(<<0>>, offset)
 
     symbols =
       Enum.map(
@@ -28,18 +28,17 @@ defmodule StreamDoctor.Probe.ToneTest do
     buffer = IO.iodata_to_binary([silence | symbols])
 
     assert {:ok, found} = Tone.find_alignment(buffer, @sample_rate)
-    assert abs(found - offset) <= div(symbol_length, 16)
+    assert abs(found - offset) <= div(symbol_bytes, 16)
 
     assert {:error, :markers_not_found} ==
              Tone.find_alignment(
-               :binary.copy(<<0::16>>, div(byte_size(buffer), 2)),
+               :binary.copy(<<0>>, byte_size(buffer)),
                @sample_rate
              )
   end
 
   test "silence reports missing marker" do
-    n = Tone.symbol_length(@sample_rate)
-    silence = :binary.copy(<<0::16>>, n)
+    silence = :binary.copy(<<0>>, Tone.symbol_bytes(@sample_rate))
     assert {:error, :markers_not_found} == Tone.decode_window(silence, @sample_rate)
   end
 
@@ -47,7 +46,7 @@ defmodule StreamDoctor.Probe.ToneTest do
     # Symbol 42 = 0b0101010 -> data tones at 1500, 2500, 3500 Hz; odd bit sum
     # -> parity tone at 4500 Hz; plus the 500 Hz reference. Amplitudes fall
     # with frequency (~ -9.5 dB power at 4.5 kHz), as after lowpass filtering.
-    n = Tone.symbol_length(@sample_rate)
+    n = div(Tone.symbol_bytes(@sample_rate), 2)
 
     window =
       for i <- 0..(n - 1), into: <<>> do
@@ -66,18 +65,17 @@ defmodule StreamDoctor.Probe.ToneTest do
   end
 
   test "decode survives small misalignment and noise" do
-    shift = div(Tone.symbol_length(@sample_rate), 32)
+    symbol_bytes = Tone.symbol_bytes(@sample_rate)
+    shift = div(symbol_bytes, 32)
 
     stream =
       [41, 42, 43]
       |> Enum.map(&Tone.symbol_samples(&1, @sample_rate))
       |> IO.iodata_to_binary()
 
-    symbol_bytes = Tone.symbol_length(@sample_rate) * 2
-
     noisy_window =
       stream
-      |> binary_part(symbol_bytes + shift * 2, symbol_bytes)
+      |> binary_part(symbol_bytes + shift, symbol_bytes)
       |> then(fn window ->
         for <<sample::16-signed-little <- window>>, into: <<>> do
           <<round(sample + 200.0 * :math.sin(sample))::16-signed-little>>

@@ -17,14 +17,14 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @spec symbol_ms() :: pos_integer()
   defdelegate symbol_ms(), to: Native, as: :tone_symbol_ms
 
-  @spec symbol_length(pos_integer()) :: pos_integer()
-  def symbol_length(sample_rate) do
-    sample_rate |> new() |> Native.tone_symbol_length()
+  @spec symbol_bytes(pos_integer()) :: pos_integer()
+  def symbol_bytes(sample_rate) do
+    sample_rate |> new() |> Native.tone_symbol_bytes()
   end
 
   @spec symbol_samples(non_neg_integer(), pos_integer()) :: binary()
   def symbol_samples(symbol_number, sample_rate) do
-    silence = :binary.copy(<<0::16>>, symbol_length(sample_rate))
+    silence = :binary.copy(<<0>>, symbol_bytes(sample_rate))
     encode(silence, new(sample_rate), symbol_number)
   end
 
