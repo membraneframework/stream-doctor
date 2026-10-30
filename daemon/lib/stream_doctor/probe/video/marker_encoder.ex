@@ -16,19 +16,19 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
 
   @impl true
   def handle_init(_ctx, _opts) do
-    {[], %{geometry: nil}}
+    {[], %{bar: nil}}
   end
 
   @impl true
   def handle_stream_format(:input, stream_format, _ctx, state) do
-    geometry = Bar.geometry(stream_format.width, stream_format.height)
-    {[stream_format: {:output, stream_format}], %{state | geometry: geometry}}
+    bar = Bar.new(stream_format.width, stream_format.height)
+    {[stream_format: {:output, stream_format}], %{state | bar: bar}}
   end
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
     frame_number = round(buffer.pts / buffer.metadata.duration)
-    buffer = %{buffer | payload: Bar.encode(buffer.payload, state.geometry, frame_number)}
+    buffer = %{buffer | payload: Bar.encode(buffer.payload, state.bar, frame_number)}
     {[buffer: {:output, buffer}], state}
   end
 end

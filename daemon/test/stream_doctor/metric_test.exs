@@ -15,7 +15,7 @@ defmodule StreamDoctor.MetricTest do
     # 1400 + m * 30 + shift_ms (the audio content shifted against the
     # video's). Counters are emitted wrapped, as the decoders produce them.
     defp video_recv(range, fps \\ 25) do
-      max_frame = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      max_frame = StreamDoctor.Probe.Video.Bar.max_frame()
 
       Enum.map(range, fn i ->
         pts = milliseconds(1400) + div(i * Membrane.Time.second(), fps)
@@ -24,7 +24,7 @@ defmodule StreamDoctor.MetricTest do
     end
 
     defp audio_recv(range, shift_ms \\ 0) do
-      max_symbol = StreamDoctor.Probe.Audio.MarkerDecoder.max_symbol()
+      max_symbol = StreamDoctor.Probe.Audio.Tone.max_symbol()
 
       Enum.map(range, fn m ->
         {:audio_symbol_received, rem(m, max_symbol), milliseconds(1400 + m * 30 + shift_ms)}

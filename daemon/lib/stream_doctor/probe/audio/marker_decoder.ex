@@ -17,7 +17,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   @typep state :: %{
            collector: pid() | nil,
            format: RawAudio.t() | nil,
-           tone: Tone.tone() | nil,
+           tone: Tone.t() | nil,
            buffer: binary(),
            synced?: boolean(),
            error_streak: non_neg_integer(),
@@ -33,12 +33,6 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
                 description:
                   "Gets `{:audio_symbol_received, symbol_number, pts}`. When nil, events are logged instead."
               ]
-
-  @spec max_symbol() :: pos_integer()
-  defdelegate max_symbol(), to: Tone
-
-  @spec symbol_ms() :: pos_integer()
-  defdelegate symbol_ms(), to: Tone
 
   @impl true
   def handle_init(_ctx, opts) do
@@ -129,7 +123,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     result =
       state.buffer
       |> binary_part(0, symbol_bytes)
-      |> Tone.decode_window(state.tone)
+      |> Tone.decode(state.tone)
 
     case {result, state.collector} do
       {{:ok, symbol_number}, nil} ->
