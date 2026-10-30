@@ -174,17 +174,17 @@ impl Tone {
 }
 
 #[must_use]
-pub fn max_symbol() -> u32 {
+pub const fn max_symbol() -> u32 {
     MAX_SYMBOL
 }
 
 #[must_use]
-pub fn symbol_ms() -> u32 {
+pub const fn symbol_ms() -> u32 {
     SYMBOL_MS
 }
 
 #[must_use]
-pub fn scan_symbols() -> u32 {
+pub const fn scan_symbols() -> u32 {
     SCAN_SYMBOLS
 }
 
