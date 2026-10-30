@@ -7,6 +7,7 @@ mod atoms {
     rustler::atoms! {
         markers_not_found,
         parity_mismatch,
+        unknown,
     }
 }
 
@@ -20,9 +21,9 @@ struct ToneResource(Tone);
 #[rustler::resource_impl]
 impl Resource for ToneResource {}
 
-fn copy<'a>(env: Env<'a>, payload: Binary<'a>) -> NewBinary<'a> {
-    let mut out = NewBinary::new(env, payload.len());
-    out.as_mut_slice().copy_from_slice(payload.as_slice());
+fn copy<'a>(env: Env<'a>, bytes: &[u8]) -> NewBinary<'a> {
+    let mut out = NewBinary::new(env, bytes.len());
+    out.as_mut_slice().copy_from_slice(bytes);
     out
 }
 
@@ -30,6 +31,7 @@ fn decoding_error(error: DecodingError) -> Atom {
     match error {
         DecodingError::MarkersNotFound => atoms::markers_not_found(),
         DecodingError::ParityMismatch => atoms::parity_mismatch(),
+        _ => atoms::unknown(),
     }
 }
 
@@ -58,7 +60,7 @@ fn bar_encode<'a>(
     geometry: &GeometryResource,
     frame_number: u32,
 ) -> Binary<'a> {
-    let mut out = copy(env, payload);
+    let mut out = copy(env, payload.as_slice());
     geometry.0.encode(out.as_mut_slice(), frame_number);
     out.into()
 }
@@ -111,17 +113,9 @@ fn tone_encode<'a>(
 ) -> Binary<'a> {
     let mut samples = i16_samples(payload);
     tone.0.encode(&mut samples, symbol_number);
-    let mut out = NewBinary::new(env, payload.len());
-    for (bytes, sample) in out
-        .as_mut_slice()
-        .as_chunks_mut::<2>()
-        .0
-        .iter_mut()
-        .zip(&samples)
-    {
-        *bytes = sample.to_le_bytes();
-    }
-    out.into()
+
+    let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+    copy(env, &bytes).into()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]

@@ -42,7 +42,7 @@ defmodule StreamDoctor.Probe.ToneTest do
     assert {:ok, found} = Tone.find_alignment(buffer, @sample_rate)
     assert abs(found - offset) <= div(symbol_length, 16)
 
-    assert :error ==
+    assert {:error, :markers_not_found} ==
              Tone.find_alignment(
                :binary.copy(<<0::16>>, div(byte_size(buffer), 2)),
                @sample_rate

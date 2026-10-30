@@ -21,7 +21,7 @@ defmodule StreamDoctor.Probe.Audio.Tone do
 
   @spec symbol_length(pos_integer()) :: pos_integer()
   def symbol_length(sample_rate) do
-    Native.tone_symbol_length(new(sample_rate))
+    sample_rate |> new() |> Native.tone_symbol_length()
   end
 
   @spec symbol_samples(non_neg_integer(), pos_integer()) :: binary()
@@ -35,12 +35,10 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     @scan_symbols + 1
   end
 
-  @spec find_alignment(binary(), pos_integer()) :: {:ok, non_neg_integer()} | :error
+  @spec find_alignment(binary(), pos_integer()) ::
+          {:ok, non_neg_integer()} | {:error, :markers_not_found}
   def find_alignment(buffer, sample_rate) do
-    case Native.tone_find_alignment(buffer, new(sample_rate)) do
-      {:ok, offset} -> {:ok, offset}
-      {:error, :markers_not_found} -> :error
-    end
+    Native.tone_find_alignment(buffer, new(sample_rate))
   end
 
   @spec decode_window(binary(), pos_integer()) ::

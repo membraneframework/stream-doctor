@@ -3,7 +3,7 @@
 //! are the frame number, highest bit first. The last square is a parity bit.
 //! Works only with I420 frames.
 
-use crate::DecodingError;
+use crate::{DecodingError, generate_bits};
 use std::{array::from_fn, iter::zip};
 
 use bitvec::prelude::*;
@@ -91,7 +91,11 @@ impl Geometry {
 
         y[self.bar_top_y as usize * width..].fill(BLACK);
 
-        let squares_row = self.squares_row(&generate_bits(frame_number));
+        let squares_row = self.squares_row(&generate_bits(
+            frame_number,
+            DATA_BITS as usize,
+            bitvec![1, 0],
+        ));
         for row in self.square_top_y..self.square_top_y + self.square_size {
             let start = row as usize * width;
             y[start..start + width].copy_from_slice(&squares_row);
@@ -145,7 +149,9 @@ impl Geometry {
         let data_bits = &bits[2..(TOTAL_SQUARES - 1) as usize];
 
         if (data_bits.count_ones() % 2 != 0) == parity_bit {
-            Ok(data_bits.load_be::<u32>())
+            Ok(data_bits
+                .iter()
+                .fold(0, |acc, bit| acc * 2 + u32::from(*bit)))
         } else {
             Err(DecodingError::ParityMismatch)
         }
@@ -180,21 +186,6 @@ impl Geometry {
             .sum::<f32>()
             / side as f32
     }
-}
-
-fn generate_bits(frame_number: u32) -> BitVec {
-    let n = frame_number % MAX_FRAME;
-
-    //calibration bits
-    let mut bits = bitvec![0; TOTAL_SQUARES as usize];
-    bits.set(0, true);
-    bits.set(1, false);
-    // data bits, MSB first
-    bits[2..(TOTAL_SQUARES - 1) as usize].store_be(n);
-    // parity bit
-    bits.set((TOTAL_SQUARES - 1) as usize, n.count_ones() % 2 == 1);
-
-    bits
 }
 
 fn round_to_even(n: u32) -> u32 {

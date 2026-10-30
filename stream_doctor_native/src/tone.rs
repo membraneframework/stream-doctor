@@ -8,10 +8,9 @@
 //! guard bins `GUARD_OFFSET` Hz on either side of it. Comparing against the neighbours rather than
 //! an absolute level is what lets the marker survive the spectral tilt that codecs add.
 
-use crate::DecodingError;
-use std::f32::consts::PI;
-
+use crate::{DecodingError, generate_bits};
 use bitvec::prelude::*;
+use std::f32::consts::PI;
 
 const SYMBOL_MS: u32 = 30;
 
@@ -50,7 +49,7 @@ impl Tone {
     }
 
     pub fn encode(&self, samples: &mut [i16], symbol_number: u32) {
-        let bits = generate_bits(symbol_number);
+        let bits = generate_bits(symbol_number, DATA_BITS as usize, bitvec![1]);
         let active_freqs: Vec<f32> = FREQS
             .iter()
             .zip(bits)
@@ -159,18 +158,6 @@ pub fn symbol_ms() -> u32 {
     SYMBOL_MS
 }
 
-fn generate_bits(symbol_number: u32) -> BitVec {
-    let n = symbol_number % MAX_SYMBOL;
-
-    //calibration bits
-    let mut bits = bitvec![1];
-    // data bits, MSB first
-    bits.extend((0..DATA_BITS).rev().map(|i| (n >> i) & 1 == 1));
-    // parity bit
-    bits.push(n.count_ones() % 2 == 1);
-
-    bits
-}
 fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
     let is_best = |&(_, score_value): &(u32, u32)| score_value == best_score_value;
     let rotation = scores.iter().position(|score| !is_best(score)).unwrap_or(0);
@@ -188,20 +175,10 @@ fn goertzel_power(samples: &[i16], n: u32, freq: u32, sample_rate: u32) -> f64 {
     let k = (f64::from(freq * n) / f64::from(sample_rate)).round();
     let omega = 2.0 * std::f64::consts::PI * k / f64::from(n);
     let coeff = 2.0 * f64::cos(omega);
-    let (s1, s2) = goertzel_loop(samples, coeff);
+    let (s1, s2) = samples.iter().fold((0.0, 0.0), |(s1, s2), sample| {
+        (f64::from(*sample) + coeff * s1 - s2, s1)
+    });
     s1 * s1 + s2 * s2 - coeff * s1 * s2
-}
-
-fn goertzel_loop(samples: &[i16], coeff: f64) -> (f64, f64) {
-    let mut s1 = 0.0;
-    let mut s2 = 0.0;
-    for &sample in samples {
-        let sample = f64::from(sample);
-        let tmp = s1;
-        s1 = sample + coeff * s1 - s2;
-        s2 = tmp;
-    }
-    (s1, s2)
 }
 
 #[cfg(test)]

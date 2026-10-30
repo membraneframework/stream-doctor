@@ -14,6 +14,16 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @max_error_streak 8
 
+  @typep state :: %{
+           collector: pid() | nil,
+           format: RawAudio.t() | nil,
+           buffer: binary(),
+           synced?: boolean(),
+           error_streak: non_neg_integer(),
+           anchor_pts: Membrane.Time.t() | nil,
+           appended_samples: non_neg_integer()
+         }
+
   def_input_pad :input, accepted_format: %RawAudio{sample_format: :s16le, channels: 1}
 
   def_options collector: [
@@ -79,6 +89,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     {[], process(state)}
   end
 
+  @spec process(state()) :: state()
   defp process(state) do
     symbol_bytes =
       state.format.sample_rate |> Tone.symbol_length() |> RawAudio.frames_to_bytes(state.format)
@@ -96,6 +107,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
+  @spec synchronize(state(), pos_integer()) :: state()
   defp synchronize(state, symbol_bytes) do
     case Tone.find_alignment(state.buffer, state.format.sample_rate) do
       {:ok, offset} ->
@@ -104,12 +116,14 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
         rest_size = byte_size(state.buffer) - offset_bytes
         %{state | buffer: binary_part(state.buffer, offset_bytes, rest_size), synced?: true}
 
-      :error ->
+      {:error, reason} ->
+        Membrane.Logger.debug("Audio marker alignment not found: #{inspect(reason)}")
         rest_size = byte_size(state.buffer) - symbol_bytes
         %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
     end
   end
 
+  @spec decode_symbol(state(), pos_integer()) :: state()
   defp decode_symbol(state, symbol_bytes) do
     result =
       state.buffer
@@ -149,6 +163,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
+  @spec symbol_pts(state()) :: Membrane.Time.t() | nil
   defp symbol_pts(%{anchor_pts: nil}) do
     nil
   end
