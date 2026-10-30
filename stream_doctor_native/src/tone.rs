@@ -29,6 +29,7 @@ const REF_FLOOR: f64 = 0.01;
 const MIN_SCORE: u32 = 10;
 const SCAN_SYMBOLS: u32 = 6;
 
+#[derive(Debug, PartialEq)]
 pub struct Tone {
     sample_rate: u32,
     symbol_length: u32,
@@ -49,6 +50,7 @@ impl Tone {
     }
 
     pub fn encode(&self, samples: &mut [i16], symbol_number: u32) {
+        self.check_window_size(samples);
         let bits = generate_bits(symbol_number, DATA_BITS as usize, bitvec![1]);
         let active_freqs: Vec<f32> = FREQS
             .iter()
@@ -65,7 +67,8 @@ impl Tone {
                 .sum::<f32>()
                 .round();
 
-            *sample = (f32::from(*sample) * SOURCE_GAIN + tone) as i16;
+            *sample = (f32::from(*sample) * SOURCE_GAIN + tone)
+                .clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16;
         }
     }
 
@@ -91,6 +94,16 @@ impl Tone {
             None => Err(DecodingError::MarkersNotFound),
             Some(best_score) => Ok(plateau_center(&mut scores, best_score)),
         }
+    }
+
+    fn check_window_size(&self, window: &[i16]) {
+        assert_eq!(
+            window.len(),
+            self.symbol_length as usize,
+            "expected a window of {} samples, got {}",
+            self.symbol_length,
+            window.len()
+        );
     }
 
     fn alignment_score(&self, samples: &[i16], offset: u32) -> u32 {
@@ -119,6 +132,7 @@ impl Tone {
     /// Fails with `MarkersNotFound` when the reference tone is missing,
     /// or `ParityMismatch` when the data bits do not match the parity bit.
     pub fn decode(&self, window: &[i16]) -> Result<u32, DecodingError> {
+        self.check_window_size(window);
         let margin = self.symbol_length / 6;
         let inner_n = self.symbol_length - 2 * margin;
         let inner = &window[margin as usize..(margin + inner_n) as usize];
@@ -223,6 +237,12 @@ mod tests {
             tone.find_alignment(&samples),
             Err(DecodingError::MarkersNotFound)
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "expected a window of 1440 samples")]
+    fn panics_on_a_window_of_the_wrong_size() {
+        Tone::new(48_000).decode(&[0; 1000]).ok();
     }
 
     #[test]
