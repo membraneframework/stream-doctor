@@ -87,6 +87,11 @@ fn tone_symbol_ms() -> u32 {
 }
 
 #[rustler::nif]
+fn tone_scan_symbols() -> u32 {
+    tone::scan_symbols()
+}
+
+#[rustler::nif]
 fn tone_symbol_length(tone: &ToneResource) -> u32 {
     tone.0.symbol_length()
 }

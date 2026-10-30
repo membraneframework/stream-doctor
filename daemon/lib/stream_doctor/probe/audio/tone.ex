@@ -11,8 +11,6 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @spec encode(binary(), tone(), non_neg_integer()) :: binary()
   defdelegate encode(payload, tone, symbol_number), to: Native, as: :tone_encode
 
-  @scan_symbols 6
-
   @spec max_symbol() :: pos_integer()
   defdelegate max_symbol(), to: Native, as: :tone_max_symbol
 
@@ -32,7 +30,7 @@ defmodule StreamDoctor.Probe.Audio.Tone do
 
   @spec alignment_buffer_symbols() :: pos_integer()
   def alignment_buffer_symbols do
-    @scan_symbols + 1
+    Native.tone_scan_symbols() + 1
   end
 
   @spec find_alignment(binary(), pos_integer()) ::

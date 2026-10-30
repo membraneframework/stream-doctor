@@ -94,7 +94,7 @@ impl Geometry {
         let squares_row = self.squares_row(&generate_bits(
             frame_number,
             DATA_BITS as usize,
-            bitvec![1, 0],
+            bitvec![u8, Msb0; 1, 0],
         ));
         for row in self.square_top_y..self.square_top_y + self.square_size {
             let start = row as usize * width;
@@ -139,7 +139,7 @@ impl Geometry {
         }
 
         let threshold = f32::midpoint(white_reference, black_reference);
-        let bits: BitVec = square_luma_averages
+        let bits: BitVec<u8, Msb0> = square_luma_averages
             .iter()
             .map(|&v| v > threshold)
             .collect();
@@ -149,15 +149,13 @@ impl Geometry {
         let data_bits = &bits[2..(TOTAL_SQUARES - 1) as usize];
 
         if (data_bits.count_ones() % 2 != 0) == parity_bit {
-            Ok(data_bits
-                .iter()
-                .fold(0, |acc, bit| acc * 2 + u32::from(*bit)))
+            Ok(data_bits.load_be::<u32>())
         } else {
             Err(DecodingError::ParityMismatch)
         }
     }
 
-    fn squares_row(&self, bits: &BitVec) -> Vec<u8> {
+    fn squares_row(&self, bits: &BitVec<u8, Msb0>) -> Vec<u8> {
         let mut row = vec![BLACK; self.width as usize];
 
         for (x, bit) in zip(self.square_xs, bits) {

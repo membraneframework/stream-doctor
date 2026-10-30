@@ -11,6 +11,7 @@ defmodule StreamDoctor.Native do
   def tone_new(_sample_rate), do: :erlang.nif_error(:nif_not_loaded)
   def tone_max_symbol, do: :erlang.nif_error(:nif_not_loaded)
   def tone_symbol_ms, do: :erlang.nif_error(:nif_not_loaded)
+  def tone_scan_symbols, do: :erlang.nif_error(:nif_not_loaded)
   def tone_symbol_length(_tone), do: :erlang.nif_error(:nif_not_loaded)
   def tone_encode(_payload, _tone, _symbol_number), do: :erlang.nif_error(:nif_not_loaded)
   def tone_find_alignment(_payload, _tone), do: :erlang.nif_error(:nif_not_loaded)

@@ -51,7 +51,7 @@ impl Tone {
 
     pub fn encode(&self, samples: &mut [i16], symbol_number: u32) {
         self.check_window_size(samples);
-        let bits = generate_bits(symbol_number, DATA_BITS as usize, bitvec![1]);
+        let bits = generate_bits(symbol_number, DATA_BITS as usize, bitvec![u8, Msb0; 1]);
         let active_freqs: Vec<f32> = FREQS
             .iter()
             .zip(bits)
@@ -170,6 +170,11 @@ pub fn max_symbol() -> u32 {
 #[must_use]
 pub fn symbol_ms() -> u32 {
     SYMBOL_MS
+}
+
+#[must_use]
+pub fn scan_symbols() -> u32 {
+    SCAN_SYMBOLS
 }
 
 fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
