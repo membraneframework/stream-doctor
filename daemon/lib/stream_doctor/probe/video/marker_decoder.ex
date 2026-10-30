@@ -20,9 +20,6 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
                   "Gets `{:video_frame_received, frame_number, pts}`. When nil, events are logged instead."
               ]
 
-  @spec max_frame() :: pos_integer()
-  defdelegate max_frame(), to: Bar
-
   @impl true
   def handle_init(_ctx, opts) do
     {[], %{collector: opts.collector, bar: nil}}
