@@ -34,12 +34,6 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
                   "Gets `{:audio_symbol_received, symbol_number, pts}`. When nil, events are logged instead."
               ]
 
-  @spec max_symbol() :: pos_integer()
-  defdelegate max_symbol(), to: Tone
-
-  @spec symbol_ms() :: pos_integer()
-  defdelegate symbol_ms(), to: Tone
-
   @impl true
   def handle_init(_ctx, opts) do
     state = %{
