@@ -36,6 +36,7 @@ pub struct Tone {
 }
 
 impl Tone {
+    #[must_use]
     pub fn new(sample_rate: u32) -> Self {
         Tone {
             sample_rate,
@@ -43,6 +44,7 @@ impl Tone {
         }
     }
 
+    #[must_use]
     pub fn symbol_length(&self) -> u32 {
         self.symbol_length
     }
@@ -64,10 +66,14 @@ impl Tone {
                 .sum::<f32>()
                 .round();
 
-            *sample = ((*sample as f32 * SOURCE_GAIN + tone) as i32).clamp(-32_768, 32_767) as i16;
+            *sample = (f32::from(*sample) * SOURCE_GAIN + tone) as i16;
         }
     }
 
+    /// Finds the sample offset at which the symbols in `samples` start.
+    ///
+    /// # Errors
+    /// Fails with `MarkersNotFound` when no offset decodes enough consecutive symbols.
     pub fn find_alignment(&self, samples: &[i16]) -> Result<u32, DecodingError> {
         let step = (self.symbol_length / 16).max(1) as usize;
 
@@ -108,6 +114,11 @@ impl Tone {
         parity_score + 2 * sequence_score
     }
 
+    /// Decodes the symbol carried by one symbol-length window of samples.
+    ///
+    /// # Errors
+    /// Fails with `MarkersNotFound` when the reference tone is missing,
+    /// or `ParityMismatch` when the data bits do not match the parity bit.
     pub fn decode(&self, window: &[i16]) -> Result<u32, DecodingError> {
         let margin = self.symbol_length / 6;
         let inner_n = self.symbol_length - 2 * margin;
@@ -126,7 +137,7 @@ impl Tone {
                 let tone_power = power(freq);
                 let on = tone_power > LOCAL_CONTRAST * local_noise(freq)
                     && tone_power > REF_FLOOR * ref_power;
-                on as u32
+                u32::from(on)
             })
             .collect();
         let (data, parity) = bits.split_at(DATA_BITS as usize);
@@ -138,10 +149,12 @@ impl Tone {
     }
 }
 
+#[must_use]
 pub fn max_symbol() -> u32 {
     MAX_SYMBOL
 }
 
+#[must_use]
 pub fn symbol_ms() -> u32 {
     SYMBOL_MS
 }
@@ -172,8 +185,8 @@ fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
 }
 
 fn goertzel_power(samples: &[i16], n: u32, freq: u32, sample_rate: u32) -> f64 {
-    let k = ((freq * n) as f64 / sample_rate as f64).round();
-    let omega: f64 = 2.0 * PI as f64 * k / n as f64;
+    let k = (f64::from(freq * n) / f64::from(sample_rate)).round();
+    let omega = 2.0 * std::f64::consts::PI * k / f64::from(n);
     let coeff = 2.0 * f64::cos(omega);
     let (s1, s2) = goertzel_loop(samples, coeff);
     s1 * s1 + s2 * s2 - coeff * s1 * s2
