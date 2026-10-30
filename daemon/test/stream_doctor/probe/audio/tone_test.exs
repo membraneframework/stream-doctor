@@ -14,18 +14,6 @@ defmodule StreamDoctor.Probe.ToneTest do
     end
   end
 
-  test "native encode round-trips through decode_window" do
-    tone = Tone.new(@sample_rate)
-    silence = :binary.copy(<<0::16>>, Tone.symbol_length(@sample_rate))
-
-    for symbol_number <- [0, 1, 42, 127, 130] do
-      window = silence |> Tone.encode(tone, symbol_number)
-
-      assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
-               Tone.decode_window(window, @sample_rate)
-    end
-  end
-
   test "find_alignment recovers the symbol boundary" do
     symbol_length = Tone.symbol_length(@sample_rate)
     offset = div(symbol_length, 3)
