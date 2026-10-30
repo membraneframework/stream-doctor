@@ -91,9 +91,8 @@ impl Geometry {
 
         y[self.bar_top_y as usize * width..].fill(BLACK);
 
-        let squares_row = self.squares_row(&generate_bits(
+        let squares_row = self.squares_row(&generate_bits::<{ DATA_BITS as usize }>(
             frame_number,
-            DATA_BITS as usize,
             bitvec![u8, Msb0; 1, 0],
         ));
         for row in self.square_top_y..self.square_top_y + self.square_size {

@@ -51,7 +51,7 @@ impl Tone {
 
     pub fn encode(&self, samples: &mut [i16], symbol_number: u32) {
         self.check_window_size(samples);
-        let bits = generate_bits(symbol_number, DATA_BITS as usize, bitvec![u8, Msb0; 1]);
+        let bits = generate_bits::<{ DATA_BITS as usize }>(symbol_number, bitvec![u8, Msb0; 1]);
         let active_freqs: Vec<f32> = FREQS
             .iter()
             .zip(bits)
