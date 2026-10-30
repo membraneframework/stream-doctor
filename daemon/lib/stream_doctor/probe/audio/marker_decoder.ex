@@ -17,7 +17,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   @typep state :: %{
            collector: pid() | nil,
            format: RawAudio.t() | nil,
-           tone: Tone.tone() | nil,
+           tone: Tone.t() | nil,
            buffer: binary(),
            synced?: boolean(),
            error_streak: non_neg_integer(),
@@ -129,7 +129,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     result =
       state.buffer
       |> binary_part(0, symbol_bytes)
-      |> Tone.decode_window(state.tone)
+      |> Tone.decode(state.tone)
 
     case {result, state.collector} do
       {{:ok, symbol_number}, nil} ->

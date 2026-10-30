@@ -25,18 +25,18 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
 
   @impl true
   def handle_init(_ctx, opts) do
-    {[], %{collector: opts.collector, geometry: nil}}
+    {[], %{collector: opts.collector, bar: nil}}
   end
 
   @impl true
   def handle_stream_format(:input, stream_format, _ctx, state) do
-    geometry = Bar.geometry(stream_format.width, stream_format.height)
-    {[], %{state | geometry: geometry}}
+    bar = Bar.new(stream_format.width, stream_format.height)
+    {[], %{state | bar: bar}}
   end
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    case {Bar.decode(buffer.payload, state.geometry), state.collector} do
+    case {Bar.decode(buffer.payload, state.bar), state.collector} do
       {{:ok, frame_number}, nil} ->
         Membrane.Logger.info("Decoded frame number: #{frame_number}")
 

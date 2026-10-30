@@ -1,6 +1,6 @@
 use rustler::{Atom, Binary, Env, NewBinary, Resource, ResourceArc};
 use stream_doctor_native::DecodingError;
-use stream_doctor_native::bar::{self, Geometry, GeometryError};
+use stream_doctor_native::bar::{self, Bar, BarError};
 use stream_doctor_native::tone::{self, Tone};
 
 mod atoms {
@@ -10,10 +10,10 @@ mod atoms {
     }
 }
 
-struct GeometryResource(Geometry);
+struct BarResource(Bar);
 
 #[rustler::resource_impl]
-impl Resource for GeometryResource {}
+impl Resource for BarResource {}
 
 struct ToneResource(Tone);
 
@@ -34,13 +34,13 @@ fn decoding_error(error: DecodingError) -> Atom {
 }
 
 #[rustler::nif]
-fn bar_geometry(width: u32, height: u32) -> Result<ResourceArc<GeometryResource>, String> {
-    match Geometry::new(width, height) {
-        Ok(g) => Ok(ResourceArc::new(GeometryResource(g))),
-        Err(GeometryError::TooNarrow(needed)) => Err(format!(
+fn bar_new(width: u32, height: u32) -> Result<ResourceArc<BarResource>, String> {
+    match Bar::new(width, height) {
+        Ok(bar) => Ok(ResourceArc::new(BarResource(bar))),
+        Err(BarError::TooNarrow(needed)) => Err(format!(
             "video is too narrow for the frame-number bar: {width}px, needs {needed}px"
         )),
-        Err(GeometryError::TooShort(needed)) => Err(format!(
+        Err(BarError::TooShort(needed)) => Err(format!(
             "video is too short for the frame-number bar: {height}px, needs {needed}px"
         )),
     }
@@ -55,20 +55,17 @@ fn bar_max_frame() -> u32 {
 fn bar_encode<'a>(
     env: Env<'a>,
     payload: Binary<'a>,
-    geometry: &GeometryResource,
+    bar: &BarResource,
     frame_number: u32,
 ) -> Binary<'a> {
     let mut out = copy(env, payload.as_slice());
-    geometry.0.encode(out.as_mut_slice(), frame_number);
+    bar.0.encode(out.as_mut_slice(), frame_number);
     out.into()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn bar_decode(payload: Binary, geometry: &GeometryResource) -> Result<u32, Atom> {
-    geometry
-        .0
-        .decode(payload.as_slice())
-        .map_err(decoding_error)
+fn bar_decode(payload: Binary, bar: &BarResource) -> Result<u32, Atom> {
+    bar.0.decode(payload.as_slice()).map_err(decoding_error)
 }
 
 #[rustler::nif]

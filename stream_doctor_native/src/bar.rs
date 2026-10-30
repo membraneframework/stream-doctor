@@ -20,9 +20,9 @@ const MIN_CONTRAST: f32 = 32.0;
 
 /// Position and size of the bar and its squares for one resolution.
 ///
-/// Create it once with [`Geometry::new`] and use it for every frame.
+/// Create it once with [`Bar::new`] and use it for every frame.
 #[derive(Debug, PartialEq)]
-pub struct Geometry {
+pub struct Bar {
     width: u32,
     height: u32,
     square_size: u32,
@@ -32,7 +32,7 @@ pub struct Geometry {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum GeometryError {
+pub enum BarError {
     /// The frame is too narrow to fit all squares. Carries the width it would need.
     TooNarrow(u32),
     /// The frame is too short to fit the bar. Carries the height it would need.
@@ -45,26 +45,26 @@ pub const fn max_frame() -> u32 {
     MAX_FRAME
 }
 
-impl Geometry {
+impl Bar {
     /// Computes the bar layout for a frame of this size.
     ///
     /// # Errors
     /// Fails when the frame is too small to fit the bar.
-    pub fn new(width: u32, height: u32) -> Result<Self, GeometryError> {
+    pub fn new(width: u32, height: u32) -> Result<Self, BarError> {
         let square_size = round_to_even((width / 24).max(8));
         let gap = round_to_even((square_size / 4).max(2));
         let pad_width = gap;
 
         let needed_width = pad_width + TOTAL_SQUARES * (square_size + gap);
         if needed_width > width {
-            return Err(GeometryError::TooNarrow(needed_width));
+            return Err(BarError::TooNarrow(needed_width));
         }
         let bar_height = square_size + 2 * pad_width;
         if bar_height > height {
-            return Err(GeometryError::TooShort(bar_height));
+            return Err(BarError::TooShort(bar_height));
         }
 
-        Ok(Geometry {
+        Ok(Bar {
             width,
             height,
             square_size,
@@ -79,7 +79,7 @@ impl Geometry {
     /// Numbers bigger than [`max_frame`] wrap around.
     ///
     /// # Panics
-    /// When `binary` is not an I420 frame of this geometry's size.
+    /// When `binary` is not an I420 frame of this bar's size.
     pub fn encode(&self, binary: &mut [u8], frame_number: u32) {
         let width = self.width as usize;
         let y_size = width * self.height as usize;
@@ -123,7 +123,7 @@ impl Geometry {
     /// Fails when the markers are missing or the parity bit does not match.
     ///
     /// # Panics
-    /// When `binary` is not an I420 frame of this geometry's size.
+    /// When `binary` is not an I420 frame of this bar's size.
     pub fn decode(&self, binary: &[u8]) -> Result<u32, DecodingError> {
         self.check_frame_size(binary);
         let y_size = (self.width * self.height) as usize;
@@ -196,33 +196,33 @@ mod tests {
     #[test]
     fn encodes_and_decodes() {
         let (width, height) = (640, 360);
-        let geometry = Geometry::new(width, height).unwrap();
+        let bar = Bar::new(width, height).unwrap();
         let frame_size = (width * height * 3 / 2) as usize;
 
         for frame_number in [0, 1, 42, 12_345, MAX_FRAME - 1, MAX_FRAME + 7] {
             let mut frame = vec![128; frame_size];
-            geometry.encode(&mut frame, frame_number);
-            assert_eq!(geometry.decode(&frame).ok(), Some(frame_number % MAX_FRAME));
+            bar.encode(&mut frame, frame_number);
+            assert_eq!(bar.decode(&frame).ok(), Some(frame_number % MAX_FRAME));
         }
 
-        assert!(geometry.decode(&vec![128; frame_size]).is_err());
+        assert!(bar.decode(&vec![128; frame_size]).is_err());
     }
 
     #[test]
     #[should_panic(expected = "expected an I420 frame of 640x360")]
     fn panics_on_a_frame_of_the_wrong_size() {
-        Geometry::new(640, 360).unwrap().decode(&[128; 1000]).ok();
+        Bar::new(640, 360).unwrap().decode(&[128; 1000]).ok();
     }
 
     #[test]
     fn rejects_frames_too_small_for_the_bar() {
         assert!(matches!(
-            Geometry::new(100, 360),
-            Err(GeometryError::TooNarrow(needed)) if needed > 100
+            Bar::new(100, 360),
+            Err(BarError::TooNarrow(needed)) if needed > 100
         ));
         assert!(matches!(
-            Geometry::new(640, 10),
-            Err(GeometryError::TooShort(needed)) if needed > 10
+            Bar::new(640, 10),
+            Err(BarError::TooShort(needed)) if needed > 10
         ));
     }
 }

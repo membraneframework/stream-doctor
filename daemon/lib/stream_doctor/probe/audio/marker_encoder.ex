@@ -64,7 +64,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerEncoder do
         {samples, state}
 
       cache ->
-        samples = Tone.symbol_samples(symbol_number, state.tone)
+        samples = Tone.symbol_samples(state.tone, symbol_number)
         {samples, %{state | cache: Map.put(cache, symbol_number, samples)}}
     end
   end
