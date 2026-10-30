@@ -10,7 +10,7 @@
 
 use crate::{DecodingError, generate_bits};
 use bitvec::prelude::*;
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 
 const SYMBOL_MS: u32 = 30;
 
@@ -19,8 +19,8 @@ const MAX_SYMBOL: u32 = 1 << DATA_BITS;
 
 const FREQS: [u32; 9] = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500];
 
-const AMPLITUDE: f32 = 3000.0;
-const SOURCE_GAIN: f32 = 0.5;
+const AMPLITUDE: f64 = 3000.0;
+const SOURCE_GAIN: f64 = 0.5;
 
 const GUARD_OFFSET: u32 = 250;
 const LOCAL_CONTRAST: f64 = 8.0;
@@ -52,23 +52,23 @@ impl Tone {
     pub fn encode(&self, samples: &mut [i16], symbol_number: u32) {
         self.check_window_size(samples);
         let bits = generate_bits::<{ DATA_BITS as usize }>(symbol_number, bitvec![u8, Msb0; 1]);
-        let active_freqs: Vec<f32> = FREQS
+        let active_freqs: Vec<f64> = FREQS
             .iter()
             .zip(bits)
             .filter(|(_, bit)| *bit)
-            .map(|(freq, _)| *freq as f32)
-            .map(|freq| 2.0 * PI * freq / (self.sample_rate as f32))
+            .map(|(freq, _)| f64::from(*freq))
+            .map(|freq| 2.0 * PI * freq / f64::from(self.sample_rate))
             .collect();
 
         for (i, sample) in samples.iter_mut().enumerate() {
-            let tone: f32 = active_freqs
+            let tone: f64 = active_freqs
                 .iter()
-                .map(|freq| f32::sin(freq * i as f32) * AMPLITUDE)
-                .sum::<f32>()
+                .map(|freq| f64::sin(freq * i as f64) * AMPLITUDE)
+                .sum::<f64>()
                 .round();
 
-            *sample = (f32::from(*sample) * SOURCE_GAIN + tone)
-                .clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16;
+            *sample = (f64::from(*sample) * SOURCE_GAIN + tone)
+                .clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16;
         }
     }
 
@@ -192,7 +192,7 @@ fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
 
 fn goertzel_power(samples: &[i16], n: u32, freq: u32, sample_rate: u32) -> f64 {
     let k = (f64::from(freq * n) / f64::from(sample_rate)).round();
-    let omega = 2.0 * std::f64::consts::PI * k / f64::from(n);
+    let omega = 2.0 * PI * k / f64::from(n);
     let coeff = 2.0 * f64::cos(omega);
     let (s1, s2) = samples.iter().fold((0.0, 0.0), |(s1, s2), sample| {
         (f64::from(*sample) + coeff * s1 - s2, s1)
