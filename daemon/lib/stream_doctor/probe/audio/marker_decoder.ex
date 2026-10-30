@@ -14,7 +14,18 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @max_error_streak 8
 
-  def_input_pad :input, accepted_format: %RawAudio{sample_format: :f64le, channels: 1}
+  @typep state :: %{
+           collector: pid() | nil,
+           format: RawAudio.t() | nil,
+           tone: Tone.tone() | nil,
+           buffer: binary(),
+           synced?: boolean(),
+           error_streak: non_neg_integer(),
+           anchor_pts: Membrane.Time.t() | nil,
+           appended_samples: non_neg_integer()
+         }
+
+  def_input_pad :input, accepted_format: %RawAudio{sample_format: :s16le, channels: 1}
 
   def_options collector: [
                 spec: pid() | nil,
@@ -34,6 +45,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     state = %{
       collector: opts.collector,
       format: nil,
+      tone: nil,
       buffer: <<>>,
       synced?: false,
       error_streak: 0,
@@ -49,6 +61,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     state = %{
       state
       | format: stream_format,
+        tone: Tone.new(stream_format.sample_rate),
         buffer: <<>>,
         synced?: false,
         anchor_pts: nil,
@@ -71,14 +84,17 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       state
       | buffer: state.buffer <> buffer.payload,
         anchor_pts: anchor_pts,
-        appended_samples: state.appended_samples + div(byte_size(buffer.payload), 8)
+        appended_samples:
+          state.appended_samples +
+            RawAudio.bytes_to_frames(byte_size(buffer.payload), state.format)
     }
 
     {[], process(state)}
   end
 
+  @spec process(state()) :: state()
   defp process(state) do
-    symbol_bytes = Tone.symbol_length(state.format.sample_rate) * 8
+    symbol_bytes = Tone.symbol_bytes(state.tone)
 
     cond do
       not state.synced? and
@@ -93,24 +109,27 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
+  @spec synchronize(state(), pos_integer()) :: state()
   defp synchronize(state, symbol_bytes) do
-    case Tone.find_alignment(state.buffer, state.format.sample_rate) do
+    case Tone.find_alignment(state.buffer, state.tone) do
       {:ok, offset} ->
-        Membrane.Logger.debug("Audio marker alignment found at offset #{offset}")
-        rest_size = byte_size(state.buffer) - offset * 8
-        %{state | buffer: binary_part(state.buffer, offset * 8, rest_size), synced?: true}
+        Membrane.Logger.debug("Audio marker alignment found at byte offset #{offset}")
+        rest_size = byte_size(state.buffer) - offset
+        %{state | buffer: binary_part(state.buffer, offset, rest_size), synced?: true}
 
-      :error ->
+      {:error, reason} ->
+        Membrane.Logger.debug("Audio marker alignment not found: #{inspect(reason)}")
         rest_size = byte_size(state.buffer) - symbol_bytes
         %{state | buffer: binary_part(state.buffer, symbol_bytes, rest_size)}
     end
   end
 
+  @spec decode_symbol(state(), pos_integer()) :: state()
   defp decode_symbol(state, symbol_bytes) do
     result =
       state.buffer
       |> binary_part(0, symbol_bytes)
-      |> Tone.decode_window(state.format.sample_rate)
+      |> Tone.decode_window(state.tone)
 
     case {result, state.collector} do
       {{:ok, symbol_number}, nil} ->
@@ -145,12 +164,15 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     end
   end
 
+  @spec symbol_pts(state()) :: Membrane.Time.t() | nil
   defp symbol_pts(%{anchor_pts: nil}) do
     nil
   end
 
   defp symbol_pts(state) do
-    consumed_samples = state.appended_samples - div(byte_size(state.buffer), 8)
+    consumed_samples =
+      state.appended_samples - RawAudio.bytes_to_frames(byte_size(state.buffer), state.format)
+
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
 end

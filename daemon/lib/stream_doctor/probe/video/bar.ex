@@ -1,27 +1,25 @@
 defmodule StreamDoctor.Probe.Video.Bar do
   @moduledoc false
 
-  use Rustler, otp_app: :stream_doctor, crate: :stream_doctor_native_nif
+  alias StreamDoctor.Native
 
   @opaque geometry :: reference()
 
   @spec max_frame() :: pos_integer()
-  def max_frame, do: :erlang.nif_error(:nif_not_loaded)
+  defdelegate max_frame(), to: Native, as: :bar_max_frame
 
   @spec geometry(pos_integer(), pos_integer()) :: geometry()
   def geometry(width, height) do
-    case geometry_native(width, height) do
+    case Native.bar_geometry(width, height) do
       {:ok, geometry} -> geometry
       {:error, message} -> raise message
     end
   end
 
-  defp geometry_native(_width, _height), do: :erlang.nif_error(:nif_not_loaded)
-
   @spec encode(binary(), geometry(), non_neg_integer()) :: binary()
-  def encode(_payload, _geometry, _frame_number), do: :erlang.nif_error(:nif_not_loaded)
+  defdelegate encode(payload, geometry, frame_number), to: Native, as: :bar_encode
 
   @spec decode(binary(), geometry()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}
-  def decode(_payload, _geometry), do: :erlang.nif_error(:nif_not_loaded)
+  defdelegate decode(payload, geometry), to: Native, as: :bar_decode
 end

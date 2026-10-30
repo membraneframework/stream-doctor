@@ -3,6 +3,7 @@
 //! are the frame number, highest bit first. The last square is a parity bit.
 //! Works only with I420 frames.
 
+use crate::{DecodingError, generate_bits};
 use std::{array::from_fn, iter::zip};
 
 use bitvec::prelude::*;
@@ -36,14 +37,6 @@ pub enum GeometryError {
     TooNarrow(u32),
     /// The frame is too short to fit the bar. Carries the height it would need.
     TooShort(u32),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DecodingError {
-    /// There is no bar in this frame.
-    MarkersNotFound,
-    /// There is a bar, but the parity bit does not match. The frame is probably damaged.
-    ParityMismatch,
 }
 
 /// The frame number starts from zero again when it reaches this value.
@@ -98,7 +91,10 @@ impl Geometry {
 
         y[self.bar_top_y as usize * width..].fill(BLACK);
 
-        let squares_row = self.squares_row(&generate_bits(frame_number));
+        let squares_row = self.squares_row(&generate_bits::<{ DATA_BITS as usize }>(
+            frame_number,
+            bitvec![u8, Msb0; 1, 0],
+        ));
         for row in self.square_top_y..self.square_top_y + self.square_size {
             let start = row as usize * width;
             y[start..start + width].copy_from_slice(&squares_row);
@@ -142,7 +138,7 @@ impl Geometry {
         }
 
         let threshold = f32::midpoint(white_reference, black_reference);
-        let bits: BitVec = square_luma_averages
+        let bits: BitVec<u8, Msb0> = square_luma_averages
             .iter()
             .map(|&v| v > threshold)
             .collect();
@@ -151,14 +147,14 @@ impl Geometry {
 
         let data_bits = &bits[2..(TOTAL_SQUARES - 1) as usize];
 
-        if (data_bits.count_ones() % 2 != 0) == parity_bit {
+        if !data_bits.count_ones().is_multiple_of(2) == parity_bit {
             Ok(data_bits.load_be::<u32>())
         } else {
             Err(DecodingError::ParityMismatch)
         }
     }
 
-    fn squares_row(&self, bits: &BitVec) -> Vec<u8> {
+    fn squares_row(&self, bits: &BitVec<u8, Msb0>) -> Vec<u8> {
         let mut row = vec![BLACK; self.width as usize];
 
         for (x, bit) in zip(self.square_xs, bits) {
@@ -187,21 +183,6 @@ impl Geometry {
             .sum::<f32>()
             / side as f32
     }
-}
-
-fn generate_bits(frame_number: u32) -> BitVec {
-    let n = frame_number % MAX_FRAME;
-
-    //calibration bits
-    let mut bits = bitvec![0; TOTAL_SQUARES as usize];
-    bits.set(0, true);
-    bits.set(1, false);
-    // data bits, MSB first
-    bits[2..(TOTAL_SQUARES - 1) as usize].store_be(n);
-    // parity bit
-    bits.set((TOTAL_SQUARES - 1) as usize, n.count_ones() % 2 == 1);
-
-    bits
 }
 
 fn round_to_even(n: u32) -> u32 {
