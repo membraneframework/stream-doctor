@@ -147,7 +147,7 @@ impl Geometry {
 
         let data_bits = &bits[2..(TOTAL_SQUARES - 1) as usize];
 
-        if (data_bits.count_ones() % 2 != 0) == parity_bit {
+        if !data_bits.count_ones().is_multiple_of(2) == parity_bit {
             Ok(data_bits.load_be::<u32>())
         } else {
             Err(DecodingError::ParityMismatch)

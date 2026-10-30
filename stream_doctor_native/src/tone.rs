@@ -155,21 +155,21 @@ impl Tone {
             return Err(DecodingError::MarkersNotFound);
         }
 
-        let bits: Vec<u32> = FREQS[1..]
+        let bits: BitVec<u8, Msb0> = FREQS[1..]
             .iter()
             .map(|&freq| {
                 let tone_power = power(freq);
-                let on = tone_power > LOCAL_CONTRAST * local_noise(freq)
-                    && tone_power > REF_FLOOR * ref_power;
-                u32::from(on)
+                tone_power > LOCAL_CONTRAST * local_noise(freq)
+                    && tone_power > REF_FLOOR * ref_power
             })
             .collect();
-        let (data, parity) = bits.split_at(DATA_BITS as usize);
-
-        if data.iter().sum::<u32>() % 2 != parity[0] {
-            return Err(DecodingError::ParityMismatch);
+        let (data_bits, parity) = bits.split_at(DATA_BITS as usize);
+        let parity_bit = parity[0];
+        if !data_bits.count_ones().is_multiple_of(2) == parity_bit {
+            Ok(data_bits.load_be::<u32>())
+        } else {
+            Err(DecodingError::ParityMismatch)
         }
-        Ok(data.iter().fold(0, |acc, bit| acc * 2 + bit))
     }
 }
 
