@@ -17,15 +17,13 @@ defmodule StreamDoctor.Probe.Audio.Tone do
   @spec symbol_ms() :: pos_integer()
   defdelegate symbol_ms(), to: Native, as: :tone_symbol_ms
 
-  @spec symbol_bytes(pos_integer()) :: pos_integer()
-  def symbol_bytes(sample_rate) do
-    sample_rate |> new() |> Native.tone_symbol_bytes()
-  end
+  @spec symbol_bytes(tone()) :: pos_integer()
+  defdelegate symbol_bytes(tone), to: Native, as: :tone_symbol_bytes
 
-  @spec symbol_samples(non_neg_integer(), pos_integer()) :: binary()
-  def symbol_samples(symbol_number, sample_rate) do
-    silence = :binary.copy(<<0>>, symbol_bytes(sample_rate))
-    encode(silence, new(sample_rate), symbol_number)
+  @spec symbol_samples(non_neg_integer(), tone()) :: binary()
+  def symbol_samples(symbol_number, tone) do
+    silence = :binary.copy(<<0>>, symbol_bytes(tone))
+    encode(silence, tone, symbol_number)
   end
 
   @spec alignment_buffer_symbols() :: pos_integer()
@@ -33,15 +31,11 @@ defmodule StreamDoctor.Probe.Audio.Tone do
     Native.tone_scan_symbols() + 1
   end
 
-  @spec find_alignment(binary(), pos_integer()) ::
+  @spec find_alignment(binary(), tone()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found}
-  def find_alignment(buffer, sample_rate) do
-    Native.tone_find_alignment(buffer, new(sample_rate))
-  end
+  defdelegate find_alignment(buffer, tone), to: Native, as: :tone_find_alignment
 
-  @spec decode_window(binary(), pos_integer()) ::
+  @spec decode_window(binary(), tone()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}
-  def decode_window(window, sample_rate) do
-    Native.tone_decode(window, new(sample_rate))
-  end
+  defdelegate decode_window(window, tone), to: Native, as: :tone_decode
 end

@@ -5,48 +5,52 @@ defmodule StreamDoctor.Probe.ToneTest do
 
   @sample_rate 44_100
 
-  test "symbol round-trip" do
+  setup do
+    %{tone: Tone.new(@sample_rate)}
+  end
+
+  test "symbol round-trip", %{tone: tone} do
     for symbol_number <- [0, 1, 42, 127, 130] do
-      window = symbol_number |> Tone.symbol_samples(@sample_rate)
+      window = symbol_number |> Tone.symbol_samples(tone)
 
       assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
-               Tone.decode_window(window, @sample_rate)
+               Tone.decode_window(window, tone)
     end
   end
 
-  test "find_alignment recovers the symbol boundary" do
-    symbol_bytes = Tone.symbol_bytes(@sample_rate)
+  test "find_alignment recovers the symbol boundary", %{tone: tone} do
+    symbol_bytes = Tone.symbol_bytes(tone)
     offset = div(symbol_bytes, 3)
     silence = :binary.copy(<<0>>, offset)
 
     symbols =
       Enum.map(
         100..(100 + Tone.alignment_buffer_symbols()),
-        &Tone.symbol_samples(&1, @sample_rate)
+        &Tone.symbol_samples(&1, tone)
       )
 
     buffer = IO.iodata_to_binary([silence | symbols])
 
-    assert {:ok, found} = Tone.find_alignment(buffer, @sample_rate)
+    assert {:ok, found} = Tone.find_alignment(buffer, tone)
     assert abs(found - offset) <= div(symbol_bytes, 16)
 
     assert {:error, :markers_not_found} ==
              Tone.find_alignment(
                :binary.copy(<<0>>, byte_size(buffer)),
-               @sample_rate
+               tone
              )
   end
 
-  test "silence reports missing marker" do
-    silence = :binary.copy(<<0>>, Tone.symbol_bytes(@sample_rate))
-    assert {:error, :markers_not_found} == Tone.decode_window(silence, @sample_rate)
+  test "silence reports missing marker", %{tone: tone} do
+    silence = :binary.copy(<<0>>, Tone.symbol_bytes(tone))
+    assert {:error, :markers_not_found} == Tone.decode_window(silence, tone)
   end
 
-  test "decode survives spectral tilt attenuating high frequencies" do
+  test "decode survives spectral tilt attenuating high frequencies", %{tone: tone} do
     # Symbol 42 = 0b0101010 -> data tones at 1500, 2500, 3500 Hz; odd bit sum
     # -> parity tone at 4500 Hz; plus the 500 Hz reference. Amplitudes fall
     # with frequency (~ -9.5 dB power at 4.5 kHz), as after lowpass filtering.
-    n = div(Tone.symbol_bytes(@sample_rate), 2)
+    n = div(Tone.symbol_bytes(tone), 2)
 
     window =
       for i <- 0..(n - 1), into: <<>> do
@@ -61,16 +65,16 @@ defmodule StreamDoctor.Probe.ToneTest do
         <<round(value)::16-signed-little>>
       end
 
-    assert {:ok, 42} == Tone.decode_window(window, @sample_rate)
+    assert {:ok, 42} == Tone.decode_window(window, tone)
   end
 
-  test "decode survives small misalignment and noise" do
-    symbol_bytes = Tone.symbol_bytes(@sample_rate)
+  test "decode survives small misalignment and noise", %{tone: tone} do
+    symbol_bytes = Tone.symbol_bytes(tone)
     shift = div(symbol_bytes, 32)
 
     stream =
       [41, 42, 43]
-      |> Enum.map(&Tone.symbol_samples(&1, @sample_rate))
+      |> Enum.map(&Tone.symbol_samples(&1, tone))
       |> IO.iodata_to_binary()
 
     noisy_window =
@@ -82,6 +86,6 @@ defmodule StreamDoctor.Probe.ToneTest do
         end
       end)
 
-    assert {:ok, 42} == Tone.decode_window(noisy_window, @sample_rate)
+    assert {:ok, 42} == Tone.decode_window(noisy_window, tone)
   end
 end
