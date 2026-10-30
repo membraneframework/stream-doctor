@@ -13,23 +13,23 @@ defmodule StreamDoctor.Probe.BarTest do
   end
 
   test "encode/decode round-trip" do
-    geometry = Bar.geometry(@width, @height)
+    bar = Bar.new(@width, @height)
 
     for frame_number <- [0, 1, 42, 12_345, Bar.max_frame() - 1, Bar.max_frame() + 7] do
-      payload = Bar.encode(grey_frame(), geometry, frame_number)
+      payload = Bar.encode(grey_frame(), bar, frame_number)
       assert byte_size(payload) == byte_size(grey_frame())
-      assert {:ok, rem(frame_number, Bar.max_frame())} == Bar.decode(payload, geometry)
+      assert {:ok, rem(frame_number, Bar.max_frame())} == Bar.decode(payload, bar)
     end
   end
 
   test "decode reports missing bar" do
-    geometry = Bar.geometry(@width, @height)
-    assert {:error, :markers_not_found} == Bar.decode(grey_frame(), geometry)
+    bar = Bar.new(@width, @height)
+    assert {:error, :markers_not_found} == Bar.decode(grey_frame(), bar)
   end
 
   test "decode survives mild compression noise" do
-    geometry = Bar.geometry(@width, @height)
-    payload = Bar.encode(grey_frame(), geometry, 1234)
+    bar = Bar.new(@width, @height)
+    payload = Bar.encode(grey_frame(), bar, 1234)
 
     noisy =
       payload
@@ -40,6 +40,6 @@ defmodule StreamDoctor.Probe.BarTest do
       end)
       |> :binary.list_to_bin()
 
-    assert {:ok, 1234} == Bar.decode(noisy, geometry)
+    assert {:ok, 1234} == Bar.decode(noisy, bar)
   end
 end
