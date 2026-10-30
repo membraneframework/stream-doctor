@@ -7,7 +7,6 @@ mod atoms {
     rustler::atoms! {
         markers_not_found,
         parity_mismatch,
-        unknown,
     }
 }
 
@@ -31,7 +30,6 @@ fn decoding_error(error: DecodingError) -> Atom {
     match error {
         DecodingError::MarkersNotFound => atoms::markers_not_found(),
         DecodingError::ParityMismatch => atoms::parity_mismatch(),
-        _ => atoms::unknown(),
     }
 }
 

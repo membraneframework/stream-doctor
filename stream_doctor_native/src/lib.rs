@@ -3,7 +3,6 @@ pub mod tone;
 use bitvec::prelude::*;
 
 #[derive(Debug, PartialEq)]
-#[non_exhaustive]
 pub enum DecodingError {
     /// There is no marker in this frame
     MarkersNotFound,
