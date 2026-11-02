@@ -6,6 +6,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.File do
 
   import Membrane.ChildrenSpec
 
+  require Logger
   require Membrane.Pad
 
   alias Membrane.{AAC, H264, H265, MP4, Pad, RawAudio, RawVideo, Transcoder}
@@ -21,19 +22,32 @@ defmodule StreamDoctor.SenderPipeline.Ingest.File do
   @spec tracks([{term(), struct()}]) :: %{optional(RTMP.kind()) => Membrane.ChildrenSpec.t()}
   def tracks(tracks) do
     Enum.reduce(tracks, %{}, fn {track_id, format}, builders ->
-      kind = kind(format)
-
-      if Map.has_key?(builders, kind) do
-        raise "RTMP carries one #{kind} track, the file has more than one"
-      end
-
-      Map.put(builders, kind, track(kind, track_id))
+      put_track(builders, track_id, format)
     end)
+  end
+
+  defp put_track(builders, track_id, format) do
+    case kind(format) do
+      nil ->
+        Logger.warning(
+          "skipping a #{inspect(format.__struct__)} track, RTMP carries H264 or H265 video and AAC audio"
+        )
+
+        builders
+
+      kind ->
+        if Map.has_key?(builders, kind) do
+          raise "RTMP carries one #{kind} track, the file has more than one"
+        end
+
+        Map.put(builders, kind, track(kind, track_id))
+    end
   end
 
   defp kind(%AAC{}), do: :audio
   defp kind(%H264{}), do: :video
   defp kind(%H265{}), do: :video
+  defp kind(_format), do: nil
 
   defp track(:video, track_id) do
     get_child(:demuxer)

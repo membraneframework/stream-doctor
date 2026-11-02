@@ -103,8 +103,8 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSourceTest do
   end
 
   test "the smallest resolution the frame-number bar allows still works" do
-    pid = start(source_opts(width: 180, height: 120))
-    geometry = Bar.geometry(180, 120)
+    pid = start(source_opts(width: 172, height: 12))
+    geometry = Bar.geometry(172, 12)
 
     for n <- 0..9 do
       assert_sink_buffer(pid, :sink, buffer)

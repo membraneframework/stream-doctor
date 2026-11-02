@@ -42,7 +42,6 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
         aligned: true
       },
       frame: 0,
-      ended: false,
       frame_duration: div(Membrane.Time.second() * den, num),
       frames: frames(opts.duration, num, den),
       rows: rows(opts.width),
@@ -60,14 +59,9 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
   end
 
   @impl true
-  def handle_demand(:output, _size, :buffers, _ctx, %{ended: true} = state) do
-    {[], state}
-  end
-
-  @impl true
   def handle_demand(:output, _size, :buffers, _ctx, state) do
     if over?(state) do
-      {[end_of_stream: :output], %{state | ended: true}}
+      {[end_of_stream: :output], state}
     else
       buffer = %Buffer{
         payload: frame(state),
