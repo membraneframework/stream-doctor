@@ -132,16 +132,31 @@ test("publish posts the input and waitUntilLive polls until frames flow", async 
   assert.deepEqual(requests[1], {
     method: "POST",
     path: "/streamer",
-    body: { input: "clip.mp4", rtmp_url: "rtmp://host/app/key" },
+    body: { input: { file: "clip.mp4" }, rtmp_url: "rtmp://host/app/key" },
   });
   assert.equal(requests.filter((r) => r.method === "GET" && r.path === "/streamer").length, 3);
   assert.deepEqual(await streamer.stop(), { status: "stopped" });
 });
 
+test("publish sends a synthetic source as an object", async () => {
+  requests = [];
+  const s = await session({ daemonUrl: url });
+  s.publish("rtmp://host/app/key", { synthetic: { video: { width: 320, fps: 10 } } });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(requests[1], {
+    method: "POST",
+    path: "/streamer",
+    body: {
+      input: { synthetic: { video: { width: 320, fps: 10 } } },
+      rtmp_url: "rtmp://host/app/key",
+    },
+  });
+});
+
 test("waitUntilLive reports a streamer that failed before going live", async () => {
   const s = await session({ daemonUrl: url });
   routes["GET /streamer"] = () => ({ status: "failed", live: false, error: "boom" });
-  const streamer = s.publish("rtmp://host/app/key");
+  const streamer = s.publish("rtmp://host/app/key", { file: "clip.mp4" });
   await assert.rejects(streamer.waitUntilLive({ intervalMs: 1 }), /streamer failed.*: boom/);
 });
 
