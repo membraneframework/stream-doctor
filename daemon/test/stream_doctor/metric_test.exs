@@ -101,6 +101,11 @@ defmodule StreamDoctor.MetricTest do
                order(frames([10, 13, 11, 12, 14]))
     end
 
+    test "a permutation still open when the stream ends is reported as far as it got" do
+      assert %{reordered: %{count: 1, max_depth: 2, permutations: [[13, 11]]}} =
+               order(frames([10, 13, 11]))
+    end
+
     test "a frame displaced over several others is late, not lost" do
       assert %{missing: %{count: 0, gaps: []}, duplicated: %{count: 0}} =
                order(frames([10, 13, 11, 12, 14]))
@@ -153,6 +158,11 @@ defmodule StreamDoctor.MetricTest do
     test "two frames repeating different numbers of times keep their own counts" do
       assert %{duplicated: %{count: 5, repeats: [[5, 2], [6, 3]]}} =
                order(frames([5, 5, 5, 6, 6, 6, 6]))
+    end
+
+    test "the same number repeating after another frame starts a second run" do
+      assert %{duplicated: %{count: 3, repeats: [[5, 1], [6, 1], [5, 1]]}} =
+               order(frames([5, 5, 6, 6, 5]))
     end
 
     test "a replayed run shows up as duplicates and as one deep reordering" do
