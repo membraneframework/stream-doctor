@@ -101,9 +101,11 @@ defmodule StreamDoctor.MetricTest do
                order(frames([10, 13, 11, 12, 14]))
     end
 
-    test "a permutation still open when the stream ends is reported as far as it got" do
-      assert %{reordered: %{count: 1, max_depth: 2, permutations: [[13, 11]]}} =
-               order(frames([10, 13, 11]))
+    test "a permutation stops growing instead of following an endless descent" do
+      descending = [1_000 | Enum.to_list(999..900//-1)]
+
+      assert %{reordered: %{permutations: [permutation]}} = order(frames(descending))
+      assert length(permutation) == 31
     end
 
     test "a frame displaced over several others is late, not lost" do
