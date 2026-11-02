@@ -98,7 +98,7 @@ impl Tone {
             .collect();
 
         for (i, sample) in samples.iter_mut().enumerate() {
-            let tone: f64 = active_freqs
+            let tone = active_freqs
                 .iter()
                 .map(|freq| f64::sin(freq * i as f64) * AMPLITUDE)
                 .sum::<f64>()
@@ -173,13 +173,13 @@ impl Tone {
     pub fn decode(&self, window: S16le) -> Result<u32, DecodingError> {
         self.check_window_size(window.len());
         let window = window.as_chunks::<2>().0;
-        let margin = self.symbol_length / 6;
-        let inner_n = self.symbol_length - 2 * margin;
-        let inner = &window[margin as usize..(margin + inner_n) as usize];
-        let power = |freq| {
-            let samples = inner.iter().map(|bytes| i16::from_le_bytes(*bytes));
-            goertzel_power(samples, inner_n, freq, self.sample_rate)
-        };
+        let margin = window.len() / 6;
+        let inner = &window[margin..window.len() - margin];
+        let samples: Vec<i16> = inner
+            .iter()
+            .map(|bytes| i16::from_le_bytes(*bytes))
+            .collect();
+        let power = |freq| goertzel_power(&samples, freq, self.sample_rate);
         let local_noise = |freq: u32| power(freq - GUARD_OFFSET).max(power(freq + GUARD_OFFSET));
 
         let ref_power = power(FREQS[0]);
@@ -191,8 +191,7 @@ impl Tone {
             .iter()
             .map(|&freq| {
                 let tone_power = power(freq);
-                tone_power > LOCAL_CONTRAST * local_noise(freq)
-                    && tone_power > REF_FLOOR * ref_power
+                tone_power > f64::max(LOCAL_CONTRAST * local_noise(freq), REF_FLOOR * ref_power)
             })
             .collect();
         let (data_bits, parity) = bits.split_at(DATA_BITS as usize);
@@ -206,17 +205,17 @@ impl Tone {
 }
 
 #[must_use]
-pub fn max_symbol() -> u32 {
+pub const fn max_symbol() -> u32 {
     MAX_SYMBOL
 }
 
 #[must_use]
-pub fn symbol_ms() -> u32 {
+pub const fn symbol_ms() -> u32 {
     SYMBOL_MS
 }
 
 #[must_use]
-pub fn scan_symbols() -> u32 {
+pub const fn scan_symbols() -> u32 {
     SCAN_SYMBOLS
 }
 
@@ -233,11 +232,12 @@ fn plateau_center(scores: &mut [(u32, u32)], best_score_value: u32) -> u32 {
     plateau[plateau.len() / 2].0
 }
 
-fn goertzel_power(samples: impl Iterator<Item = i16>, n: u32, freq: u32, sample_rate: u32) -> f64 {
-    let k = (f64::from(freq * n) / f64::from(sample_rate)).round();
-    let omega = 2.0 * PI * k / f64::from(n);
+fn goertzel_power(samples: &[i16], freq: u32, sample_rate: u32) -> f64 {
+    let n = samples.len() as f64;
+    let k = (f64::from(freq) * n / f64::from(sample_rate)).round();
+    let omega = 2.0 * PI * k / n;
     let coeff = 2.0 * f64::cos(omega);
-    let (s1, s2) = samples.fold((0.0, 0.0), |(s1, s2), sample| {
+    let (s1, s2) = samples.iter().fold((0.0, 0.0), |(s1, s2), &sample| {
         (f64::from(sample) + coeff * s1 - s2, s1)
     });
     s1 * s1 + s2 * s2 - coeff * s1 * s2

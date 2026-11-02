@@ -22,7 +22,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
            synced?: boolean(),
            error_streak: non_neg_integer(),
            anchor_pts: Membrane.Time.t() | nil,
-           appended_samples: non_neg_integer()
+           appended_samples_count: non_neg_integer()
          }
 
   def_input_pad :input, accepted_format: %RawAudio{sample_format: :s16le, channels: 1}
@@ -50,7 +50,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       synced?: false,
       error_streak: 0,
       anchor_pts: nil,
-      appended_samples: 0
+      appended_samples_count: 0
     }
 
     {[], state}
@@ -65,7 +65,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
         buffer: <<>>,
         synced?: false,
         anchor_pts: nil,
-        appended_samples: 0
+        appended_samples_count: 0
     }
 
     {[], state}
@@ -76,7 +76,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
     anchor_pts =
       cond do
         state.anchor_pts != nil -> state.anchor_pts
-        state.appended_samples == 0 -> buffer.pts
+        state.appended_samples_count == 0 -> buffer.pts
         true -> nil
       end
 
@@ -84,8 +84,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
       state
       | buffer: state.buffer <> buffer.payload,
         anchor_pts: anchor_pts,
-        appended_samples:
-          state.appended_samples +
+        appended_samples_count:
+          state.appended_samples_count +
             RawAudio.bytes_to_frames(byte_size(buffer.payload), state.format)
     }
 
@@ -171,7 +171,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   defp symbol_pts(state) do
     consumed_samples =
-      state.appended_samples - RawAudio.bytes_to_frames(byte_size(state.buffer), state.format)
+      state.appended_samples_count - RawAudio.bytes_to_frames(byte_size(state.buffer), state.format)
 
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
