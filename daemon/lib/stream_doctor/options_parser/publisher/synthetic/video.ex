@@ -3,6 +3,8 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
   Parses the video settings of a synthetic input.
   """
 
+  require Logger
+
   alias StreamDoctor.OptionsParser.Options
 
   @type profile :: :baseline | :main | :high
@@ -68,10 +70,23 @@ defmodule StreamDoctor.OptionsParser.Publisher.Synthetic.Video do
   @spec parse(term()) :: {:ok, t()} | {:error, String.t()}
   def parse(config) do
     with {:ok, video} <- Options.validate(config, schema(), @scope) do
-      {:ok,
-       Map.merge(%{gop_size: default_gop(video.fps), profile: nil, crf: nil, bitrate: nil}, video)}
+      video =
+        Map.merge(
+          %{gop_size: default_gop(video.fps), profile: nil, crf: nil, bitrate: nil},
+          video
+        )
+
+      warn_rate_control(video)
+
+      {:ok, video}
     end
   end
+
+  defp warn_rate_control(%{crf: crf, bitrate: bitrate}) when crf != nil and bitrate != nil do
+    Logger.warning("#{@scope}: bitrate overrides crf, so crf #{crf} will not be applied")
+  end
+
+  defp warn_rate_control(_video), do: :ok
 
   @doc false
   @spec dimension(term(), pos_integer()) :: {:ok, pos_integer()} | {:error, String.t()}
