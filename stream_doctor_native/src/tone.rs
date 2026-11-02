@@ -115,6 +115,13 @@ impl Tone {
     /// # Errors
     /// Fails with `MarkersNotFound` when no offset decodes enough consecutive symbols.
     pub fn find_alignment(&self, samples: S16le) -> Result<u32, DecodingError> {
+        let min_bytes = ((SCAN_SYMBOLS + 1) * self.symbol_bytes()) as usize;
+        assert!(
+            samples.len() >= min_bytes,
+            "expected at least {} bytes, got {}",
+            min_bytes,
+            samples.len()
+        );
         let step = (self.symbol_length / 16).max(1) as usize;
 
         let mut scores: Vec<(u32, u32)> = (0..self.symbol_length)
@@ -282,6 +289,14 @@ mod tests {
             tone.find_alignment(S16le(&samples)),
             Err(DecodingError::MarkersNotFound)
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "expected at least 20160 bytes")]
+    fn find_alignment_panics_on_a_short_buffer() {
+        let tone = Tone::new(48_000);
+        let samples = vec![0u8; tone.symbol_bytes() as usize * SCAN_SYMBOLS as usize];
+        tone.find_alignment(S16le(&samples)).ok();
     }
 
     #[test]
