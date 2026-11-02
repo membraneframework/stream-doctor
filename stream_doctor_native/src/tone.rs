@@ -13,7 +13,10 @@
 
 use crate::{DecodingError, generate_bits};
 use bitvec::prelude::*;
-use std::f64::consts::PI;
+use std::{
+    f64::consts::PI,
+    ops::{Deref, DerefMut},
+};
 
 const SYMBOL_MS: u32 = 30;
 
@@ -39,6 +42,35 @@ pub struct Tone {
     symbol_length: u32,
 }
 
+/// Mutable mono PCM with signed 16-bit little-endian samples, as raw bytes.
+pub struct S16leMut<'a>(pub &'a mut [u8]);
+
+impl<'a> Deref for S16leMut<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl<'a> DerefMut for S16leMut<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+/// Mono PCM with signed 16-bit little-endian samples, as raw bytes.
+#[derive(Clone, Copy)]
+pub struct S16le<'a>(pub &'a [u8]);
+
+impl<'a> Deref for S16le<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
 impl Tone {
     #[must_use]
     pub fn new(sample_rate: u32) -> Self {
@@ -53,7 +85,7 @@ impl Tone {
         self.symbol_length * BYTES_PER_SAMPLE
     }
 
-    pub fn encode(&self, samples: &mut [u8], symbol_number: u32) {
+    pub fn encode<'a>(&self, mut samples: S16leMut<'a>, symbol_number: u32) {
         self.check_window_size(samples.len());
         let samples = samples.as_chunks_mut::<2>().0;
         let bits = generate_bits::<{ DATA_BITS as usize }>(symbol_number, bitvec![u8, Msb0; 1]);
@@ -82,7 +114,7 @@ impl Tone {
     ///
     /// # Errors
     /// Fails with `MarkersNotFound` when no offset decodes enough consecutive symbols.
-    pub fn find_alignment(&self, samples: &[u8]) -> Result<u32, DecodingError> {
+    pub fn find_alignment(&self, samples: S16le) -> Result<u32, DecodingError> {
         let step = (self.symbol_length / 16).max(1) as usize;
 
         let mut scores: Vec<(u32, u32)> = (0..self.symbol_length)
@@ -112,12 +144,12 @@ impl Tone {
         );
     }
 
-    fn alignment_score(&self, samples: &[u8], offset: u32) -> u32 {
+    fn alignment_score(&self, samples: S16le, offset: u32) -> u32 {
         let results: Vec<Result<u32, DecodingError>> = samples
             [(offset * BYTES_PER_SAMPLE) as usize..]
             .chunks_exact(self.symbol_bytes() as usize)
             .take(SCAN_SYMBOLS as usize)
-            .map(|window| self.decode(window))
+            .map(|window| self.decode(S16le(window)))
             .collect();
 
         let parity_score = results.iter().filter(|r| r.is_ok()).count() as u32;
@@ -138,7 +170,7 @@ impl Tone {
     /// # Errors
     /// Fails with `MarkersNotFound` when the reference tone is missing,
     /// or `ParityMismatch` when the data bits do not match the parity bit.
-    pub fn decode(&self, window: &[u8]) -> Result<u32, DecodingError> {
+    pub fn decode(&self, window: S16le) -> Result<u32, DecodingError> {
         self.check_window_size(window.len());
         let window = window.as_chunks::<2>().0;
         let margin = self.symbol_length / 6;
@@ -220,8 +252,8 @@ mod tests {
         let tone = Tone::new(48_000);
         for symbol in [0, 1, 42, 127] {
             let mut samples = vec![0u8; tone.symbol_bytes() as usize];
-            tone.encode(&mut samples, symbol);
-            assert_eq!(tone.decode(&samples), Ok(symbol));
+            tone.encode(S16leMut(&mut samples), symbol);
+            assert_eq!(tone.decode(S16le(&samples)), Ok(symbol));
         }
     }
 
@@ -232,9 +264,9 @@ mod tests {
         let offset = symbol_bytes / 3;
         let mut samples = vec![0u8; symbol_bytes * (SCAN_SYMBOLS as usize + 2)];
         for (i, chunk) in samples[offset..].chunks_exact_mut(symbol_bytes).enumerate() {
-            tone.encode(chunk, 100 + i as u32);
+            tone.encode(S16leMut(chunk), 100 + i as u32);
         }
-        let found = tone.find_alignment(&samples).unwrap() as usize;
+        let found = tone.find_alignment(S16le(&samples)).unwrap() as usize;
         let step = symbol_bytes / 16;
         assert!(
             found.abs_diff(offset) <= step,
@@ -247,7 +279,7 @@ mod tests {
         let tone = Tone::new(48_000);
         let samples = vec![0u8; tone.symbol_bytes() as usize * 8];
         assert_eq!(
-            tone.find_alignment(&samples),
+            tone.find_alignment(S16le(&samples)),
             Err(DecodingError::MarkersNotFound)
         );
     }
@@ -255,13 +287,16 @@ mod tests {
     #[test]
     #[should_panic(expected = "expected a window of 2880 bytes")]
     fn panics_on_a_window_of_the_wrong_size() {
-        Tone::new(48_000).decode(&[0; 1000]).ok();
+        Tone::new(48_000).decode(S16le(&[0; 1000])).ok();
     }
 
     #[test]
     fn decode_silence_is_not_a_marker() {
         let tone = Tone::new(48_000);
         let window = vec![0u8; tone.symbol_bytes() as usize];
-        assert_eq!(tone.decode(&window), Err(DecodingError::MarkersNotFound));
+        assert_eq!(
+            tone.decode(S16le(&window)),
+            Err(DecodingError::MarkersNotFound)
+        );
     }
 }

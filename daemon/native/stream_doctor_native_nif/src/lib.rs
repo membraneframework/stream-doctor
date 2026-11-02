@@ -104,20 +104,23 @@ fn tone_encode<'a>(
     symbol_number: u32,
 ) -> Binary<'a> {
     let mut out = copy(env, payload.as_slice());
-    tone.0.encode(out.as_mut_slice(), symbol_number);
+    tone.0
+        .encode(tone::S16leMut(out.as_mut_slice()), symbol_number);
     out.into()
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
 fn tone_find_alignment(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
     tone.0
-        .find_alignment(payload.as_slice())
+        .find_alignment(tone::S16le(payload.as_slice()))
         .map_err(decoding_error)
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
 fn tone_decode(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
-    tone.0.decode(payload.as_slice()).map_err(decoding_error)
+    tone.0
+        .decode(tone::S16le(payload.as_slice()))
+        .map_err(decoding_error)
 }
 
 rustler::init!("Elixir.StreamDoctor.Native");
