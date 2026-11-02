@@ -104,7 +104,7 @@ ask whether there is a measurement before comparing it.
 
 Watching before publishing is what lets `time_to_first_frame` be measured: the
 moment a segment becomes available leaves no trace to read afterwards, so a
-viewer attached later reports `attached_late` instead of a number.
+viewer that joins a stream already running reports `missed_first_frame` instead of a number.
 
 The stream carries markers in both audio and video that identify each moment
 of the source. Because a viewer can recover the original position from what

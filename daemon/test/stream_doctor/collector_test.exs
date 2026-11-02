@@ -18,7 +18,7 @@ defmodule StreamDoctor.CollectorTest do
     Collector.record(collector, {:audio_symbol_received, 1, Membrane.Time.milliseconds(30)})
 
     Collector.event(collector, {:streamer_started, {:watching, 500}})
-    Collector.event(collector, {:first_segment_seen, 1_700})
+    Collector.event(collector, {:first_frame_arrived, 1_700})
 
     assert %{av_drift: %{drift_ms: 0}, time_to_first_frame: %{status: :measured, ms: 1_200}} =
              Collector.report(collector)
