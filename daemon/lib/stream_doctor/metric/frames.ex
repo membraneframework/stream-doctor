@@ -34,13 +34,9 @@ defmodule StreamDoctor.Metric.Frames do
       join: nil,
       open_permutation: nil,
       open_gaps: [],
-      out_of_order: 0,
-      max_depth: nil,
-      permutations: [],
-      missing: 0,
-      gaps: [],
-      duplicated: 0,
-      repeats: []
+      reordered: %{count: 0, max_depth: nil, permutations: []},
+      missing: %{count: 0, gaps: []},
+      duplicated: %{count: 0, repeats: []}
     }
   end
 
@@ -73,13 +69,9 @@ defmodule StreamDoctor.Metric.Frames do
     drained = close_gaps(state, state.highest + 1)
 
     %{
-      reordered: %{
-        count: state.out_of_order,
-        max_depth: state.max_depth,
-        permutations: permutations_so_far(state)
-      },
-      missing: %{count: drained.missing, gaps: drained.gaps},
-      duplicated: %{count: state.duplicated, repeats: state.repeats}
+      reordered: %{state.reordered | permutations: permutations_so_far(state)},
+      missing: drained.missing,
+      duplicated: state.duplicated
     }
   end
 
@@ -89,11 +81,7 @@ defmodule StreamDoctor.Metric.Frames do
 
   defp count_descent(%{previous: previous} = state, number)
        when previous != nil and number < previous do
-    %{
-      state
-      | out_of_order: state.out_of_order + 1,
-        max_depth: max(previous - number, state.max_depth || 0)
-    }
+    %{state | reordered: record_descent(state.reordered, previous - number)}
   end
 
   defp count_descent(state, _number) do
@@ -129,12 +117,7 @@ defmodule StreamDoctor.Metric.Frames do
 
   # Runs above the horizon are disjoint and need a frame between them, so the list stays bounded.
   defp close_gaps(%{open_gaps: [{from, to} | rest]} = state, horizon) when to < horizon do
-    %{
-      state
-      | open_gaps: rest,
-        missing: state.missing + to - from + 1,
-        gaps: keep(state.gaps, gap(from, to))
-    }
+    %{state | open_gaps: rest, missing: record_loss(state.missing, from, to)}
     |> close_gaps(horizon)
   end
 
@@ -159,7 +142,19 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   defp duplicate(state, number) do
-    %{state | duplicated: state.duplicated + 1, repeats: extend_run(state.repeats, number)}
+    %{state | duplicated: record_repeat(state.duplicated, number)}
+  end
+
+  defp record_descent(reordered, depth) do
+    %{reordered | count: reordered.count + 1, max_depth: max(depth, reordered.max_depth || 0)}
+  end
+
+  defp record_loss(missing, from, to) do
+    %{missing | count: missing.count + to - from + 1, gaps: keep(missing.gaps, gap(from, to))}
+  end
+
+  defp record_repeat(duplicated, number) do
+    %{duplicated | count: duplicated.count + 1, repeats: extend_run(duplicated.repeats, number)}
   end
 
   defp extend_run(repeats, number) do
@@ -199,16 +194,20 @@ defmodule StreamDoctor.Metric.Frames do
     %{
       state
       | open_permutation: nil,
-        permutations: keep(state.permutations, Enum.reverse([number | open]))
+        reordered: record_permutation(state.reordered, Enum.reverse([number | open]))
     }
   end
 
+  defp record_permutation(reordered, permutation) do
+    %{reordered | permutations: keep(reordered.permutations, permutation)}
+  end
+
   defp permutations_so_far(%{open_permutation: nil} = state) do
-    state.permutations
+    state.reordered.permutations
   end
 
   defp permutations_so_far(state) do
-    keep(state.permutations, Enum.reverse(state.open_permutation))
+    keep(state.reordered.permutations, Enum.reverse(state.open_permutation))
   end
 
   defp keep(kept, entry), do: Enum.take(kept ++ [entry], -@evidence)
