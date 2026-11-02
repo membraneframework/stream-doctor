@@ -11,7 +11,7 @@ defmodule StreamDoctor.Metric do
           | {:audio_symbol_received, symbol_number :: non_neg_integer(),
              pts :: Membrane.Time.t() | nil}
           | {:streamer_started, {:watching, at_ms :: integer()} | :missed}
-          | {:first_segment_seen, at_ms :: integer()}
+          | {:first_frame_arrived, at_ms :: integer()}
 
   @doc "Timebase of the `at_ms` fields above, shared by everything that stamps an event."
   @spec now_ms() :: integer()

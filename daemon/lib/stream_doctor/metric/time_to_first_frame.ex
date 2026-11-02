@@ -1,11 +1,11 @@
 defmodule StreamDoctor.Metric.TimeToFirstFrame do
   @moduledoc """
-  Measures how long the first HLS segment takes to appear after the streamer starts, which
-  includes establishing the connection to the ingest.
+  Measures how long the first frame takes to reach the viewer after the streamer starts,
+  including the connection to the ingest.
 
-  Reported only when the viewer was already watching when the streamer started, since the moment
-  a segment becomes available leaves no trace to read afterwards. With a master playlist the
-  measurement follows its first video variant.
+  Reported only when the first frame was seen arriving; a viewer that joined a stream already
+  running, or that found a frame left over from an earlier one, reports `missed_first_frame`,
+  because nothing records when a frame that is already there got there.
   """
 
   @behaviour StreamDoctor.Metric
@@ -17,45 +17,62 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
 
   @impl true
   def init(_opts) do
-    %{streamer: nil, first_segment_at: nil}
+    %{status: :waiting, first_frame_sent_at: nil, first_frame_arrived_at: nil}
   end
 
   @impl true
-  def handle_event({:streamer_started, basis}, %{first_segment_at: nil} = state) do
-    %{state | streamer: basis}
+  def handle_event({:streamer_started, {:watching, at}}, %{first_frame_arrived_at: nil} = state) do
+    %{state | status: :waiting, first_frame_sent_at: at}
   end
 
   @impl true
-  def handle_event({:streamer_started, basis}, %{streamer: nil} = state) do
-    %{state | streamer: basis}
+  def handle_event(
+        {:streamer_started, :missed},
+        %{status: :waiting, first_frame_sent_at: nil, first_frame_arrived_at: nil} = state
+      ) do
+    %{state | status: :missed_first_frame}
+  end
+
+  # A frame already there when the streamer starts came from an earlier run.
+  @impl true
+  def handle_event({:streamer_started, {:watching, _at}}, %{status: :no_streamer} = state) do
+    %{state | status: :missed_first_frame}
   end
 
   @impl true
-  def handle_event({:first_segment_seen, at}, %{first_segment_at: nil} = state) do
-    %{state | first_segment_at: at}
+  def handle_event({:first_frame_arrived, at}, %{first_frame_arrived_at: nil} = state) do
+    %{state | status: status_on_arrival(state, at), first_frame_arrived_at: at}
   end
 
   @impl true
-  def handle_event(_event, state) do
+  def handle_event({:first_frame_arrived, _at}, _state) do
+    raise "the first frame cannot arrive twice: a viewer has one poller"
+  end
+
+  @impl true
+  def handle_event({:streamer_started, :missed}, _state) do
+    raise ":missed cannot follow another event: it is stamped when the viewer is created"
+  end
+
+  @impl true
+  def handle_event(_event_of_another_metric, state) do
     state
   end
 
   @impl true
-  def report(%{first_segment_at: nil}) do
-    result(:waiting, nil)
+  def report(%{status: :measured} = state) do
+    result(:measured, state.first_frame_arrived_at - state.first_frame_sent_at)
   end
 
-  def report(%{streamer: nil}) do
-    result(:no_streamer, nil)
+  @impl true
+  def report(state) do
+    result(state.status, nil)
   end
 
-  def report(%{streamer: {:watching, at}, first_segment_at: seen}) when seen >= at do
-    result(:measured, seen - at)
-  end
-
-  def report(_unmeasurable) do
-    result(:attached_late, nil)
-  end
+  defp status_on_arrival(%{status: :missed_first_frame}, _at), do: :missed_first_frame
+  defp status_on_arrival(%{first_frame_sent_at: nil}, _at), do: :no_streamer
+  defp status_on_arrival(%{first_frame_sent_at: sent}, at) when at >= sent, do: :measured
+  defp status_on_arrival(_frame_older_than_the_stream, _at), do: :missed_first_frame
 
   defp result(status, ms) do
     %{status: status, ms: ms}

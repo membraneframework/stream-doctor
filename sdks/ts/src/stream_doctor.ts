@@ -102,7 +102,7 @@ export interface AvDrift {
 
 /** Time from the streamer starting to the first segment appearing; needs `watch()` before `publish()`. */
 export interface TimeToFirstFrame {
-  status: "waiting" | "measured" | "attached_late" | "no_streamer";
+  status: "waiting" | "measured" | "missed_first_frame" | "no_streamer";
   ms: number | null;
 }
 

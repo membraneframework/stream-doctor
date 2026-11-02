@@ -83,45 +83,62 @@ defmodule StreamDoctor.MetricTest do
 
     defp missed, do: {:streamer_started, :missed}
 
-    defp seen(at), do: {:first_segment_seen, at}
+    defp arrived(at), do: {:first_frame_arrived, at}
 
-    test "measures from the streamer starting to the first segment" do
-      assert %{status: :measured, ms: 1_900} = ttff([watching(1_500), seen(3_400)])
+    test "measures from the streamer starting to the first frame" do
+      assert %{status: :measured, ms: 1_900} = ttff([watching(1_500), arrived(3_400)])
     end
 
     test "a viewer that started after the streamer does not measure" do
-      assert %{status: :attached_late, ms: nil} = ttff([missed(), seen(3_400)])
+      assert %{status: :missed_first_frame, ms: nil} = ttff([missed(), arrived(3_400)])
     end
 
-    test "a segment older than the streamer is rejected when the start is known first" do
-      assert %{status: :attached_late, ms: nil} = ttff([watching(5_000), seen(2_000)])
+    test "a frame older than the streamer is rejected when the start is known first" do
+      assert %{status: :missed_first_frame, ms: nil} = ttff([watching(5_000), arrived(2_000)])
     end
 
-    test "a segment older than the streamer is rejected when the segment is seen first" do
-      assert %{status: :attached_late, ms: nil} = ttff([seen(2_000), watching(5_000)])
+    test "a frame older than the streamer is rejected when the frame arrives first" do
+      assert %{status: :missed_first_frame, ms: nil} = ttff([arrived(2_000), watching(5_000)])
     end
 
-    test "a segment seen without a streamer has nothing to measure from" do
-      assert %{status: :no_streamer, ms: nil} = ttff([seen(1_200)])
+    test "a frame without a streamer has nothing to measure from" do
+      assert %{status: :no_streamer, ms: nil} = ttff([arrived(1_200)])
     end
 
-    test "reports waiting until a segment appears" do
+    test "a viewer that joined a running stream says so before any frame arrives" do
+      assert %{status: :missed_first_frame, ms: nil} = ttff([missed()])
+    end
+
+    test "reports waiting until a frame arrives" do
       assert %{status: :waiting, ms: nil} = ttff([])
       assert %{status: :waiting, ms: nil} = ttff([watching(1_500)])
     end
 
     test "a republished streamer is measured from its own start" do
-      assert %{status: :measured, ms: 2_000} = ttff([watching(0), watching(30_000), seen(32_000)])
+      assert %{status: :measured, ms: 2_000} =
+               ttff([watching(0), watching(30_000), arrived(32_000)])
     end
 
-    test "a viewer watching when the second streamer started is not late" do
-      assert %{status: :measured, ms: 2_000} = ttff([missed(), watching(30_000), seen(32_000)])
+    test "a viewer watching when the second streamer started measures that one" do
+      assert %{status: :measured, ms: 2_000} = ttff([missed(), watching(30_000), arrived(32_000)])
     end
 
-    test "later events do not move the measurement" do
-      events = [watching(1_500), seen(3_400), missed(), seen(9_000)]
+    test "a streamer restart does not move a finished measurement" do
+      events = [watching(1_500), arrived(3_400), watching(9_000)]
 
       assert %{status: :measured, ms: 1_900} = ttff(events)
+    end
+
+    test "a second frame cannot arrive" do
+      assert_raise RuntimeError, ~r/twice/, fn ->
+        ttff([watching(1_500), arrived(3_400), arrived(9_000)])
+      end
+    end
+
+    test "a missed start cannot follow another event" do
+      assert_raise RuntimeError, ~r/viewer is created/, fn ->
+        ttff([watching(1_500), missed()])
+      end
     end
   end
 end

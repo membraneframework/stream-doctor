@@ -120,7 +120,7 @@ defmodule StreamDoctor.Server do
       spawn_link(fn ->
         try do
           at = __MODULE__.HLS.await_first_segment(hls_url, @hls_timeout)
-          Collector.event(collector, {:first_segment_seen, at})
+          Collector.event(collector, {:first_frame_arrived, at})
           send(server, {:playlist_ready, id})
         rescue
           e -> send(server, {:viewer_failed, id, Exception.message(e)})
