@@ -171,7 +171,8 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   defp symbol_pts(state) do
     consumed_samples =
-      state.appended_samples_count - RawAudio.bytes_to_frames(byte_size(state.buffer), state.format)
+      state.appended_samples_count -
+        RawAudio.bytes_to_frames(byte_size(state.buffer), state.format)
 
     state.anchor_pts + round(consumed_samples * Membrane.Time.second() / state.format.sample_rate)
   end
