@@ -105,7 +105,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @spec synchronize(state(), pos_integer()) :: state()
   defp synchronize(state, symbol_bytes) do
-    case Tone.find_alignment(state.buffer, state.tone) do
+    case Tone.find_alignment(state.tone, state.buffer) do
       {:ok, offset} ->
         Membrane.Logger.debug("Audio marker alignment found at byte offset #{offset}")
         rest_size = byte_size(state.buffer) - offset
@@ -120,10 +120,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @spec decode_symbol(state(), pos_integer()) :: state()
   defp decode_symbol(state, symbol_bytes) do
-    result =
-      state.buffer
-      |> binary_part(0, symbol_bytes)
-      |> Tone.decode(state.tone)
+    result = Tone.decode(state.tone, binary_part(state.buffer, 0, symbol_bytes))
 
     case {result, state.collector} do
       {{:ok, symbol_number}, nil} ->

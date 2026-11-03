@@ -33,7 +33,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    case {Bar.decode(buffer.payload, state.bar), state.collector} do
+    case {Bar.decode(state.bar, buffer.payload), state.collector} do
       {{:ok, frame_number}, nil} ->
         Membrane.Logger.info("Decoded frame number: #{frame_number}")
 

@@ -16,10 +16,10 @@ defmodule StreamDoctor.Probe.Video.Bar do
     end
   end
 
-  @spec encode(binary(), t(), non_neg_integer()) :: binary()
-  defdelegate encode(payload, bar, frame_number), to: Native, as: :bar_encode
+  @spec encode(t(), binary(), non_neg_integer()) :: binary()
+  defdelegate encode(bar, payload, frame_number), to: Native, as: :bar_encode
 
-  @spec decode(binary(), t()) ::
+  @spec decode(t(), binary()) ::
           {:ok, non_neg_integer()} | {:error, :markers_not_found | :parity_mismatch}
-  defdelegate decode(payload, bar), to: Native, as: :bar_decode
+  defdelegate decode(bar, payload), to: Native, as: :bar_decode
 end

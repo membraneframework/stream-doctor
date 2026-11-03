@@ -14,7 +14,7 @@ defmodule StreamDoctor.Probe.ToneTest do
       window = Tone.symbol_samples(tone, symbol_number)
 
       assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
-               Tone.decode(window, tone)
+               Tone.decode(tone, window)
     end
   end
 
@@ -31,19 +31,19 @@ defmodule StreamDoctor.Probe.ToneTest do
 
     buffer = IO.iodata_to_binary([silence | symbols])
 
-    assert {:ok, found} = Tone.find_alignment(buffer, tone)
+    assert {:ok, found} = Tone.find_alignment(tone, buffer)
     assert abs(found - offset) <= div(symbol_bytes, 16)
 
     assert {:error, :markers_not_found} ==
              Tone.find_alignment(
-               :binary.copy(<<0>>, byte_size(buffer)),
-               tone
+               tone,
+               :binary.copy(<<0>>, byte_size(buffer))
              )
   end
 
   test "silence reports missing marker", %{tone: tone} do
     silence = :binary.copy(<<0>>, Tone.symbol_bytes(tone))
-    assert {:error, :markers_not_found} == Tone.decode(silence, tone)
+    assert {:error, :markers_not_found} == Tone.decode(tone, silence)
   end
 
   test "decode survives spectral tilt attenuating high frequencies", %{tone: tone} do
@@ -65,7 +65,7 @@ defmodule StreamDoctor.Probe.ToneTest do
         <<round(value)::16-signed-little>>
       end
 
-    assert {:ok, 42} == Tone.decode(window, tone)
+    assert {:ok, 42} == Tone.decode(tone, window)
   end
 
   test "decode survives small misalignment and noise", %{tone: tone} do
@@ -86,6 +86,6 @@ defmodule StreamDoctor.Probe.ToneTest do
         end
       end)
 
-    assert {:ok, 42} == Tone.decode(noisy_window, tone)
+    assert {:ok, 42} == Tone.decode(tone, noisy_window)
   end
 end

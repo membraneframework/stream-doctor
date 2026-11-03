@@ -54,8 +54,8 @@ fn bar_max_frame() -> u32 {
 #[rustler::nif(schedule = "DirtyCpu")]
 fn bar_encode<'a>(
     env: Env<'a>,
-    payload: Binary<'a>,
     bar: &BarResource,
+    payload: Binary<'a>,
     frame_number: u32,
 ) -> Binary<'a> {
     let mut out = copy(env, payload.as_slice());
@@ -64,7 +64,7 @@ fn bar_encode<'a>(
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn bar_decode(payload: Binary, bar: &BarResource) -> Result<u32, Atom> {
+fn bar_decode(bar: &BarResource, payload: Binary) -> Result<u32, Atom> {
     bar.0.decode(payload.as_slice()).map_err(decoding_error)
 }
 
@@ -96,8 +96,8 @@ fn tone_symbol_bytes(tone: &ToneResource) -> u32 {
 #[rustler::nif(schedule = "DirtyCpu")]
 fn tone_encode<'a>(
     env: Env<'a>,
-    payload: Binary<'a>,
     tone: &ToneResource,
+    payload: Binary<'a>,
     symbol_number: u32,
 ) -> Binary<'a> {
     let mut out = copy(env, payload.as_slice());
@@ -107,14 +107,14 @@ fn tone_encode<'a>(
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn tone_find_alignment(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
+fn tone_find_alignment(tone: &ToneResource, payload: Binary) -> Result<u32, Atom> {
     tone.0
         .find_alignment(tone::S16le(payload.as_slice()))
         .map_err(decoding_error)
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
-fn tone_decode(payload: Binary, tone: &ToneResource) -> Result<u32, Atom> {
+fn tone_decode(tone: &ToneResource, payload: Binary) -> Result<u32, Atom> {
     tone.0
         .decode(tone::S16le(payload.as_slice()))
         .map_err(decoding_error)
