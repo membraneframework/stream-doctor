@@ -1,11 +1,11 @@
 defmodule StreamDoctor.Metric.TimeToFirstFrame do
   @moduledoc """
-  Measures how long the first frame takes to reach the viewer after the streamer starts,
-  including the connection to the ingest.
+  Measures how long the first frame takes to reach the viewer after the streamer starts, the
+  connection to the ingest included.
 
-  Reported only when the first frame was seen arriving; a viewer that joined a stream already
-  running, or that found a frame left over from an earlier one, reports `missed_first_frame`,
-  because nothing records when a frame that is already there got there.
+  `ms` is that wait, once both ends have been observed. `status` says why it is `nil` instead:
+  the viewer was not watching when the streamer started, or found a frame left over from an
+  earlier one (`missed_first_frame`), or there was no streamer at all (`no_streamer`).
   """
 
   @behaviour StreamDoctor.Metric
