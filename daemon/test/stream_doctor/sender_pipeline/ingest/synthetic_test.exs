@@ -76,7 +76,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.SyntheticTest do
     decoded =
       for index <- 0..2 do
         window = binary_part(samples, index * symbol_bytes, symbol_bytes)
-        Tone.decode_window(window, tone)
+        Tone.decode(tone, window)
       end
 
     assert [{:ok, 0}, {:ok, 1}, {:ok, 2}] = decoded

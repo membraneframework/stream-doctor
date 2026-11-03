@@ -9,8 +9,8 @@ defmodule StreamDoctor.Metric.AvDrift do
 
   @behaviour StreamDoctor.Metric
 
-  alias StreamDoctor.Probe.Audio.MarkerDecoder, as: AudioMarkerDecoder
-  alias StreamDoctor.Probe.Video.MarkerDecoder, as: VideoMarkerDecoder
+  alias StreamDoctor.Probe.Audio.Tone
+  alias StreamDoctor.Probe.Video.Bar
 
   @max_samples 50
 
@@ -38,7 +38,7 @@ defmodule StreamDoctor.Metric.AvDrift do
 
   @impl true
   def handle_event({:video_frame_received, frame_number, pts}, state) do
-    frame_number = unwrap(frame_number, state.video, VideoMarkerDecoder.max_frame())
+    frame_number = unwrap(frame_number, state.video, Bar.max_frame())
     {first_frame_number, first_pts} = state.video_first || {frame_number, pts}
 
     frame_duration =
@@ -71,7 +71,7 @@ defmodule StreamDoctor.Metric.AvDrift do
     symbol_number =
       case state.audio do
         nil -> unwrap_against_video(symbol_number, pts, video_offset)
-        last -> unwrap(symbol_number, last, AudioMarkerDecoder.max_symbol())
+        last -> unwrap(symbol_number, last, Tone.max_symbol())
       end
 
     drift = round(pts - symbol_number * symbol_duration() - video_offset)
@@ -93,7 +93,7 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   defp unwrap_against_video(symbol_number, pts, video_offset) do
-    max = AudioMarkerDecoder.max_symbol()
+    max = Tone.max_symbol()
 
     k =
       round((pts - video_offset - symbol_number * symbol_duration()) / (max * symbol_duration()))
@@ -116,7 +116,7 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   defp symbol_duration do
-    Membrane.Time.milliseconds(AudioMarkerDecoder.symbol_ms())
+    Membrane.Time.milliseconds(Tone.symbol_ms())
   end
 
   defp median([]) do

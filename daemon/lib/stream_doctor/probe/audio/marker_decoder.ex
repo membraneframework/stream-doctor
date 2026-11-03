@@ -17,7 +17,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
   @typep state :: %{
            collector: pid() | nil,
            format: RawAudio.t() | nil,
-           tone: Tone.tone() | nil,
+           tone: Tone.t() | nil,
            buffer: binary(),
            synced?: boolean(),
            error_streak: non_neg_integer(),
@@ -33,12 +33,6 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
                 description:
                   "Gets `{:audio_symbol_received, symbol_number, pts}`. When nil, events are logged instead."
               ]
-
-  @spec max_symbol() :: pos_integer()
-  defdelegate max_symbol(), to: Tone
-
-  @spec symbol_ms() :: pos_integer()
-  defdelegate symbol_ms(), to: Tone
 
   @impl true
   def handle_init(_ctx, opts) do
@@ -111,7 +105,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @spec synchronize(state(), pos_integer()) :: state()
   defp synchronize(state, symbol_bytes) do
-    case Tone.find_alignment(state.buffer, state.tone) do
+    case Tone.find_alignment(state.tone, state.buffer) do
       {:ok, offset} ->
         Membrane.Logger.debug("Audio marker alignment found at byte offset #{offset}")
         rest_size = byte_size(state.buffer) - offset
@@ -126,10 +120,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
 
   @spec decode_symbol(state(), pos_integer()) :: state()
   defp decode_symbol(state, symbol_bytes) do
-    result =
-      state.buffer
-      |> binary_part(0, symbol_bytes)
-      |> Tone.decode_window(state.tone)
+    result = Tone.decode(state.tone, binary_part(state.buffer, 0, symbol_bytes))
 
     case {result, state.collector} do
       {{:ok, symbol_number}, nil} ->

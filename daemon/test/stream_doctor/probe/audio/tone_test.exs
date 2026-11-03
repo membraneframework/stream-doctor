@@ -6,15 +6,15 @@ defmodule StreamDoctor.Probe.ToneTest do
   @sample_rate 44_100
 
   setup do
-    %{tone: Tone.new(@sample_rate)}
+    [tone: Tone.new(@sample_rate)]
   end
 
   test "symbol round-trip", %{tone: tone} do
     for symbol_number <- [0, 1, 42, 127, 130] do
-      window = symbol_number |> Tone.symbol_samples(tone)
+      window = Tone.symbol_samples(tone, symbol_number)
 
       assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
-               Tone.decode_window(window, tone)
+               Tone.decode(tone, window)
     end
   end
 
@@ -26,24 +26,24 @@ defmodule StreamDoctor.Probe.ToneTest do
     symbols =
       Enum.map(
         100..(100 + Tone.alignment_buffer_symbols()),
-        &Tone.symbol_samples(&1, tone)
+        &Tone.symbol_samples(tone, &1)
       )
 
     buffer = IO.iodata_to_binary([silence | symbols])
 
-    assert {:ok, found} = Tone.find_alignment(buffer, tone)
+    assert {:ok, found} = Tone.find_alignment(tone, buffer)
     assert abs(found - offset) <= div(symbol_bytes, 16)
 
     assert {:error, :markers_not_found} ==
              Tone.find_alignment(
-               :binary.copy(<<0>>, byte_size(buffer)),
-               tone
+               tone,
+               :binary.copy(<<0>>, byte_size(buffer))
              )
   end
 
   test "silence reports missing marker", %{tone: tone} do
     silence = :binary.copy(<<0>>, Tone.symbol_bytes(tone))
-    assert {:error, :markers_not_found} == Tone.decode_window(silence, tone)
+    assert {:error, :markers_not_found} == Tone.decode(tone, silence)
   end
 
   test "decode survives spectral tilt attenuating high frequencies", %{tone: tone} do
@@ -65,7 +65,7 @@ defmodule StreamDoctor.Probe.ToneTest do
         <<round(value)::16-signed-little>>
       end
 
-    assert {:ok, 42} == Tone.decode_window(window, tone)
+    assert {:ok, 42} == Tone.decode(tone, window)
   end
 
   test "decode survives small misalignment and noise", %{tone: tone} do
@@ -74,7 +74,7 @@ defmodule StreamDoctor.Probe.ToneTest do
 
     stream =
       [41, 42, 43]
-      |> Enum.map(&Tone.symbol_samples(&1, tone))
+      |> Enum.map(&Tone.symbol_samples(tone, &1))
       |> IO.iodata_to_binary()
 
     noisy_window =
@@ -86,6 +86,6 @@ defmodule StreamDoctor.Probe.ToneTest do
         end
       end)
 
-    assert {:ok, 42} == Tone.decode_window(noisy_window, tone)
+    assert {:ok, 42} == Tone.decode(tone, noisy_window)
   end
 end

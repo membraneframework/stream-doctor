@@ -29,21 +29,21 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSourceTest do
 
   test "the frame number drawn by the marker survives the generated frames" do
     pid = start(source_opts())
-    geometry = Bar.geometry(@width, @height)
+    bar = Bar.new(@width, @height)
 
     for n <- 0..39 do
       assert_sink_buffer(pid, :sink, buffer)
-      assert {:ok, ^n} = Bar.decode(buffer.payload, geometry)
+      assert {:ok, ^n} = Bar.decode(bar, buffer.payload)
     end
   end
 
   test "the frame number stays correct at a fractional frame rate" do
     pid = start(source_opts(framerate: {30_000, 1001}))
-    geometry = Bar.geometry(@width, @height)
+    bar = Bar.new(@width, @height)
 
     for n <- 0..39 do
       assert_sink_buffer(pid, :sink, buffer)
-      assert {:ok, ^n} = Bar.decode(buffer.payload, geometry)
+      assert {:ok, ^n} = Bar.decode(bar, buffer.payload)
     end
   end
 
@@ -94,21 +94,21 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSourceTest do
 
   test "the bouncing square fits a frame taller than it is wide" do
     pid = start(source_opts(width: 320, height: 1440))
-    geometry = Bar.geometry(320, 1440)
+    bar = Bar.new(320, 1440)
 
     for n <- 0..9 do
       assert_sink_buffer(pid, :sink, buffer)
-      assert {:ok, ^n} = Bar.decode(buffer.payload, geometry)
+      assert {:ok, ^n} = Bar.decode(bar, buffer.payload)
     end
   end
 
   test "the smallest resolution the frame-number bar allows still works" do
     pid = start(source_opts(width: 172, height: 12))
-    geometry = Bar.geometry(172, 12)
+    bar = Bar.new(172, 12)
 
     for n <- 0..9 do
       assert_sink_buffer(pid, :sink, buffer)
-      assert {:ok, ^n} = Bar.decode(buffer.payload, geometry)
+      assert {:ok, ^n} = Bar.decode(bar, buffer.payload)
     end
   end
 
