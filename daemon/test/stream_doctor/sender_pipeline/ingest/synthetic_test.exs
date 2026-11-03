@@ -29,12 +29,6 @@ defmodule StreamDoctor.SenderPipeline.Ingest.SyntheticTest do
     pid
   end
 
-  defp to_floats(s16_binary) do
-    for <<sample::16-signed-little <- s16_binary>>, into: <<>> do
-      <<sample * 1.0::float-64-little>>
-    end
-  end
-
   defp collect(pid, count) do
     for _n <- 1..count, into: <<>> do
       assert_sink_buffer(pid, :sink, buffer)
@@ -73,15 +67,16 @@ defmodule StreamDoctor.SenderPipeline.Ingest.SyntheticTest do
 
   test "symbols stamped by the marker decode back in order" do
     pid = start(@sample_rate, true)
-    length = Tone.symbol_length(@sample_rate)
-    buffers = ceil(length * 4 / @frames_per_buffer) + 1
+    tone = Tone.new(@sample_rate)
+    symbol_bytes = Tone.symbol_bytes(tone)
+    buffers = ceil(symbol_bytes * 2 / @frames_per_buffer) + 1
 
-    samples = pid |> collect(buffers) |> to_floats()
+    samples = collect(pid, buffers)
 
     decoded =
       for index <- 0..2 do
-        window = binary_part(samples, index * length * 8, length * 8)
-        Tone.decode_window(window, @sample_rate)
+        window = binary_part(samples, index * symbol_bytes, symbol_bytes)
+        Tone.decode_window(window, tone)
       end
 
     assert [{:ok, 0}, {:ok, 1}, {:ok, 2}] = decoded

@@ -86,7 +86,7 @@ defmodule StreamDoctor.ReceiverPipeline do
     |> child(:audio_parser, %AAC.Parser{out_encapsulation: :ADTS})
     |> child(:audio_decoder, Membrane.AAC.FDK.Decoder)
     |> child(:audio_converter, %Membrane.FFmpeg.SWResample.Converter{
-      output_stream_format: %RawAudio{sample_format: :f64le, channels: 1, sample_rate: 48_000}
+      output_stream_format: %RawAudio{sample_format: :s16le, channels: 1, sample_rate: 48_000}
     })
     |> child(:audio_marker_decoder, %StreamDoctor.Probe.Audio.MarkerDecoder{
       collector: state.collector
