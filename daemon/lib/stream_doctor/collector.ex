@@ -13,9 +13,9 @@ defmodule StreamDoctor.Collector do
     GenServer.start_link(__MODULE__, metric_specs)
   end
 
-  @spec event(pid(), Metric.event()) :: :ok
-  def event(collector, event) do
-    GenServer.cast(collector, {:event, event})
+  @spec record(pid(), Metric.event()) :: :ok
+  def record(collector, event) do
+    GenServer.cast(collector, {:record, event})
   end
 
   @spec report(pid()) :: map()
@@ -25,13 +25,12 @@ defmodule StreamDoctor.Collector do
 
   @impl true
   def init(metric_specs) do
-    {:ok, Enum.map(metric_specs, fn {module, opts} -> {module, module.init(opts)} end)}
+    {:ok, Enum.map(metric_specs, fn {module, opts} -> {module, module.new(opts)} end)}
   end
 
   @impl true
-  def handle_cast({:event, event}, metrics) do
-    {:noreply,
-     Enum.map(metrics, fn {module, state} -> {module, module.handle_event(event, state)} end)}
+  def handle_cast({:record, event}, metrics) do
+    {:noreply, Enum.map(metrics, fn {module, state} -> {module, module.record(event, state)} end)}
   end
 
   @impl true

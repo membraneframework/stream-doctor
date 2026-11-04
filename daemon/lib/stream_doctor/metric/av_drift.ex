@@ -20,7 +20,7 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def init(_opts) do
+  def new(_opts) do
     %{
       video_first: nil,
       video: nil,
@@ -32,12 +32,12 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event({:video_frame_received, _frame_number, _pts = nil}, state) do
+  def record({:video_frame_received, _frame_number, _pts = nil}, state) do
     state
   end
 
   @impl true
-  def handle_event({:video_frame_received, frame_number, pts}, state) do
+  def record({:video_frame_received, frame_number, pts}, state) do
     frame_number = unwrap(frame_number, state.video, Bar.max_frame())
     {first_frame_number, first_pts} = state.video_first || {frame_number, pts}
 
@@ -58,12 +58,12 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event({:audio_symbol_received, _symbol_number, _pts = nil}, state) do
+  def record({:audio_symbol_received, _symbol_number, _pts = nil}, state) do
     state
   end
 
   @impl true
-  def handle_event(
+  def record(
         {:audio_symbol_received, symbol_number, pts},
         %{video_offset: video_offset} = state
       )
@@ -79,7 +79,7 @@ defmodule StreamDoctor.Metric.AvDrift do
   end
 
   @impl true
-  def handle_event(_event, state) do
+  def record(_event, state) do
     state
   end
 

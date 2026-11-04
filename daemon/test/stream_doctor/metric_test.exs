@@ -6,7 +6,7 @@ defmodule StreamDoctor.MetricTest do
   import Membrane.Time, only: [milliseconds: 1]
 
   defp run(module, opts, events) do
-    Enum.reduce(events, module.init(opts), &module.handle_event/2)
+    Enum.reduce(events, module.new(opts), &module.record/2)
   end
 
   describe "AvDrift" do
