@@ -41,6 +41,7 @@ const routes: Record<string, (body: any) => object> = {
         av_drift: { drift_ms: 12 },
         time_to_first_frame: { status: "measured", ms: 1_800 },
         frames,
+        minimal_latency: { status: "measured", ms: 2_400, latest_samples: [2_400, 2_380] },
       },
       playlist: {
         variants: [
@@ -179,6 +180,7 @@ test("watch creates a viewer whose metrics and stop go through the API", async (
     av_drift: { drift_ms: 12 },
     time_to_first_frame: { status: "measured", ms: 1_800 },
     frames,
+    minimal_latency: { status: "measured", ms: 2_400, latest_samples: [2_400, 2_380] },
   } as object);
   const done = await viewer.waitUntilDone({ intervalMs: 1 });
   assert.equal(done.hls_url, "http://cdn/index.m3u8");
@@ -186,6 +188,7 @@ test("watch creates a viewer whose metrics and stop go through the API", async (
     av_drift: { drift_ms: 12 },
     time_to_first_frame: { status: "measured", ms: 1_800 },
     frames,
+    minimal_latency: { status: "measured", ms: 2_400, latest_samples: [2_400, 2_380] },
   });
   await assert.rejects(viewer.status(), /HTTP 404/);
 });
