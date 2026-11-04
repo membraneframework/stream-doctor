@@ -12,6 +12,8 @@ defmodule StreamDoctor.CollectorTest do
         {Metric.Frames, []}
       ])
 
+    Collector.record(collector, {:streamer_started, {:watching, 500}})
+
     for i <- 0..2 do
       Collector.record(
         collector,
@@ -20,8 +22,6 @@ defmodule StreamDoctor.CollectorTest do
     end
 
     Collector.record(collector, {:audio_symbol_received, 1, Membrane.Time.milliseconds(30)})
-
-    Collector.record(collector, {:streamer_started, {:watching, 500}})
     Collector.record(collector, {:first_frame_arrived, 1_700})
 
     assert %{

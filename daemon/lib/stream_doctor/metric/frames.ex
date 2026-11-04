@@ -1,20 +1,23 @@
 defmodule StreamDoctor.Metric.Frames do
   @moduledoc """
-  Reports what happened to the sequence of decoded frame numbers: how often it went backwards,
-  which numbers never arrived, and which arrived more than once.
+  Reports what happened to the sequence of decoded frame numbers, in three groups:
 
-  A verdict on a missing number is deferred, so a frame that merely runs late is not counted as
-  lost. Marker numbers are the source pts divided by the frame duration, so a variable frame rate
-  moves them on its own; every count here is only meaningful for a constant one.
+    * `reordered` - the numbers that arrived after a later one, with the deepest such
+      displacement and the runs they formed
+    * `missing` - the numbers that never arrived, as inclusive ranges, counted once the
+      sequence has run far enough past them that a reordering could no longer bring them
+    * `duplicated` - the numbers that arrived again, with how many extra times each did
+
+  A number is the source pts divided by that frame's own duration, so a change of frame rate
+  rescales them and is reported as loss or duplication of everything sent so far.
   """
 
   @behaviour StreamDoctor.Metric
 
   alias StreamDoctor.Metric
-  alias StreamDoctor.Probe.Video.MarkerDecoder
+  alias StreamDoctor.Probe.Video.Bar
 
-  # H.264 reorders by at most this, so a longer run is not the codec, and a number that has not
-  # arrived within twice it is lost rather than late.
+  # How far the infrastructure may displace a frame before it counts as loss, not reordering.
   @reorder_depth 16
   @frames_per_permutation 2 * @reorder_depth
   @settle_lag 2 * @reorder_depth
@@ -27,7 +30,7 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   @impl true
-  def init(_opts) do
+  def new(_opts) do
     %{
       previous: nil,
       highest: nil,
@@ -41,8 +44,8 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   @impl true
-  def handle_event({:video_frame_received, frame_number, _pts}, state) do
-    number = Metric.unwrap(frame_number, state.previous, MarkerDecoder.max_frame())
+  def record({:video_frame_received, frame_number, _pts}, state) do
+    number = Metric.unwrap(frame_number, state.previous, Bar.max_frame())
 
     state
     |> count_descent(number)
@@ -52,7 +55,7 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   @impl true
-  def handle_event(_event, state) do
+  def record(_event, state) do
     state
   end
 
@@ -65,6 +68,7 @@ defmodule StreamDoctor.Metric.Frames do
     }
   end
 
+  @impl true
   def report(state) do
     drained = close_gaps(state, state.highest + 1)
 

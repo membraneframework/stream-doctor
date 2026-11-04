@@ -77,7 +77,7 @@ defmodule StreamDoctor.MetricTest do
 
   describe "Frames" do
     defp frames(numbers) do
-      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
       Enum.map(numbers, &{:video_frame_received, rem(&1, max), milliseconds(0)})
     end
 
@@ -190,7 +190,7 @@ defmodule StreamDoctor.MetricTest do
     end
 
     test "an in-order run across the counter wrap reports nothing" do
-      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
 
       assert %{
                reordered: %{count: 0},
@@ -200,7 +200,7 @@ defmodule StreamDoctor.MetricTest do
     end
 
     test "reordering across the counter wrap is still detected" do
-      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
       unwrapped = [max, max - 1, max + 1]
 
       assert %{reordered: %{count: 1, max_depth: 1, permutations: [^unwrapped]}} =
@@ -208,14 +208,14 @@ defmodule StreamDoctor.MetricTest do
     end
 
     test "a gap across the counter wrap is one run" do
-      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
       run = [max, max + 4]
 
       assert %{missing: %{count: 5, gaps: [^run]}} = order(frames([max - 2, max - 1, max + 5]))
     end
 
     test "a repeat across the counter wrap is still a duplicate" do
-      max = StreamDoctor.Probe.Video.MarkerDecoder.max_frame()
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
 
       assert %{duplicated: %{count: 1, repeats: [[^max, 1]]}} =
                order(frames([max - 1, max, max, max + 1]))

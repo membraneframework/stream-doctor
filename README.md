@@ -102,9 +102,6 @@ expect(metrics.frames.missing.count).toBe(0);
 expect(metrics.frames.duplicated.count).toBe(0);
 ```
 
-Every metric reports null until it can say something, and a null compares below
-any threshold, so the two checks above guard the comparisons that follow.
-
 Watching before publishing is what lets `time_to_first_frame` be measured: the
 moment a segment becomes available leaves no trace to read afterwards, so a
 viewer that joins a stream already running reports `missed_first_frame` instead of a number.

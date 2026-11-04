@@ -19,10 +19,7 @@ defmodule StreamDoctor.Metric do
     System.monotonic_time(:millisecond)
   end
 
-  @doc """
-  Lifts a wrapped counter into the epoch of the previous value, assuming consecutive values
-  differ by less than half of `max`.
-  """
+  @doc "Continues a counter that wrapped at `max`, assuming it moved by less than half of it."
   @spec unwrap(non_neg_integer(), integer() | nil, pos_integer()) :: integer()
   def unwrap(value, nil, _max) do
     value
