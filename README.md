@@ -94,17 +94,25 @@ const metrics = await viewer.stop();
 
 expect(metrics.av_drift.drift_ms).not.toBeNull(); // any test runner's assertion
 expect(metrics.time_to_first_frame.status).toBe("measured");
+expect(metrics.minimal_latency.status).toBe("measured");
 
 expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50);
 expect(metrics.time_to_first_frame.ms).toBeLessThan(5000);
 expect(metrics.frames.reordered.count).toBe(0);
 expect(metrics.frames.missing.count).toBe(0);
 expect(metrics.frames.duplicated.count).toBe(0);
+expect(metrics.minimal_latency.ms).toBeLessThan(8000);
 ```
 
-Watching before publishing is what lets `time_to_first_frame` be measured: the
-moment a segment becomes available leaves no trace to read afterwards, so a
-viewer that joins a stream already running reports `missed_first_frame` instead of a number.
+Watching before publishing is what lets `time_to_first_frame` and
+`minimal_latency` be measured: the moment a segment becomes available leaves no
+trace to read afterwards, so a viewer that joins a stream already running
+reports `missed_first_frame` and `missed_the_stream` instead of numbers.
+
+`minimal_latency` is how long a frame takes to become downloadable, sampled once
+per playlist reload on the last frame it brings. A viewer reloads at the pace
+RFC 8216 prescribes, so it sees new media up to one reload after it appeared and
+the number runs a fraction of a second high, never low.
 
 The stream carries markers in both audio and video that identify each moment
 of the source. Because a viewer can recover the original position from what

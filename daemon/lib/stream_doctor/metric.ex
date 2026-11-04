@@ -12,6 +12,9 @@ defmodule StreamDoctor.Metric do
              pts :: Membrane.Time.t() | nil}
           | {:streamer_started, {:watching, at_ms :: integer()} | :missed}
           | {:first_frame_arrived, at_ms :: integer()}
+          | {:ingest_started, at_ms :: integer()}
+          | {:media_available, media_end :: Membrane.Time.t(), at_ms :: integer()}
+          | {:timeline_broken, :missed_start | :discontinuity | :window_gap}
 
   @doc "Timebase of the `at_ms` fields above, shared by everything that stamps an event."
   @spec now_ms() :: integer()

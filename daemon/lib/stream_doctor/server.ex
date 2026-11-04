@@ -11,7 +11,12 @@ defmodule StreamDoctor.Server do
   alias StreamDoctor.OptionsParser.Publisher
 
   @hls_timeout 120_000
-  @metric_specs [{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}, {Metric.Frames, []}]
+  @metric_specs [
+    {Metric.AvDrift, []},
+    {Metric.TimeToFirstFrame, []},
+    {Metric.Frames, []},
+    {Metric.MinimalLatency, []}
+  ]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -75,7 +80,8 @@ defmodule StreamDoctor.Server do
         rtmp_url: rtmp_url,
         status: :streaming,
         error: nil,
-        live: false
+        live: false,
+        live_at: nil
       }
 
       {:reply, {:ok, streamer_summary(streamer)}, %{state | streamer: streamer}}
@@ -116,12 +122,21 @@ defmodule StreamDoctor.Server do
       Collector.record(collector, {:streamer_started, :missed})
     end
 
+    case state.streamer do
+      %{live_at: live_at} when live_at != nil ->
+        Collector.record(collector, {:ingest_started, live_at})
+
+      _not_live_yet ->
+        :ok
+    end
+
     poller =
       spawn_link(fn ->
         try do
-          at = __MODULE__.HLS.await_first_segment(hls_url, @hls_timeout)
-          Collector.record(collector, {:first_frame_arrived, at})
-          send(server, {:playlist_ready, id})
+          __MODULE__.HLS.watch(hls_url, @hls_timeout, fn event ->
+            Collector.record(collector, event)
+            if match?({:first_frame_arrived, _at}, event), do: send(server, {:playlist_ready, id})
+          end)
         rescue
           e -> send(server, {:viewer_failed, id, Exception.message(e)})
         end
@@ -176,7 +191,9 @@ defmodule StreamDoctor.Server do
 
   @impl true
   def handle_info({:streamer_live, pid}, %{streamer: %{pid: pid} = streamer} = state) do
-    {:noreply, %{state | streamer: %{streamer | live: true}}}
+    live_at = Metric.now_ms()
+    broadcast(state.viewers, {:ingest_started, live_at})
+    {:noreply, %{state | streamer: %{streamer | live: true, live_at: live_at}}}
   end
 
   @impl true
@@ -216,6 +233,9 @@ defmodule StreamDoctor.Server do
     case state.viewers[id] do
       %{status: :waiting_for_playlist} = viewer ->
         {:noreply, put_in(state.viewers[id], %{viewer | status: :failed, error: reason})}
+
+      %{status: :receiving} = viewer ->
+        {:noreply, put_in(state.viewers[id], %{viewer | error: reason})}
 
       _stopped_or_missing ->
         {:noreply, state}
@@ -258,8 +278,12 @@ defmodule StreamDoctor.Server do
 
   defp mark_down_pid(state, pid, error) do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
-      {id, viewer} -> put_in(state.viewers[id], mark_down(viewer, error))
-      nil -> state
+      {id, viewer} ->
+        Process.exit(viewer.poller, :kill)
+        put_in(state.viewers[id], mark_down(viewer, error))
+
+      nil ->
+        state
     end
   end
 
