@@ -113,14 +113,14 @@ defmodule StreamDoctor.Server do
     {:ok, collector} = Collector.start_link(@metric_specs)
 
     if state.streamer != nil do
-      Collector.event(collector, {:streamer_started, :missed})
+      Collector.record(collector, {:streamer_started, :missed})
     end
 
     poller =
       spawn_link(fn ->
         try do
           at = __MODULE__.HLS.await_first_segment(hls_url, @hls_timeout)
-          Collector.event(collector, {:first_frame_arrived, at})
+          Collector.record(collector, {:first_frame_arrived, at})
           send(server, {:playlist_ready, id})
         rescue
           e -> send(server, {:viewer_failed, id, Exception.message(e)})
@@ -294,7 +294,7 @@ defmodule StreamDoctor.Server do
   defp broadcast(viewers, event) do
     viewers
     |> Enum.filter(fn {_id, viewer} -> viewer.status in [:waiting_for_playlist, :receiving] end)
-    |> Enum.each(fn {_id, viewer} -> Collector.event(viewer.collector, event) end)
+    |> Enum.each(fn {_id, viewer} -> Collector.record(viewer.collector, event) end)
   end
 
   defp streamer_summary(streamer) do

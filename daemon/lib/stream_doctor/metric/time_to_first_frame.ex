@@ -16,17 +16,17 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   end
 
   @impl true
-  def init(_opts) do
+  def new(_opts) do
     %{status: :waiting, first_frame_sent_at: nil, first_frame_arrived_at: nil}
   end
 
   @impl true
-  def handle_event({:streamer_started, {:watching, at}}, %{first_frame_arrived_at: nil} = state) do
+  def record({:streamer_started, {:watching, at}}, %{first_frame_arrived_at: nil} = state) do
     %{state | status: :waiting, first_frame_sent_at: at}
   end
 
   @impl true
-  def handle_event(
+  def record(
         {:streamer_started, :missed},
         %{status: :waiting, first_frame_sent_at: nil, first_frame_arrived_at: nil} = state
       ) do
@@ -35,27 +35,27 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
 
   # A frame already there when the streamer starts came from an earlier run.
   @impl true
-  def handle_event({:streamer_started, {:watching, _at}}, %{status: :no_streamer} = state) do
+  def record({:streamer_started, {:watching, _at}}, %{status: :no_streamer} = state) do
     %{state | status: :missed_first_frame}
   end
 
   @impl true
-  def handle_event({:first_frame_arrived, at}, %{first_frame_arrived_at: nil} = state) do
+  def record({:first_frame_arrived, at}, %{first_frame_arrived_at: nil} = state) do
     %{state | status: status_on_arrival(state, at), first_frame_arrived_at: at}
   end
 
   @impl true
-  def handle_event({:first_frame_arrived, _at}, _state) do
+  def record({:first_frame_arrived, _at}, _state) do
     raise "the first frame cannot arrive twice: a viewer has one poller"
   end
 
   @impl true
-  def handle_event({:streamer_started, :missed}, _state) do
+  def record({:streamer_started, :missed}, _state) do
     raise ":missed cannot follow another event: it is stamped when the viewer is created"
   end
 
   @impl true
-  def handle_event(_event_of_another_metric, state) do
+  def record(_event_of_another_metric, state) do
     state
   end
 
