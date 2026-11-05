@@ -75,6 +75,209 @@ defmodule StreamDoctor.MetricTest do
     end
   end
 
+  describe "Frames" do
+    defp frames(numbers) do
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
+      Enum.map(numbers, &{:video_frame_received, rem(&1, max), milliseconds(0)})
+    end
+
+    defp order(events), do: Metric.Frames.report(run(Metric.Frames, [], events))
+
+    test "frames arriving in order report no fault" do
+      assert %{
+               reordered: %{count: 0, max_depth: nil, permutations: []},
+               missing: %{count: 0, gaps: []},
+               duplicated: %{count: 0, repeats: []}
+             } = order(frames(0..99))
+    end
+
+    test "a swapped pair counts once" do
+      assert %{reordered: %{count: 1, max_depth: 1, permutations: [[12, 11, 13]]}} =
+               order(frames([10, 12, 11, 13]))
+    end
+
+    test "a frame displaced over several others counts once, not once per frame it passed" do
+      assert %{reordered: %{count: 1, max_depth: 2, permutations: [[13, 11, 12, 14]]}} =
+               order(frames([10, 13, 11, 12, 14]))
+    end
+
+    test "a permutation stops growing instead of following an endless descent" do
+      descending = [1_000 | Enum.to_list(999..900//-1)]
+
+      assert %{reordered: %{permutations: [permutation]}} = order(frames(descending))
+      assert length(permutation) == 31
+    end
+
+    test "a frame displaced over several others is late, not lost" do
+      assert %{missing: %{count: 0, gaps: []}, duplicated: %{count: 0}} =
+               order(frames([10, 13, 11, 12, 14]))
+    end
+
+    test "gaps are not reordering" do
+      assert %{reordered: %{count: 0}, missing: %{count: 47, gaps: [[3, 49]]}} =
+               order(frames([0, 1, 2, 50, 51]))
+    end
+
+    test "repeated numbers are not reordering" do
+      assert %{reordered: %{count: 0}, duplicated: %{count: 2, repeats: [[5, 1], [6, 1]]}} =
+               order(frames([5, 5, 6, 6, 7]))
+    end
+
+    test "a single missing frame is written as one number" do
+      assert %{missing: %{count: 1, gaps: [[2]]}} = order(frames([0, 1, 3, 4]))
+    end
+
+    test "separate outages are listed separately" do
+      assert %{missing: %{count: 15, gaps: [[3, 9], [12, 19]]}} =
+               order(frames([0, 1, 2, 10, 11, 20, 21]))
+    end
+
+    test "a long outage is one run, not thousands of numbers" do
+      assert %{missing: %{count: 4998, gaps: [[2, 4999]]}} = order(frames([0, 1, 5000]))
+    end
+
+    test "a hole still open when the stream ends is counted missing" do
+      assert %{missing: %{count: 8, gaps: [[12, 19]]}} = order(frames([10, 11, 20]))
+    end
+
+    test "nothing below the first frame seen is missing" do
+      assert %{missing: %{count: 0, gaps: []}} = order(frames([100, 101, 102]))
+    end
+
+    test "a frame below the first one seen is a late join, not a duplicate" do
+      assert %{duplicated: %{count: 0}, missing: %{count: 0}} = order(frames([10, 11, 9, 12]))
+    end
+
+    test "a number far below the join does not move the join point" do
+      assert %{duplicated: %{count: 2, repeats: [[3, 1], [4, 1]]}, missing: %{count: 0}} =
+               order(frames([100, 101, 3, 4, 102]))
+    end
+
+    test "a frozen frame is one entry with many repeats" do
+      assert %{duplicated: %{count: 3, repeats: [[7, 3]]}} = order(frames([7, 7, 7, 7, 8]))
+    end
+
+    test "two frames repeating different numbers of times keep their own counts" do
+      assert %{duplicated: %{count: 5, repeats: [[5, 2], [6, 3]]}} =
+               order(frames([5, 5, 5, 6, 6, 6, 6]))
+    end
+
+    test "the same number repeating after another frame starts a second run" do
+      assert %{duplicated: %{count: 3, repeats: [[5, 1], [6, 1], [5, 1]]}} =
+               order(frames([5, 5, 6, 6, 5]))
+    end
+
+    test "a replayed run shows up as duplicates and as one deep reordering" do
+      assert %{
+               reordered: %{count: 1, max_depth: 2},
+               duplicated: %{count: 3, repeats: [[1, 1], [2, 1], [3, 1]]}
+             } = order(frames([0, 1, 2, 3, 1, 2, 3, 4]))
+    end
+
+    test "a frame arriving after its gap settled is counted as a duplicate too" do
+      assert %{missing: %{count: 78}, duplicated: %{count: 1, repeats: [[1, 1]]}} =
+               order(frames([0, 40, 80, 1]))
+    end
+
+    test "a truncated list keeps the newest entries and still totals correctly" do
+      assert %{missing: %{count: 88, gaps: gaps}} =
+               order(frames(Enum.flat_map(0..11, &[&1 * 10, &1 * 10 + 1])))
+
+      assert length(gaps) == 10
+      assert Enum.sum(Enum.map(gaps, fn [from, to] -> to - from + 1 end)) < 88
+      assert List.last(gaps) == [102, 109]
+      refute [2, 9] in gaps
+    end
+
+    test "an in-order run across the counter wrap reports nothing" do
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
+
+      assert %{
+               reordered: %{count: 0},
+               missing: %{count: 0},
+               duplicated: %{count: 0}
+             } = order(frames(0..(max + 500)))
+    end
+
+    test "reordering across the counter wrap is still detected" do
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
+      unwrapped = [max, max - 1, max + 1]
+
+      assert %{reordered: %{count: 1, max_depth: 1, permutations: [^unwrapped]}} =
+               order(frames([max - 2, max, max - 1, max + 1]))
+    end
+
+    test "a gap across the counter wrap is one run" do
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
+      run = [max, max + 4]
+
+      assert %{missing: %{count: 5, gaps: [^run]}} = order(frames([max - 2, max - 1, max + 5]))
+    end
+
+    test "a repeat across the counter wrap is still a duplicate" do
+      max = StreamDoctor.Probe.Video.Bar.max_frame()
+
+      assert %{duplicated: %{count: 1, repeats: [[^max, 1]]}} =
+               order(frames([max - 1, max, max, max + 1]))
+    end
+
+    test "decode order instead of display order shows up as a repeating permutation" do
+      assert %{
+               reordered: %{
+                 count: 3,
+                 max_depth: 2,
+                 permutations: [[3, 1, 2, 6], [6, 4, 5, 9], [9, 7, 8]]
+               }
+             } = order(frames([0, 3, 1, 2, 6, 4, 5, 9, 7, 8]))
+    end
+
+    test "a reordering still open when the stream ends is still reported" do
+      assert %{reordered: %{permutations: [[13, 12]]}} = order(frames([10, 11, 13, 12]))
+    end
+
+    test "a frame that jumped far ahead does not drag its distance into the permutation" do
+      assert %{reordered: %{max_depth: 99, permutations: [[102, 3, 103]]}} =
+               order(frames([100, 101, 102, 3, 103, 104]))
+    end
+
+    test "the deepest descent is the one reported" do
+      assert %{reordered: %{count: 2, max_depth: 50}, missing: %{count: 107}} =
+               order(frames([100, 90, 200, 150, 210]))
+    end
+
+    test "a frame without a pts still counts" do
+      events = [{:video_frame_received, 7, nil}, {:video_frame_received, 9, nil}]
+
+      assert %{missing: %{count: 1, gaps: [[8]]}} = order(events)
+    end
+
+    test "nothing is reported before the first frame" do
+      assert %{
+               reordered: %{count: nil, max_depth: nil, permutations: []},
+               missing: %{count: nil, gaps: []},
+               duplicated: %{count: nil, repeats: []}
+             } = order([])
+
+      assert %{reordered: %{count: nil}} = order([{:streamer_started, :missed}])
+    end
+
+    test "audio and lifecycle events leave the report alone" do
+      events = [
+        {:video_frame_received, 1, nil},
+        {:audio_symbol_received, 9, milliseconds(0)},
+        {:streamer_started, :missed},
+        {:first_frame_arrived, 1},
+        {:video_frame_received, 2, nil}
+      ]
+
+      assert %{
+               reordered: %{count: 0},
+               missing: %{count: 0},
+               duplicated: %{count: 0}
+             } = order(events)
+    end
+  end
+
   describe "TimeToFirstFrame" do
     defp ttff(events),
       do: Metric.TimeToFirstFrame.report(run(Metric.TimeToFirstFrame, [], events))

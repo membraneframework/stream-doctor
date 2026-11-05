@@ -106,10 +106,26 @@ export interface TimeToFirstFrame {
   ms: number | null;
 }
 
+/** One frame number, or an inclusive run of them. */
+export type FrameGap = [number] | [number, number];
+
+/** A frame number and how many extra times it arrived. */
+export type FrameRepeat = [number, number];
+
+/** What happened to the frame sequence. A frame number is its pts divided by its own duration,
+ * so a change of frame rate rescales the numbers and is reported as loss or duplication of
+ * everything the stream has sent so far - 20 s at 30 fps dropping to 15 fps reports 300 extra. */
+export interface FrameFaults {
+  reordered: { count: number | null; max_depth: number | null; permutations: number[][] };
+  missing: { count: number | null; gaps: FrameGap[] };
+  duplicated: { count: number | null; repeats: FrameRepeat[] };
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
   time_to_first_frame?: TimeToFirstFrame;
+  frames?: FrameFaults;
   error?: string;
 }
 
