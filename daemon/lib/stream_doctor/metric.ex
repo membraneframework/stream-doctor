@@ -15,10 +15,10 @@ defmodule StreamDoctor.Metric do
   @callback name() :: atom()
 
   @doc "Builds the initial state from the options given in the collector's metric spec."
-  @callback init(opts :: keyword()) :: state()
+  @callback new(opts :: keyword()) :: state()
 
   @doc "Folds one event into the state. Called for every event."
-  @callback handle_event(event(), state()) :: state()
+  @callback record(event(), state()) :: state()
 
   @doc "Current value of the metric. Must be JSON-encodable."
   @callback report(state()) :: map()

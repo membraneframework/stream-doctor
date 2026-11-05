@@ -130,7 +130,7 @@ defmodule StreamDoctor.Probe.Audio.MarkerDecoder do
         Membrane.Logger.warning("Failed to decode audio symbol: #{inspect(reason)}")
 
       {{:ok, symbol_number}, collector} ->
-        Collector.event(
+        Collector.record(
           collector,
           {:audio_symbol_received, symbol_number, symbol_pts(state)}
         )

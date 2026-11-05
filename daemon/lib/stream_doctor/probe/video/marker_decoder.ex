@@ -41,7 +41,7 @@ defmodule StreamDoctor.Probe.Video.MarkerDecoder do
         Membrane.Logger.warning("Failed to decode frame number: #{inspect(reason)}")
 
       {{:ok, frame_number}, collector} ->
-        Collector.event(
+        Collector.record(
           collector,
           {:video_frame_received, frame_number, buffer.pts}
         )
