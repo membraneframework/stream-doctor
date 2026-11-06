@@ -46,7 +46,7 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
 
   @impl true
   def record({:first_frame_arrived, _at}, _state) do
-    raise "the first frame cannot arrive twice: a viewer has one poller"
+    raise "the first frame cannot arrive twice: a viewer has one watcher"
   end
 
   @impl true
