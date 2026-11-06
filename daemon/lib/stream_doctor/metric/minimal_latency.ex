@@ -10,8 +10,6 @@ defmodule StreamDoctor.Metric.MinimalLatency do
     * `ms` - the median of up to 50 samples, one per playlist reload, each taken on the last
       frame of the newest segment that reload brought, the frame that waited least
     * `latest_samples` - the ten newest samples
-
-  The number runs high, never low: a reload sees new media up to one reload after it appeared.
   """
 
   @behaviour StreamDoctor.Metric
