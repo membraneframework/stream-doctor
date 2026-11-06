@@ -1,10 +1,10 @@
-defmodule StreamDoctor.Server.HLSTest do
-  use ExUnit.Case, async: true
+defmodule StreamDoctor.HLS.WatcherTest do
+  use ExUnit.Case, async: false
 
-  import ExUnit.CaptureLog
-
+  alias StreamDoctor.HLS.Watcher
   alias StreamDoctor.Metric
-  alias StreamDoctor.Server.HLS
+
+  setup {Req.Test, :set_req_test_to_shared}
 
   @base "http://cdn.example/a/master.m3u8"
   @slow_response 60
@@ -84,27 +84,17 @@ defmodule StreamDoctor.Server.HLSTest do
   defp asked(script), do: script |> Agent.get(fn {_rest, seen} -> seen end) |> Enum.reverse()
 
   defp watch(url, timeout \\ 1_000) do
-    test = self()
+    pid =
+      start_supervised!({Watcher, url: url, timeout: timeout, notify: {self(), :watcher}},
+        restart: :temporary
+      )
 
-    {pid, ref} =
-      spawn_monitor(fn ->
-        receive do: (:go -> :ok)
-        HLS.watch(url, timeout, &send(test, &1))
-      end)
-
-    on_exit(fn -> Process.exit(pid, :kill) end)
-    Req.Test.allow(:http, self(), pid)
-    send(pid, :go)
-    ref
+    Process.monitor(pid)
   end
 
-  defp assert_raised(ref, pattern) do
-    capture_log(fn ->
-      assert_receive {:DOWN, ^ref, :process, _pid, {%RuntimeError{message: message}, _stack}},
-                     1_000
-
-      assert message =~ pattern
-    end)
+  defp assert_stopped(ref, pattern) do
+    assert_receive {:DOWN, ^ref, :process, _pid, {:shutdown, message}}, 1_000
+    assert message =~ pattern
   end
 
   test "the segment is stamped when it was asked for, not when the answer arrived" do
@@ -118,7 +108,7 @@ defmodule StreamDoctor.Server.HLSTest do
     asked_at = Metric.now_ms()
     watch(@base)
 
-    assert_receive {:first_frame_arrived, at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, at}}, 1_000
     answered_at = Metric.now_ms()
 
     assert at >= asked_at
@@ -135,7 +125,7 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
     assert requested(script) == List.duplicate("/a/master.m3u8", 3)
   end
 
@@ -148,11 +138,11 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
     assert requested(script) == ["/a/master.m3u8", "/a/sub/index.m3u8"]
   end
 
-  test "a failing variant sends the poller back to the master playlist" do
+  test "a failing variant sends the watcher back to the master playlist" do
     script =
       serve([
         fn "/a/master.m3u8" -> {:ok, @master} end,
@@ -163,7 +153,7 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
 
     assert requested(script) == [
              "/a/master.m3u8",
@@ -177,23 +167,23 @@ defmodule StreamDoctor.Server.HLSTest do
   test "a master playlist that points at itself does not spin" do
     serve([fn _path -> {:ok, @self_referencing_master} end])
 
-    assert_raised(watch(@base, 20), "no segments yet")
+    assert_stopped(watch(@base, 20), "no segments yet")
   end
 
   @tag timeout: 1_000
   test "a stream inf with no URI line does not spin" do
     serve([fn _path -> {:ok, @uriless_master} end])
 
-    assert_raised(watch(@base, 20), "no segments yet")
+    assert_stopped(watch(@base, 20), "no segments yet")
   end
 
-  test "a playlist that never appears raises past the deadline" do
+  test "a playlist that never appears stops past the deadline" do
     serve([fn _path -> {:error, 404} end])
 
-    assert_raised(watch(@base, 5), "not available")
+    assert_stopped(watch(@base, 5), "not available")
   end
 
-  test "a master playlist whose variant never lists a segment raises past the deadline" do
+  test "a master playlist whose variant never lists a segment stops past the deadline" do
     serve([
       fn
         "/a/master.m3u8" -> {:ok, @master}
@@ -201,7 +191,7 @@ defmodule StreamDoctor.Server.HLSTest do
       end
     ])
 
-    assert_raised(watch(@base, 20), "no segments yet")
+    assert_stopped(watch(@base, 20), "no segments yet")
   end
 
   test "the segments listed before watching began count towards the timeline but are not timed" do
@@ -212,12 +202,12 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
 
-    assert_receive {:media_available, media_end, _at}, 1_000
+    assert_receive {:hls, _watcher, {:media_available, media_end, _at}}, 1_000
     assert media_end == Membrane.Time.seconds(4)
 
-    refute_receive {:media_available, _media_end, _at}, 300
+    refute_receive {:hls, _watcher, {:media_available, _media_end, _at}}, 300
   end
 
   test "a media playlist with CRLF line endings is read, not crashed on" do
@@ -225,7 +215,7 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
     refute_receive {:DOWN, _ref, :process, _pid, _reason}, 300
   end
 
@@ -237,10 +227,10 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:media_available, media_end, _at}, 2_000
+    assert_receive {:hls, _watcher, {:media_available, media_end, _at}}, 2_000
     assert media_end == Membrane.Time.seconds(3)
 
-    refute_receive {:media_available, _media_end, _at}, 300
+    refute_receive {:hls, _watcher, {:media_available, _media_end, _at}}, 300
   end
 
   test "a reload that finds several new segments reports only the newest" do
@@ -251,10 +241,10 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:media_available, media_end, _at}, 2_000
+    assert_receive {:hls, _watcher, {:media_available, media_end, _at}}, 2_000
     assert media_end == Membrane.Time.seconds(3)
 
-    refute_receive {:media_available, _media_end, _at}, 300
+    refute_receive {:hls, _watcher, {:media_available, _media_end, _at}}, 300
   end
 
   test "a window that moved past an unseen segment breaks the timeline" do
@@ -265,18 +255,7 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:timeline_broken, :window_gap}, 2_000
-  end
-
-  test "a discontinuity breaks the timeline" do
-    serve([
-      fn _path -> {:ok, media(1, 0, [1.0]) <> "#EXT-X-DISCONTINUITY\n#EXTINF:1.0,\nseg1.ts\n"} end
-    ])
-
-    watch(@base)
-
-    assert_receive {:timeline_broken, :discontinuity}, 1_000
-    refute_receive {:media_available, _media_end, _at}, 100
+    assert_receive {:hls, _watcher, {:timeline_broken, :window_gap}}, 2_000
   end
 
   test "a playlist that fails once the watch is running is retried, not given up on" do
@@ -288,20 +267,8 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base, 500)
 
-    assert_receive {:media_available, media_end, _at}, 1_000
+    assert_receive {:hls, _watcher, {:media_available, media_end, _at}}, 1_000
     assert media_end == Membrane.Time.seconds(2)
-  end
-
-  test "a discontinuity appearing mid-stream breaks the timeline" do
-    serve([
-      fn _path -> {:ok, media(1, 0, [1.0])} end,
-      fn _path -> {:ok, media(1, 0, [1.0]) <> "#EXT-X-DISCONTINUITY\n#EXTINF:1.0,\nseg1.ts\n"} end
-    ])
-
-    watch(@base)
-
-    assert_receive {:timeline_broken, :discontinuity}, 1_000
-    refute_receive {:media_available, _media_end, _at}, 300
   end
 
   test "a playlist whose first load already dropped segments reports a missed start" do
@@ -309,23 +276,21 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
-    assert_receive {:timeline_broken, :missed_start}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
+    assert_receive {:hls, _watcher, {:timeline_broken, :missed_start}}, 1_000
   end
 
-  test "a broken timeline stops the polling" do
+  test "a broken timeline stops the watch" do
     script =
       serve([
         fn _path -> {:ok, media(1, 0, [1.0])} end,
-        fn _path ->
-          {:ok, media(1, 0, [1.0]) <> "#EXT-X-DISCONTINUITY\n#EXTINF:1.0,\nseg1.ts\n"}
-        end,
+        fn _path -> {:ok, media(1, 2, [1.0])} end,
         fn _path -> {:ok, media(1, 0, [1.0, 1.0, 1.0])} end
       ])
 
     watch(@base)
 
-    assert_receive {:timeline_broken, :discontinuity}, 1_000
+    assert_receive {:hls, _watcher, {:timeline_broken, :window_gap}}, 1_000
     Process.sleep(1_200)
 
     assert length(requested(script)) == 2
@@ -340,7 +305,7 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base, 2_000)
 
-    assert_receive {:media_available, _media_end, _at}, 1_000
+    assert_receive {:hls, _watcher, {:media_available, _media_end, _at}}, 1_000
     Process.sleep(1_800)
 
     assert [sync, after_change, after_no_change] =
@@ -356,7 +321,7 @@ defmodule StreamDoctor.Server.HLSTest do
 
     watch(@base, 2_000)
 
-    assert_receive {:first_frame_arrived, _at}, 1_000
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
     Process.sleep(3_000)
 
     assert [from, to] = script |> gaps() |> List.last()

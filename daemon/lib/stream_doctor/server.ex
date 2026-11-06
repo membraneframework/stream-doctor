@@ -7,10 +7,10 @@ defmodule StreamDoctor.Server do
 
   alias StreamDoctor.Collector
   alias StreamDoctor.HLS.Description
+  alias StreamDoctor.HLS.Watcher
   alias StreamDoctor.Metric
   alias StreamDoctor.OptionsParser.Publisher
 
-  @hls_timeout 120_000
   @metric_specs [
     {Metric.AvDrift, []},
     {Metric.TimeToFirstFrame, []},
@@ -80,7 +80,6 @@ defmodule StreamDoctor.Server do
         rtmp_url: rtmp_url,
         status: :streaming,
         error: nil,
-        live: false,
         live_at: nil
       }
 
@@ -114,39 +113,19 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_call({:start_viewer, hls_url}, _from, state) do
     id = "viewer-#{state.next_id}"
-    server = self()
-
     {:ok, collector} = Collector.start_link(@metric_specs)
 
-    if state.streamer != nil do
-      Collector.record(collector, {:streamer_started, :missed})
-    end
+    {:ok, watcher} = Watcher.start_link(url: hls_url, notify: {self(), id})
 
-    case state.streamer do
-      %{live_at: live_at} when live_at != nil ->
-        Collector.record(collector, {:ingest_started, live_at})
+    record_streamer_state(collector, state.streamer)
 
-      _not_live_yet ->
-        :ok
-    end
-
-    poller =
-      spawn_link(fn ->
-        try do
-          __MODULE__.HLS.watch(hls_url, @hls_timeout, fn event ->
-            Collector.record(collector, event)
-            if match?({:first_frame_arrived, _at}, event), do: send(server, {:playlist_ready, id})
-          end)
-        rescue
-          e -> send(server, {:viewer_failed, id, Exception.message(e)})
-        end
-      end)
+    Process.monitor(watcher)
 
     viewer = %{
       id: id,
       hls_url: hls_url,
       pid: nil,
-      poller: poller,
+      watcher: watcher,
       status: :waiting_for_playlist,
       error: nil,
       playlist: nil,
@@ -164,7 +143,7 @@ defmodule StreamDoctor.Server do
         {:reply, {:error, :not_found}, state}
 
       viewer ->
-        Process.exit(viewer.poller, :kill)
+        Process.exit(viewer.watcher, :shutdown)
         viewer = terminate_pipeline(viewer)
         state = put_in(state.viewers[id], viewer)
         {:reply, {:ok, viewer_summary(viewer)}, state}
@@ -193,7 +172,7 @@ defmodule StreamDoctor.Server do
   def handle_info({:streamer_live, pid}, %{streamer: %{pid: pid} = streamer} = state) do
     live_at = Metric.now_ms()
     broadcast(state.viewers, {:ingest_started, live_at})
-    {:noreply, %{state | streamer: %{streamer | live: true, live_at: live_at}}}
+    {:noreply, %{state | streamer: %{streamer | live_at: live_at}}}
   end
 
   @impl true
@@ -202,21 +181,14 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:playlist_ready, id}, state) do
+  def handle_info({:hls, id, event}, state) do
     case state.viewers[id] do
-      %{status: :waiting_for_playlist} = viewer ->
-        pid =
-          StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url,
-            collector: viewer.collector
-          )
-
-        Process.monitor(pid)
-        describe_playlist(viewer)
-
-        {:noreply, put_in(state.viewers[id], %{viewer | pid: pid, status: :receiving})}
-
-      _stopped_or_missing ->
+      nil ->
         {:noreply, state}
+
+      viewer ->
+        Collector.record(viewer.collector, event)
+        {:noreply, put_in(state.viewers[id], start_receiving(viewer, event))}
     end
   end
 
@@ -229,30 +201,32 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:viewer_failed, id, reason}, state) do
-    case state.viewers[id] do
-      %{status: :waiting_for_playlist} = viewer ->
-        {:noreply, put_in(state.viewers[id], %{viewer | status: :failed, error: reason})}
-
-      %{status: :receiving} = viewer ->
-        {:noreply, put_in(state.viewers[id], %{viewer | error: reason})}
-
-      _stopped_or_missing ->
-        {:noreply, state}
-    end
-  end
-
-  @impl true
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    error = if reason == :normal, do: nil, else: inspect(reason)
+    case Enum.find(state.viewers, fn {_id, viewer} -> viewer.watcher == pid end) do
+      {id, viewer} ->
+        {:noreply, put_in(state.viewers[id], watch_stopped(viewer, reason))}
 
-    {:noreply, mark_down_pid(state, pid, error)}
+      nil ->
+        {:noreply,
+         mark_down_pid(state, pid, if(reason == :normal, do: nil, else: inspect(reason)))}
+    end
   end
 
   @impl true
   def handle_info({:EXIT, _pid, _reason}, state) do
     {:noreply, state}
   end
+
+  defp start_receiving(%{status: :waiting_for_playlist} = viewer, {:first_frame_arrived, _at}) do
+    pid = StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url, collector: viewer.collector)
+
+    Process.monitor(pid)
+    describe_playlist(viewer)
+
+    %{viewer | pid: pid, status: :receiving}
+  end
+
+  defp start_receiving(viewer, _event), do: viewer
 
   defp describe_playlist(viewer) do
     server = self()
@@ -272,6 +246,18 @@ defmodule StreamDoctor.Server do
     end
   end
 
+  defp watch_stopped(viewer, :normal), do: viewer
+
+  defp watch_stopped(%{status: :waiting_for_playlist} = viewer, {:shutdown, reason}) do
+    %{viewer | status: :failed, error: reason}
+  end
+
+  defp watch_stopped(%{status: :receiving} = viewer, {:shutdown, reason}) do
+    %{viewer | error: reason}
+  end
+
+  defp watch_stopped(viewer, _stopped_or_ended), do: viewer
+
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
     %{state | streamer: mark_down(streamer, error)}
   end
@@ -279,7 +265,7 @@ defmodule StreamDoctor.Server do
   defp mark_down_pid(state, pid, error) do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
       {id, viewer} ->
-        Process.exit(viewer.poller, :kill)
+        Process.exit(viewer.watcher, :shutdown)
         put_in(state.viewers[id], mark_down(viewer, error))
 
       nil ->
@@ -321,8 +307,22 @@ defmodule StreamDoctor.Server do
     |> Enum.each(fn {_id, viewer} -> Collector.record(viewer.collector, event) end)
   end
 
+  defp record_streamer_state(collector, streamer) do
+    streamer
+    |> streamer_events_so_far()
+    |> Enum.each(&Collector.record(collector, &1))
+  end
+
+  defp streamer_events_so_far(nil), do: []
+  defp streamer_events_so_far(%{live_at: nil}), do: [{:streamer_started, :missed}]
+
+  defp streamer_events_so_far(%{live_at: at}),
+    do: [{:streamer_started, :missed}, {:ingest_started, at}]
+
   defp streamer_summary(streamer) do
-    Map.take(streamer, [:input, :rtmp_url, :status, :error, :live])
+    streamer
+    |> Map.take([:input, :rtmp_url, :status, :error])
+    |> Map.put(:live, streamer.live_at != nil)
   end
 
   defp viewer_summary(viewer) do

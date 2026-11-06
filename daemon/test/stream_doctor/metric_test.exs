@@ -409,12 +409,10 @@ defmodule StreamDoctor.MetricTest do
     end
 
     test "a broken timeline stops the measurement and keeps what it had until then" do
-      for reason <- [:discontinuity, :window_gap] do
-        events =
-          live([{:media_available, milliseconds(2000), 3000}, {:timeline_broken, reason}])
+      events =
+        live([{:media_available, milliseconds(2000), 3000}, {:timeline_broken, :window_gap}])
 
-        assert %{status: :timeline_broken, ms: 500, latest_samples: [500]} = latency(events)
-      end
+      assert %{status: :timeline_broken, ms: 500, latest_samples: [500]} = latency(events)
     end
 
     test "a later streamer does not reset what was measured" do
@@ -442,15 +440,13 @@ defmodule StreamDoctor.MetricTest do
 
     test "media cannot be published after the timeline broke" do
       assert_raise RuntimeError, ~r/watch ended with it/, fn ->
-        latency(
-          live([{:timeline_broken, :discontinuity}, {:media_available, milliseconds(1), 2}])
-        )
+        latency(live([{:timeline_broken, :window_gap}, {:media_available, milliseconds(1), 2}]))
       end
     end
 
     test "the timeline cannot break twice" do
       assert_raise RuntimeError, ~r/cannot break twice/, fn ->
-        latency(live([{:timeline_broken, :discontinuity}, {:timeline_broken, :window_gap}]))
+        latency(live([{:timeline_broken, :window_gap}, {:timeline_broken, :window_gap}]))
       end
     end
 
