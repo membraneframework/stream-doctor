@@ -101,11 +101,11 @@ defmodule StreamDoctor.MetricTest do
                order(frames([10, 13, 11, 12, 14]))
     end
 
-    test "a permutation stops growing instead of following an endless descent" do
+    test "a permutation follows a descent however long it runs" do
       descending = [1_000 | Enum.to_list(999..900//-1)]
 
       assert %{reordered: %{permutations: [permutation]}} = order(frames(descending))
-      assert length(permutation) == 31
+      assert length(permutation) == length(descending)
     end
 
     test "a frame displaced over several others is late, not lost" do
@@ -241,7 +241,7 @@ defmodule StreamDoctor.MetricTest do
     end
 
     test "the deepest descent is the one reported" do
-      assert %{reordered: %{count: 2, max_depth: 50}, missing: %{count: 107}} =
+      assert %{reordered: %{count: 2, max_depth: 50}, missing: %{count: 117}} =
                order(frames([100, 90, 200, 150, 210]))
     end
 

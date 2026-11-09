@@ -10,6 +10,12 @@ defmodule StreamDoctor.Metric.Frames do
 
   A number is the source pts divided by that frame's own duration, so a change of frame rate
   rescales them and is reported as loss or duplication of everything sent so far.
+
+      %{
+        reordered: %{count: 1, max_depth: 1, permutations: [[111, 110, 112]]},
+        missing: %{count: 3, gaps: [[120, 122]]},
+        duplicated: %{count: 1, repeats: [[130, 1]]}
+      }
   """
 
   @behaviour StreamDoctor.Metric
@@ -19,7 +25,6 @@ defmodule StreamDoctor.Metric.Frames do
 
   # How far the infrastructure may displace a frame before it counts as loss, not reordering.
   @reorder_depth 16
-  @frames_per_permutation 2 * @reorder_depth
   @settle_lag 2 * @reorder_depth
 
   @evidence 10
@@ -36,7 +41,7 @@ defmodule StreamDoctor.Metric.Frames do
       highest: nil,
       join: nil,
       open_permutation: nil,
-      open_gaps: [],
+      seen: MapSet.new(),
       reordered: %{count: 0, max_depth: nil, permutations: []},
       missing: %{count: 0, gaps: []},
       duplicated: %{count: 0, repeats: []}
@@ -70,11 +75,9 @@ defmodule StreamDoctor.Metric.Frames do
 
   @impl true
   def report(state) do
-    drained = close_gaps(state, state.highest + 1)
-
     %{
       reordered: %{state.reordered | permutations: permutations_so_far(state)},
-      missing: drained.missing,
+      missing: settle(state, state.highest).missing,
       duplicated: state.duplicated
     }
   end
@@ -94,55 +97,41 @@ defmodule StreamDoctor.Metric.Frames do
 
   defp count_missing_and_duplicated(%{join: join} = state, number)
        when join == nil or (number < join and join - number <= @settle_lag) do
-    %{state | join: number}
+    see(%{state | join: number}, number)
   end
 
   defp count_missing_and_duplicated(%{highest: highest} = state, number)
        when number > highest do
     state
-    |> open_gap(highest + 1, number - 1)
-    |> close_gaps(number - @settle_lag)
+    |> settle(horizon(number))
+    |> see(number)
   end
 
   defp count_missing_and_duplicated(state, number) do
-    case claim(state.open_gaps, number) do
-      {:ok, open_gaps} -> %{state | open_gaps: open_gaps}
-      :absent -> duplicate(state, number)
-    end
+    if settled?(state, number), do: duplicate(state, number), else: see(state, number)
   end
 
-  defp open_gap(state, from, to) when from > to do
-    state
+  defp settled?(state, number) do
+    MapSet.member?(state.seen, number) or number <= horizon(state.highest)
   end
 
-  defp open_gap(state, from, to) do
-    %{state | open_gaps: state.open_gaps ++ [{from, to}]}
+  defp see(state, number) do
+    %{state | seen: MapSet.put(state.seen, number)}
   end
 
-  # Runs above the horizon are disjoint and need a frame between them, so the list stays bounded.
-  defp close_gaps(%{open_gaps: [{from, to} | rest]} = state, horizon) when to < horizon do
-    %{state | open_gaps: rest, missing: record_loss(state.missing, from, to)}
-    |> close_gaps(horizon)
+  defp horizon(number), do: number - @settle_lag
+
+  defp settle(state, horizon) do
+    state.join
+    |> max(horizon(state.highest) + 1)
+    |> Range.new(horizon, 1)
+    |> Enum.reject(&MapSet.member?(state.seen, &1))
+    |> Enum.reduce(state, fn lost, acc -> %{acc | missing: record_loss(acc.missing, lost)} end)
+    |> forget_settled(horizon)
   end
 
-  defp close_gaps(state, _horizon) do
-    state
-  end
-
-  defp claim([{from, to} | rest], number) when from <= number and number <= to do
-    {:ok, split(from, to, number) ++ rest}
-  end
-
-  defp claim([gap | rest], number) do
-    with {:ok, open_gaps} <- claim(rest, number), do: {:ok, [gap | open_gaps]}
-  end
-
-  defp claim([], _number) do
-    :absent
-  end
-
-  defp split(from, to, number) do
-    Enum.reject([{from, number - 1}, {number + 1, to}], fn {from, to} -> from > to end)
+  defp forget_settled(state, horizon) do
+    %{state | seen: MapSet.filter(state.seen, &(&1 > horizon))}
   end
 
   defp duplicate(state, number) do
@@ -153,8 +142,8 @@ defmodule StreamDoctor.Metric.Frames do
     %{reordered | count: reordered.count + 1, max_depth: max(depth, reordered.max_depth || 0)}
   end
 
-  defp record_loss(missing, from, to) do
-    %{missing | count: missing.count + to - from + 1, gaps: keep(missing.gaps, gap(from, to))}
+  defp record_loss(missing, number) do
+    %{missing | count: missing.count + 1, gaps: extend_gap(missing.gaps, number)}
   end
 
   defp record_repeat(duplicated, number) do
@@ -164,25 +153,29 @@ defmodule StreamDoctor.Metric.Frames do
   defp extend_run(repeats, number) do
     case List.last(repeats) do
       [^number, times] -> List.replace_at(repeats, -1, [number, times + 1])
-      _other -> keep(repeats, [number, 1])
+      _other -> keep_last(repeats, [number, 1])
     end
   end
 
-  defp gap(number, number), do: [number]
-  defp gap(from, to), do: [from, to]
+  defp extend_gap(gaps, number) do
+    case List.last(gaps) do
+      [from] when number == from + 1 -> List.replace_at(gaps, -1, [from, number])
+      [from, to] when number == to + 1 -> List.replace_at(gaps, -1, [from, number])
+      _other -> keep_last(gaps, [number])
+    end
+  end
 
-  defp collect_permutations(%{highest: highest} = state, number)
-       when highest == nil or number > highest do
+  defp collect_permutations(%{open_permutation: open, highest: highest} = state, number)
+       when open != nil and number > highest do
     close_permutation(state, number)
   end
 
   defp collect_permutations(%{open_permutation: nil, highest: highest} = state, number)
-       when number < highest do
-    %{state | open_permutation: [number, state.previous]}
+       when highest != nil and number < highest do
+    open_permutation(state, number)
   end
 
-  defp collect_permutations(%{open_permutation: open} = state, number)
-       when open != nil and length(open) < @frames_per_permutation - 1 do
+  defp collect_permutations(%{open_permutation: open} = state, number) when open != nil do
     %{state | open_permutation: [number | open]}
   end
 
@@ -190,8 +183,9 @@ defmodule StreamDoctor.Metric.Frames do
     state
   end
 
-  defp close_permutation(%{open_permutation: nil} = state, _number) do
-    state
+  # Entries go in newest first and are reversed when the permutation closes.
+  defp open_permutation(state, number) do
+    %{state | open_permutation: [number, state.highest]}
   end
 
   defp close_permutation(%{open_permutation: open} = state, number) do
@@ -203,7 +197,7 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   defp record_permutation(reordered, permutation) do
-    %{reordered | permutations: keep(reordered.permutations, permutation)}
+    %{reordered | permutations: keep_last(reordered.permutations, permutation)}
   end
 
   defp permutations_so_far(%{open_permutation: nil} = state) do
@@ -211,8 +205,8 @@ defmodule StreamDoctor.Metric.Frames do
   end
 
   defp permutations_so_far(state) do
-    keep(state.reordered.permutations, Enum.reverse(state.open_permutation))
+    keep_last(state.reordered.permutations, Enum.reverse(state.open_permutation))
   end
 
-  defp keep(kept, entry), do: Enum.take(kept ++ [entry], -@evidence)
+  defp keep_last(kept, entry), do: Enum.take(kept ++ [entry], -@evidence)
 end
