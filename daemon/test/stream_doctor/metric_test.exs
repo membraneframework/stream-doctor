@@ -137,7 +137,7 @@ defmodule StreamDoctor.MetricTest do
 
     test "a missed start cannot follow another event" do
       assert_raise RuntimeError, ~r/viewer is created/, fn ->
-        IO.inspect(ttff([watching(1_500), missed()]))
+        ttff([watching(1_500), missed()])
       end
     end
   end
