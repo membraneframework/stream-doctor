@@ -1,7 +1,6 @@
 defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic do
   @moduledoc """
-  Sources that generate a video and a mono audio stream, with `metadata.duration` on every
-  video buffer.
+  Sources that generate a video and a mono audio stream.
 
   Without a `duration` they never end; they run until the pipeline is terminated.
   """

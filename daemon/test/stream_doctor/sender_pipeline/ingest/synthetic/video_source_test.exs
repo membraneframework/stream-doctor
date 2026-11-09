@@ -69,14 +69,13 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSourceTest do
     end
   end
 
-  test "timestamps rise by one frame duration and carry it as metadata" do
+  test "timestamps rise by one frame duration" do
     pid = start(source_opts(framerate: {25, 1}))
     expected = div(Membrane.Time.second(), 25)
 
     for n <- 0..9 do
       assert_sink_buffer(pid, :sink, buffer)
       assert buffer.pts == n * expected
-      assert buffer.metadata.duration == expected
     end
   end
 

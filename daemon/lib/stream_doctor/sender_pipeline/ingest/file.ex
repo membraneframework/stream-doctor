@@ -1,7 +1,6 @@
 defmodule StreamDoctor.SenderPipeline.Ingest.File do
   @moduledoc """
-  Reads an MP4 file and decodes its tracks to raw video and audio, with `metadata.duration`
-  on every video buffer.
+  Reads an MP4 file and decodes its tracks to raw video and audio.
   """
 
   import Membrane.ChildrenSpec
@@ -11,7 +10,6 @@ defmodule StreamDoctor.SenderPipeline.Ingest.File do
 
   alias Membrane.{AAC, H264, H265, MP4, Pad, RawAudio, RawVideo, Transcoder}
   alias StreamDoctor.SenderPipeline.Egress.RTMP
-  alias StreamDoctor.SenderPipeline.Ingest.DurationAdder
 
   @spec spec(String.t()) :: Membrane.ChildrenSpec.t()
   def spec(path) do
@@ -53,7 +51,6 @@ defmodule StreamDoctor.SenderPipeline.Ingest.File do
     get_child(:demuxer)
     |> via_out(Pad.ref(:output, track_id))
     |> child(:video_decoder, %Transcoder{output_stream_format: RawVideo})
-    |> child(:video_duration_adder, DurationAdder)
   end
 
   defp track(:audio, track_id) do
