@@ -3,9 +3,12 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   Measures how long the first frame takes to reach the viewer after the streamer starts, the
   connection to the ingest included.
 
-  `ms` is that wait, once both ends have been observed. `status` says why it is `nil` instead:
-  the viewer was not watching when the streamer started, or found a frame left over from an
-  earlier one (`missed_first_frame`), or there was no streamer at all (`no_streamer`).
+  Returns a map with `status` and `ms`. Ms is the measurement in milliseconds.
+  The `status` can be one of:
+  * `:waiting_for_the_first_frame` - the streamer has started, but the first frame has not arrived yet
+  * `:measured` - the first frame has arrived, and the time is measured
+  * `:missed_first_frame` - the first frame has arrived, but it was older than the first frame sent by the streamer
+  * `:no_streamer` - no streamer has started
   """
 
   @behaviour StreamDoctor.Metric
@@ -17,23 +20,25 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
 
   @impl true
   def new(_opts) do
-    %{status: :waiting, first_frame_sent_at: nil, first_frame_arrived_at: nil}
+    %{status: :waiting_for_the_first_frame, first_frame_sent_at: nil, first_frame_arrived_at: nil}
   end
 
   @impl true
   def record({:streamer_started, {:watching, at}}, %{first_frame_arrived_at: nil} = state) do
-    %{state | status: :waiting, first_frame_sent_at: at}
+    %{state | status: :waiting_for_the_first_frame, first_frame_sent_at: at}
   end
 
   @impl true
-  def record(
-        {:streamer_started, :missed},
-        %{status: :waiting, first_frame_sent_at: nil, first_frame_arrived_at: nil} = state
-      ) do
+  def record({:streamer_started, :missed}, %{status: :waiting_for_the_first_frame, first_frame_sent_at: nil, first_frame_arrived_at: nil} = state) do
     %{state | status: :missed_first_frame}
   end
 
-  # A frame already there when the streamer starts came from an earlier run.
+  @impl true
+  def record({:streamer_started, :missed}, _state) do
+    raise ":missed cannot follow another event: it is stamped when the viewer is created"
+  end
+
+  # A frame already there when the streamer starts means it came from an earlier run.
   @impl true
   def record({:streamer_started, {:watching, _at}}, %{status: :no_streamer} = state) do
     %{state | status: :missed_first_frame}
@@ -47,11 +52,6 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   @impl true
   def record({:first_frame_arrived, _at}, _state) do
     raise "the first frame cannot arrive twice: a viewer has one poller"
-  end
-
-  @impl true
-  def record({:streamer_started, :missed}, _state) do
-    raise ":missed cannot follow another event: it is stamped when the viewer is created"
   end
 
   @impl true

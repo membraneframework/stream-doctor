@@ -109,9 +109,9 @@ defmodule StreamDoctor.MetricTest do
       assert %{status: :missed_first_frame, ms: nil} = ttff([missed()])
     end
 
-    test "reports waiting until a frame arrives" do
-      assert %{status: :waiting, ms: nil} = ttff([])
-      assert %{status: :waiting, ms: nil} = ttff([watching(1_500)])
+    test "reports waiting_for_the_first_frame until a frame arrives" do
+      assert %{status: :waiting_for_the_first_frame, ms: nil} = ttff([])
+      assert %{status: :waiting_for_the_first_frame, ms: nil} = ttff([watching(1_500)])
     end
 
     test "a republished streamer is measured from its own start" do
@@ -137,7 +137,7 @@ defmodule StreamDoctor.MetricTest do
 
     test "a missed start cannot follow another event" do
       assert_raise RuntimeError, ~r/viewer is created/, fn ->
-        ttff([watching(1_500), missed()])
+        IO.inspect(ttff([watching(1_500), missed()]))
       end
     end
   end
