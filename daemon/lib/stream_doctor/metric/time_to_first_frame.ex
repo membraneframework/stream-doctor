@@ -29,7 +29,14 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   end
 
   @impl true
-  def record({:streamer_started, :missed}, %{status: :waiting_for_the_first_frame, first_frame_sent_at: nil, first_frame_arrived_at: nil} = state) do
+  def record(
+        {:streamer_started, :missed},
+        %{
+          status: :waiting_for_the_first_frame,
+          first_frame_sent_at: nil,
+          first_frame_arrived_at: nil
+        } = state
+      ) do
     %{state | status: :missed_first_frame}
   end
 
