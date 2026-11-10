@@ -65,8 +65,7 @@ defmodule StreamDoctor.SenderPipeline.Ingest.Synthetic.VideoSource do
     else
       buffer = %Buffer{
         payload: frame(state),
-        pts: state.frame * state.frame_duration,
-        metadata: %{duration: state.frame_duration}
+        pts: state.frame * state.frame_duration
       }
 
       {[buffer: {:output, buffer}, redemand: :output], %{state | frame: state.frame + 1}}

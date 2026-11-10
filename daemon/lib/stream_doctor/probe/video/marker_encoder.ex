@@ -1,8 +1,7 @@
 defmodule StreamDoctor.Probe.Video.MarkerEncoder do
   @moduledoc """
-  Draws the bar on each frame. The frame number is the pts divided by the frame duration, so
-  number 0 is source time zero whether or not a frame sits there. It wraps at
-  `StreamDoctor.Probe.Video.Bar.max_frame/0`. Every buffer must carry `metadata.duration`.
+  Draws the bar on each frame. Frames are numbered in arrival order from zero, wrapping at
+  `StreamDoctor.Probe.Video.Bar.max_frame/0`.
   """
 
   use Membrane.Filter
@@ -15,7 +14,7 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
 
   @impl true
   def handle_init(_ctx, _opts) do
-    {[], %{bar: nil}}
+    {[], %{bar: nil, frame_count: 0}}
   end
 
   @impl true
@@ -26,8 +25,9 @@ defmodule StreamDoctor.Probe.Video.MarkerEncoder do
 
   @impl true
   def handle_buffer(:input, buffer, _ctx, state) do
-    frame_number = round(buffer.pts / buffer.metadata.duration)
-    buffer = %{buffer | payload: Bar.encode(state.bar, buffer.payload, frame_number)}
-    {[buffer: {:output, buffer}], state}
+    buffer = %{buffer | payload: Bar.encode(state.bar, buffer.payload, state.frame_count)}
+
+    {[buffer: {:output, buffer}],
+     %{state | frame_count: rem(state.frame_count + 1, Bar.max_frame())}}
   end
 end
