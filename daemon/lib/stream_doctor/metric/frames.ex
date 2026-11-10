@@ -2,15 +2,11 @@ defmodule StreamDoctor.Metric.Frames do
   @moduledoc """
   Reports what happened to the sequence of decoded frame numbers, in three groups:
 
-    * `reordered` - the numbers that arrived after a later one, with the deepest such
-      displacement and the runs they formed
-    * `missing` - the numbers that never arrived, as inclusive ranges, counted once the
-      sequence has run far enough past them that a reordering could no longer bring them
-    * `duplicated` - the numbers that arrived again, with how many extra times each did
+    * `reordered` - the numbers that arrived in the wrong order, with actual permutations and how deep the reordering went
+    * `missing` - the numbers that never arrived, as inclusive ranges
+    * `duplicated` - the numbers that arrived more than once, with how many extra times each did
 
-  A number is the source pts divided by that frame's own duration, so a change of frame rate
-  rescales them and is reported as loss or duplication of everything sent so far.
-
+  For example, if the viewer saw frames 110, 111, 112, 120, 130, 130, and 122, the report would be:
       %{
         reordered: %{count: 1, max_depth: 1, permutations: [[111, 110, 112]]},
         missing: %{count: 3, gaps: [[120, 122]]},
