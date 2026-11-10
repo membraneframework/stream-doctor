@@ -1,15 +1,15 @@
 defmodule StreamDoctor.Metric.MinimalLatency do
   @moduledoc """
-  Measures the floor of the output latency: the time from a frame reaching the sender's sink
-  to the media holding it being listed for download.
+  Measures the minimal latency of the stream, from the ingest to the viewer, as the median of up to 50 samples.
 
-    * `status` - `measured` once there is a number, `waiting` before that, or why there will
-      not be one: the viewer did not watch one stream from its ingest (`missed_the_stream`),
-      the stream broke its own published timeline (`timeline_broken`), or nobody was
-      streaming (`no_streamer`)
-    * `ms` - the median of up to 50 samples, one per playlist reload, each taken on the last
-      frame of the newest segment that reload brought, the frame that waited least
+    * `ms` - the median of up to 50 samples, one per playlist reload, each taken on the last frame of the newest segment.
     * `latest_samples` - the ten newest samples
+    * `status` - the status of the measurement, one of:
+      * `:no_streamer` - no streamer has started
+      * `:waiting` - the streamer has started, but the ingest has not yet started
+      * `:measured` - the ingest has started and at least one sample has been taken
+      * `:missed_the_stream` - the ingest started before the streamer, so no sample could be taken
+      * `:timeline_broken` - the timeline broke before a sample could be taken
   """
 
   @behaviour StreamDoctor.Metric
