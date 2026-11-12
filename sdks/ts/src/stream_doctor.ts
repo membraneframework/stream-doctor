@@ -135,7 +135,7 @@ export interface Resolution {
   height: number;
 }
 
-/** One variant of an HLS stream. Every field is declared by the packager, not measured. */
+/** One variant of an HLS stream. Every field is declared by the packager, not measured, except `tracks` when no CODECS is declared. */
 export interface Variant {
   id: number;
   uri: string;
@@ -146,7 +146,7 @@ export interface Variant {
   frame_rate: number | null;
   name: string | null;
   codecs: string | null;
-  /** "unknown" when the playlist declares no CODECS attribute. */
+  /** Read from the media when the playlist declares no CODECS attribute, "unknown" when that fails too. */
   tracks: Track[] | "unknown";
 }
 
