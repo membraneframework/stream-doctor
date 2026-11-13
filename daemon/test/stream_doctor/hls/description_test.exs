@@ -27,10 +27,13 @@ defmodule StreamDoctor.HLS.DescriptionTest do
   seg0.m4s
   """
 
-  defp serve(master) do
+  @fixtures "test/fixtures/hls"
+
+  defp serve(master, media \\ %{}) do
     Req.Test.stub(:http, fn conn ->
       case conn.request_path do
         "/a/master.m3u8" -> Req.Test.text(conn, master)
+        "/a/" <> path when is_map_key(media, path) -> send_media(conn, media[path])
         "/a/sub/index.m3u8" -> Req.Test.text(conn, @media_ts)
         "/abs/index.m3u8" -> Req.Test.text(conn, @media_cmaf)
         "/other/index.m3u8" -> Req.Test.text(conn, @media_ts)
@@ -39,11 +42,79 @@ defmodule StreamDoctor.HLS.DescriptionTest do
     end)
   end
 
+  defp send_media(conn, "#EXTM3U" <> _rest = playlist) do
+    Req.Test.text(conn, playlist)
+  end
+
+  defp send_media(conn, fixture) do
+    Plug.Conn.send_resp(conn, 200, File.read!(Path.join(@fixtures, fixture)))
+  end
+
+  @video %{type: :video, codec: :h264, profile: :main, level: "1.1"}
+  @audio %{type: :audio, codec: :aac, profile: :LC, level: nil}
+
   test "a media playlist becomes one synthetic variant" do
     serve(@media_ts)
 
     assert {:ok, [%{id: 0, uri: @base, container: :mpeg_ts, codecs: nil, tracks: :unknown}]} =
              Description.variants(@base)
+  end
+
+  test "a media playlist has its tracks read from the newest mpeg-ts segment" do
+    serve(@media_ts <> "#EXTINF:2.0,\nseg1.ts\n", %{"seg1.ts" => "av.ts"})
+
+    assert {:ok, [%{container: :mpeg_ts, codecs: nil, tracks: [@video, @audio]}]} =
+             Description.variants(@base)
+  end
+
+  test "a media playlist has its tracks read from the cmaf init section" do
+    serve(@media_cmaf, %{"init.mp4" => "init.mp4"})
+
+    assert {:ok, [%{container: :cmaf, codecs: nil, tracks: [@video, @audio]}]} =
+             Description.variants(@base)
+  end
+
+  test "a variant without CODECS has its tracks read from its media" do
+    serve(
+      """
+      #EXTM3U
+      #EXT-X-STREAM-INF:BANDWIDTH=100
+      muxed.m3u8
+      """,
+      %{"muxed.m3u8" => @media_ts, "seg0.ts" => "av.ts"}
+    )
+
+    assert {:ok, [%{codecs: nil, tracks: [@video, @audio]}]} = Description.variants(@base)
+  end
+
+  test "a separate audio rendition is read along with every video variant" do
+    serve(
+      """
+      #EXTM3U
+      #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="en",DEFAULT=YES,URI="audio/index.m3u8"
+      #EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO="aud"
+      low/index.m3u8
+      #EXT-X-STREAM-INF:BANDWIDTH=200,AUDIO="aud"
+      high/index.m3u8
+      """,
+      %{
+        "audio/index.m3u8" => @media_ts,
+        "audio/seg0.ts" => "audio.ts",
+        "low/index.m3u8" => @media_ts,
+        "low/seg0.ts" => "video.ts",
+        "high/index.m3u8" => @media_ts,
+        "high/seg0.ts" => "video.ts"
+      }
+    )
+
+    assert {:ok, [%{tracks: [@video, @audio]}, %{tracks: [@video, @audio]}]} =
+             Description.variants(@base)
+  end
+
+  test "an unreadable cmaf init section leaves the tracks unknown" do
+    serve(@media_cmaf, %{"init.mp4" => "#EXTM3U"})
+
+    assert {:ok, [%{container: :cmaf, tracks: :unknown}]} = Description.variants(@base)
   end
 
   test "EXT-X-MAP marks the variant as cmaf" do

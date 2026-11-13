@@ -3,7 +3,8 @@ defmodule StreamDoctor.HLS.Description do
   Reads the metadata an HLS stream declares about itself in its playlists.
   """
 
-  alias StreamDoctor.HLS.Codecs
+  alias ExM3U8.Tags
+  alias StreamDoctor.HLS.{Codecs, Media}
 
   @receive_timeout 5_000
   @undeclared %{
@@ -12,9 +13,9 @@ defmodule StreamDoctor.HLS.Description do
     resolution: nil,
     frame_rate: nil,
     name: nil,
-    codecs: nil,
-    tracks: :unknown
+    codecs: nil
   }
+  @no_media %{container: nil, sample: nil}
 
   @type variant :: %{
           id: non_neg_integer(),
@@ -39,8 +40,8 @@ defmodule StreamDoctor.HLS.Description do
   defp parse_variants(playlist, url) do
     with {:ok, %{items: items}} <- ExM3U8.deserialize_multivariant_playlist(playlist, []) do
       items
-      |> Enum.filter(&match?(%ExM3U8.Tags.Stream{}, &1))
-      |> Enum.with_index(&variant(&1, &2, url))
+      |> Enum.filter(&match?(%Tags.Stream{}, &1))
+      |> Enum.with_index(&variant(&1, &2, url, items))
       |> case do
         [] -> {:ok, [sole_variant(playlist, url)]}
         variants -> {:ok, variants}
@@ -49,11 +50,19 @@ defmodule StreamDoctor.HLS.Description do
   end
 
   defp sole_variant(playlist, url) do
-    Map.merge(@undeclared, %{id: 0, uri: url, container: container_of(playlist)})
+    media = media_of(playlist, url)
+
+    Map.merge(@undeclared, %{
+      id: 0,
+      uri: url,
+      tracks: read_tracks([media]),
+      container: media.container
+    })
   end
 
-  defp variant(stream, index, base) do
+  defp variant(stream, index, base, items) do
     url = resolve(base, stream.uri)
+    media = media(url)
 
     %{
       id: index,
@@ -64,36 +73,91 @@ defmodule StreamDoctor.HLS.Description do
       frame_rate: stream.frame_rate,
       name: stream.name,
       codecs: stream.codecs,
-      tracks: Codecs.parse(stream.codecs),
-      container: container(url)
+      tracks: tracks(stream, media, base, items),
+      container: media.container
     }
   end
 
-  defp container(nil), do: nil
+  defp tracks(%{codecs: nil} = stream, media, base, items) do
+    read_tracks([media, audio_rendition(stream, base, items)])
+  end
 
-  defp container(url) do
+  defp tracks(stream, _media, _base, _items) do
+    Codecs.parse(stream.codecs)
+  end
+
+  defp audio_rendition(%{audio: group}, base, items) do
+    rendition =
+      Enum.find(items, &match?(%Tags.Media{type: :audio, group_id: ^group, uri: "" <> _}, &1))
+
+    media(rendition && resolve(base, rendition.uri))
+  end
+
+  defp read_tracks(medias) do
+    case Enum.flat_map(medias, &media_tracks/1) do
+      [] -> :unknown
+      tracks -> tracks
+    end
+  end
+
+  defp media_tracks(%{sample: nil}) do
+    []
+  end
+
+  defp media_tracks(%{container: container, sample: url}) do
     case fetch(url) do
-      {:ok, playlist} -> container_of(playlist)
-      {:error, _reason} -> nil
+      {:ok, binary} -> Media.tracks(container, binary)
+      {:error, _reason} -> []
     end
   end
 
-  defp container_of(playlist) do
+  defp media(nil) do
+    @no_media
+  end
+
+  defp media(url) do
+    case fetch(url) do
+      {:ok, playlist} -> media_of(playlist, url)
+      {:error, _reason} -> @no_media
+    end
+  end
+
+  defp media_of(playlist, url) do
     case ExM3U8.deserialize_media_playlist(playlist, []) do
-      {:ok, %{timeline: timeline}} -> segment_format(timeline)
-      {:error, _reason} -> nil
+      {:ok, %{timeline: timeline}} ->
+        init = last(timeline, Tags.MediaInit)
+        sample = init || last(timeline, Tags.Segment)
+
+        %{
+          container: if(init, do: :cmaf, else: :mpeg_ts),
+          sample: sample && resolve(url, sample.uri)
+        }
+
+      {:error, _reason} ->
+        @no_media
     end
   end
 
-  defp segment_format(timeline) do
-    if Enum.any?(timeline, &match?(%ExM3U8.Tags.MediaInit{}, &1)), do: :cmaf, else: :mpeg_ts
+  # The newest entry is the one a live playlist is least likely to have expired already.
+  defp last(timeline, tag) do
+    timeline |> Enum.reverse() |> Enum.find(&is_struct(&1, tag))
   end
 
-  defp resolution(nil), do: nil
-  defp resolution({width, height}), do: %{width: width, height: height}
+  defp resolution(nil) do
+    nil
+  end
 
-  defp resolve(_base, nil), do: nil
-  defp resolve(base, uri), do: base |> URI.merge(uri) |> URI.to_string()
+  defp resolution({width, height}) do
+    %{width: width, height: height}
+  end
+
+  defp resolve(_base, nil) do
+    nil
+  end
+
+  defp resolve(base, uri) do
+    base |> URI.merge(uri) |> URI.to_string()
+  end
 
   defp fetch(url) do
     case Req.get(url, retry: false, receive_timeout: @receive_timeout) do
