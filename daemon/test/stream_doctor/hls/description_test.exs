@@ -111,16 +111,10 @@ defmodule StreamDoctor.HLS.DescriptionTest do
              Description.variants(@base)
   end
 
-  test "declared CODECS are trusted over the media of a separate audio rendition" do
-    serve("""
-    #EXTM3U
-    #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="en",DEFAULT=YES,URI="audio/index.m3u8"
-    #EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO="aud",CODECS="avc1.64001e,mp4a.40.2"
-    sub/index.m3u8
-    """)
+  test "an unreadable cmaf init section leaves the tracks unknown" do
+    serve(@media_cmaf, %{"init.mp4" => "#EXTM3U"})
 
-    assert {:ok, [%{tracks: [%{type: :video, profile: :high}, %{type: :audio, profile: :LC}]}]} =
-             Description.variants(@base)
+    assert {:ok, [%{container: :cmaf, tracks: :unknown}]} = Description.variants(@base)
   end
 
   test "EXT-X-MAP marks the variant as cmaf" do

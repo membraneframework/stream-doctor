@@ -11,6 +11,7 @@ defmodule StreamDoctor.HLS.Media do
   # The spec of `MPEG.TS.Demuxer.demux/2` rejects the struct its own `new/0` returns.
   @dialyzer {:nowarn_function, codecs: 2, ts_codec: 2}
 
+  # The three bytes after the SPS header are the ones `avc1.PPCCLL` spells out.
   @sps ~r/\x00\x00\x01[\x27\x47\x67](.{3})/s
 
   @spec tracks(:cmaf | :mpeg_ts, binary()) :: [Codecs.track()]
@@ -23,8 +24,10 @@ defmodule StreamDoctor.HLS.Media do
   end
 
   defp codecs(:cmaf, init) do
-    {:ok, tracks} = CMAF.Engine.new() |> CMAF.Engine.feed!(init) |> CMAF.Engine.get_tracks_info()
-    Enum.map(tracks, fn {id, format} -> {id, cmaf_codec(format)} end)
+    case CMAF.Engine.new() |> CMAF.Engine.feed!(init) |> CMAF.Engine.get_tracks_info() do
+      {:ok, tracks} -> Enum.map(tracks, fn {id, format} -> {id, cmaf_codec(format)} end)
+      {:error, :not_available_yet} -> []
+    end
   end
 
   defp codecs(:mpeg_ts, segment) do
@@ -44,7 +47,7 @@ defmodule StreamDoctor.HLS.Media do
   end
 
   defp cmaf_codec(%AAC{config: {:esds, esds}}) do
-    mp4a(AAC.Parser.Esds.parse_esds(esds).profile)
+    "mp4a.40.#{AAC.profile_to_aot_id(AAC.Parser.Esds.parse_esds(esds).profile)}"
   end
 
   defp cmaf_codec(%format{}) do
@@ -52,7 +55,6 @@ defmodule StreamDoctor.HLS.Media do
   end
 
   defp ts_codec(:H264_AVC, payloads) do
-    # The three bytes after the SPS header are the ones `avc1.PPCCLL` spells out.
     payloads
     |> Enum.find_value(<<>>, fn data -> Regex.run(@sps, data, capture: :all_but_first) end)
     |> IO.iodata_to_binary()
@@ -69,9 +71,5 @@ defmodule StreamDoctor.HLS.Media do
 
   defp avc1(params) do
     "avc1." <> Base.encode16(params)
-  end
-
-  defp mp4a(profile) do
-    "mp4a.40.#{AAC.profile_to_aot_id(profile)}"
   end
 end

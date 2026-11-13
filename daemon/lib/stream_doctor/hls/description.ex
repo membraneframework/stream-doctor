@@ -79,7 +79,7 @@ defmodule StreamDoctor.HLS.Description do
   end
 
   defp tracks(%{codecs: nil} = stream, media, base, items) do
-    read_tracks([media | audio_rendition(stream, base, items)])
+    read_tracks([media, audio_rendition(stream, base, items)])
   end
 
   defp tracks(stream, _media, _base, _items) do
@@ -87,14 +87,10 @@ defmodule StreamDoctor.HLS.Description do
   end
 
   defp audio_rendition(%{audio: group}, base, items) do
-    items
-    |> Enum.find(
-      &match?(%Tags.Media{type: :audio, group_id: ^group, uri: uri} when is_binary(uri), &1)
-    )
-    |> case do
-      nil -> []
-      rendition -> [media(resolve(base, rendition.uri))]
-    end
+    rendition =
+      Enum.find(items, &match?(%Tags.Media{type: :audio, group_id: ^group, uri: "" <> _}, &1))
+
+    media(rendition && resolve(base, rendition.uri))
   end
 
   defp read_tracks(medias) do
