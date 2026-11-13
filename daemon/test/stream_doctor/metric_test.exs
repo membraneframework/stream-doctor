@@ -345,9 +345,9 @@ defmodule StreamDoctor.MetricTest do
     end
   end
 
-  describe "MinimalLatency" do
+  describe "AvailabilityLatency" do
     defp latency(events) do
-      Metric.MinimalLatency.report(run(Metric.MinimalLatency, [], events))
+      Metric.AvailabilityLatency.report(run(Metric.AvailabilityLatency, [], events))
     end
 
     defp live(events), do: [{:streamer_started, {:watching, 0}}, {:ingest_started, 500} | events]

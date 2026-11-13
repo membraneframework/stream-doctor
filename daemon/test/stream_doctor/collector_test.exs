@@ -10,7 +10,7 @@ defmodule StreamDoctor.CollectorTest do
         {Metric.AvDrift, []},
         {Metric.TimeToFirstFrame, []},
         {Metric.Frames, []},
-        {Metric.MinimalLatency, []}
+        {Metric.AvailabilityLatency, []}
       ])
 
     Collector.record(collector, {:streamer_started, {:watching, 500}})
@@ -31,7 +31,7 @@ defmodule StreamDoctor.CollectorTest do
              av_drift: %{drift_ms: 0},
              time_to_first_frame: %{status: :measured, ms: 1_200},
              frames: %{reordered: %{count: 0}, missing: %{count: 0}, duplicated: %{count: 0}},
-             minimal_latency: %{status: :measured, ms: 420}
+             availability_latency: %{status: :measured, ms: 420}
            } = Collector.report(collector)
   end
 end

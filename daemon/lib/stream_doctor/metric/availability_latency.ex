@@ -1,25 +1,25 @@
-defmodule StreamDoctor.Metric.MinimalLatency do
+defmodule StreamDoctor.Metric.AvailabilityLatency do
+  @max_samples 50
+  @evidence 10
+
   @moduledoc """
-  Measures how long a frame takes to get from the ingest to being downloadable by the viewer, as the median of up to 50 samples.
+  Measures how long a frame takes to get from the ingest to being downloadable by the viewer, as the median of up to #{@max_samples} samples.
   Returns a report with three fields:
-    * `ms` - the median of up to 50 samples, one per playlist reload, each taken on the last frame of the newest segment.
-    * `latest_samples` - the ten newest samples
+    * `ms` - the median of up to #{@max_samples} samples, one per playlist reload, each taken on the last frame of the newest segment.
+    * `latest_samples` - the #{@evidence} newest samples
     * `status` - the status of the measurement, one of:
       * `:no_streamer` - no streamer has started
       * `:waiting` - the streamer has started, but the ingest has not yet started
       * `:measured` - the ingest has started and at least one sample has been taken
-      * `:missed_the_stream` - the ingest started before the streamer, so no sample could be taken
+      * `:missed_the_stream` - the first playlist segment was already dropped, or a later ingest restarted the stream, so no sample could be taken
       * `:timeline_broken` - the timeline broke before a sample could be taken
   """
 
   @behaviour StreamDoctor.Metric
 
-  @max_samples 50
-  @evidence 10
-
   @impl true
   def name do
-    :minimal_latency
+    :availability_latency
   end
 
   @impl true
