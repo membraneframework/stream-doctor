@@ -1,7 +1,7 @@
 defmodule StreamDoctor.Metric.MinimalLatency do
   @moduledoc """
-  Measures the minimal latency of the stream, from the ingest to the viewer, as the median of up to 50 samples.
-
+  Measures how long a frame takes to get from the ingest to being downloadable by the viewer, as the median of up to 50 samples.
+  Returns a report with three fields:
     * `ms` - the median of up to 50 samples, one per playlist reload, each taken on the last frame of the newest segment.
     * `latest_samples` - the ten newest samples
     * `status` - the status of the measurement, one of:

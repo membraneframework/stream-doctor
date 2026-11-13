@@ -248,15 +248,21 @@ defmodule StreamDoctor.Server do
 
   defp watch_stopped(viewer, :normal), do: viewer
 
-  defp watch_stopped(%{status: :waiting_for_playlist} = viewer, {:shutdown, reason}) do
-    %{viewer | status: :failed, error: reason}
+  defp watch_stopped(%{status: status} = viewer, _already_over)
+       when status in [:stopped, :ended, :failed] do
+    viewer
   end
 
-  defp watch_stopped(%{status: :receiving} = viewer, {:shutdown, reason}) do
-    %{viewer | error: reason}
+  defp watch_stopped(%{status: :waiting_for_playlist} = viewer, reason) do
+    %{viewer | status: :failed, error: watch_error(reason)}
   end
 
-  defp watch_stopped(viewer, _stopped_or_ended), do: viewer
+  defp watch_stopped(%{status: :receiving} = viewer, reason) do
+    %{viewer | error: watch_error(reason)}
+  end
+
+  defp watch_error({:shutdown, reason}) when is_binary(reason), do: reason
+  defp watch_error(reason), do: inspect(reason)
 
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
     %{state | streamer: mark_down(streamer, error)}
@@ -313,16 +319,18 @@ defmodule StreamDoctor.Server do
     |> Enum.each(&Collector.record(collector, &1))
   end
 
-  defp streamer_events_so_far(nil), do: []
-  defp streamer_events_so_far(%{live_at: nil}), do: [{:streamer_started, :missed}]
+  defp streamer_events_so_far(%{status: :streaming, live_at: nil}),
+    do: [{:streamer_started, :missed}]
 
-  defp streamer_events_so_far(%{live_at: at}),
+  defp streamer_events_so_far(%{status: :streaming, live_at: at}),
     do: [{:streamer_started, :missed}, {:ingest_started, at}]
+
+  defp streamer_events_so_far(_no_streamer_or_no_longer_streaming), do: []
 
   defp streamer_summary(streamer) do
     streamer
     |> Map.take([:input, :rtmp_url, :status, :error])
-    |> Map.put(:live, streamer.live_at != nil)
+    |> Map.put(:live, streamer.status == :streaming and streamer.live_at != nil)
   end
 
   defp viewer_summary(viewer) do
