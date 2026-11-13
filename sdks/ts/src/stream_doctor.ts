@@ -118,11 +118,19 @@ export interface FrameFaults {
   duplicated: { count: number | null; repeats: FrameRepeat[] };
 }
 
+/** How long a frame takes to become downloadable; `watch()` must see the first segment, so call it before `publish()` or right after. */
+export interface AvailabilityLatency {
+  status: "waiting" | "measured" | "no_streamer" | "missed_the_stream" | "timeline_broken";
+  ms: number | null;
+  latest_samples: number[];
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
   time_to_first_frame?: TimeToFirstFrame;
   frames?: FrameFaults;
+  availability_latency?: AvailabilityLatency;
   error?: string;
 }
 

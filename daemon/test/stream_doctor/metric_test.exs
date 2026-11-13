@@ -344,4 +344,132 @@ defmodule StreamDoctor.MetricTest do
       end
     end
   end
+
+  describe "AvailabilityLatency" do
+    defp latency(events) do
+      Metric.AvailabilityLatency.report(run(Metric.AvailabilityLatency, [], events))
+    end
+
+    defp live(events), do: [{:streamer_started, {:watching, 0}}, {:ingest_started, 500} | events]
+
+    test "a segment is measured against the media time it ends at" do
+      events = live([{:media_available, milliseconds(2000), 3000}])
+
+      assert %{status: :measured, ms: 500, latest_samples: [500]} = latency(events)
+    end
+
+    test "each segment is measured against its own end" do
+      events =
+        live([
+          {:media_available, milliseconds(2000), 3100},
+          {:media_available, milliseconds(4000), 5000}
+        ])
+
+      assert %{status: :measured, ms: 600, latest_samples: [500, 600]} = latency(events)
+    end
+
+    test "nothing is reported before the first segment" do
+      assert %{status: :waiting, ms: nil, latest_samples: []} = latency(live([]))
+    end
+
+    test "a segment seen before the streamer went live yields no sample" do
+      events = [
+        {:streamer_started, {:watching, 0}},
+        {:media_available, milliseconds(2000), 3000}
+      ]
+
+      assert %{status: :waiting, ms: nil} = latency(events)
+    end
+
+    test "without a streamer there is nothing to measure" do
+      assert %{status: :no_streamer, ms: nil} =
+               latency([{:media_available, milliseconds(2000), 3000}])
+    end
+
+    test "a viewer that attached mid-stream measures once it learns when the ingest started" do
+      events = [
+        {:streamer_started, :missed},
+        {:ingest_started, 500},
+        {:media_available, milliseconds(2000), 3000}
+      ]
+
+      assert %{status: :measured, ms: 500} = latency(events)
+    end
+
+    test "a viewer that attached mid-stream reports nothing until then" do
+      events = [{:streamer_started, :missed}, {:media_available, milliseconds(2000), 3000}]
+
+      assert %{status: :waiting, ms: nil, latest_samples: []} = latency(events)
+    end
+
+    test "a playlist that had already dropped segments reports no number" do
+      events = live([{:timeline_broken, :missed_start}])
+
+      assert %{status: :missed_the_stream, ms: nil, latest_samples: []} = latency(events)
+    end
+
+    test "a broken timeline stops the measurement and keeps what it had until then" do
+      events =
+        live([{:media_available, milliseconds(2000), 3000}, {:timeline_broken, :window_gap}])
+
+      assert %{status: :timeline_broken, ms: 500, latest_samples: [500]} = latency(events)
+    end
+
+    test "a later streamer does not reset what was measured" do
+      events =
+        live([
+          {:media_available, milliseconds(2000), 3000},
+          {:streamer_started, {:watching, 40_000}}
+        ])
+
+      assert %{status: :measured, ms: 500, latest_samples: [500]} = latency(events)
+    end
+
+    test "a second ingest ends the measurement" do
+      events = live([{:media_available, milliseconds(2000), 3000}, {:ingest_started, 40_000}])
+
+      assert %{status: :missed_the_stream, latest_samples: [500]} = latency(events)
+    end
+
+    test "media published after a restart is not sampled" do
+      events =
+        live([{:ingest_started, 40_000}, {:media_available, milliseconds(2000), 43_000}])
+
+      assert %{status: :missed_the_stream, ms: nil, latest_samples: []} = latency(events)
+    end
+
+    test "media cannot be published after the timeline broke" do
+      assert_raise RuntimeError, ~r/watch ended with it/, fn ->
+        latency(live([{:timeline_broken, :window_gap}, {:media_available, milliseconds(1), 2}]))
+      end
+    end
+
+    test "the timeline cannot break twice" do
+      assert_raise RuntimeError, ~r/cannot break twice/, fn ->
+        latency(live([{:timeline_broken, :window_gap}, {:timeline_broken, :window_gap}]))
+      end
+    end
+
+    test "only the newest samples are kept" do
+      segments =
+        for k <- 1..60, do: {:media_available, milliseconds(k * 1000), 500 + k * 1000 + k}
+
+      report = latency(live(segments))
+
+      assert report.latest_samples == Enum.to_list(60..51//-1)
+      assert report.ms == 36
+    end
+
+    test "receiver-side events leave the report alone" do
+      events =
+        live([
+          {:video_frame_received, 7, milliseconds(0)},
+          {:audio_symbol_received, 9, milliseconds(0)},
+          {:first_frame_arrived, 2500},
+          {:media_available, milliseconds(2000), 3000}
+        ])
+
+      assert %{status: :measured, ms: 500} = latency(events)
+    end
+  end
 end
