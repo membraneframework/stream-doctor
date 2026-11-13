@@ -10,7 +10,7 @@ defmodule StreamDoctor.Probe.ToneTest do
   end
 
   test "symbol round-trip", %{tone: tone} do
-    for symbol_number <- [0, 1, 42, 127, 130] do
+    for symbol_number <- [0, 1, 42, 4095, 4100] do
       window = Tone.symbol_samples(tone, symbol_number)
 
       assert {:ok, rem(symbol_number, Tone.max_symbol())} ==
@@ -47,15 +47,15 @@ defmodule StreamDoctor.Probe.ToneTest do
   end
 
   test "decode survives spectral tilt attenuating high frequencies", %{tone: tone} do
-    # Symbol 42 = 0b0101010 -> data tones at 1500, 2500, 3500 Hz; odd bit sum
-    # -> parity tone at 4500 Hz; plus the 500 Hz reference. Amplitudes fall
-    # with frequency (~ -9.5 dB power at 4.5 kHz), as after lowpass filtering.
+    # Symbol 42 = 0b000000101010 -> data tones at 4000, 5000, 6000 Hz; odd bit sum
+    # -> parity tone at 7000 Hz; plus the 500 Hz reference. Amplitudes fall
+    # with frequency (~ -11.4 dB power at 7 kHz), as after lowpass filtering.
     n = div(Tone.symbol_bytes(tone), 2)
 
     window =
       for i <- 0..(n - 1), into: <<>> do
         value =
-          [500, 1500, 2500, 3500, 4500]
+          [500, 4000, 5000, 6000, 7000]
           |> Enum.map(fn freq ->
             amplitude = 3000 * :math.sqrt(500 / freq)
             amplitude * :math.sin(2 * :math.pi() * freq * i / @sample_rate)
