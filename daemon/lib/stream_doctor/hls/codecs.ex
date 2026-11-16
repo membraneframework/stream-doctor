@@ -51,13 +51,13 @@ defmodule StreamDoctor.HLS.Codecs do
   def from_media(container, binary) do
     case tracks_by_id(container, binary) do
       :unknown -> :unknown
+      [] -> :unknown
       tracks -> tracks |> Enum.sort() |> Enum.map(fn {_id, track} -> track end)
     end
   end
 
   defp tracks_by_id(:cmaf, init) do
     case CMAF.Engine.new() |> CMAF.Engine.feed!(init) |> CMAF.Engine.get_tracks_info() do
-      {:ok, tracks} when tracks == %{} -> :unknown
       {:ok, tracks} -> Enum.map(tracks, fn {id, format} -> {id, cmaf_track(format)} end)
       {:error, :not_available_yet} -> :unknown
     end
@@ -69,13 +69,10 @@ defmodule StreamDoctor.HLS.Codecs do
     {flushed, demuxer} = Demuxer.flush(demuxer)
     packets = packets ++ flushed
 
-    tracks =
-      for {pid, %{stream_type: type}} <- demuxer.streams, type != :METADATA_IN_PES do
-        payloads = for %{pid: ^pid, payload: %{data: data}} <- packets, do: data
-        {pid, ts_track(type, payloads)}
-      end
-
-    if tracks == [], do: :unknown, else: tracks
+    for {pid, %{stream_type: type}} <- demuxer.streams, type != :METADATA_IN_PES do
+      payloads = for %{pid: ^pid, payload: %{data: data}} <- packets, do: data
+      {pid, ts_track(type, payloads)}
+    end
   end
 
   defp cmaf_track(%H264{stream_structure: {_avc, <<1, params::binary-size(3), _rest::binary>>}}) do
