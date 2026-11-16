@@ -3,7 +3,7 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   Measures how long the first frame takes to reach the viewer after the streamer starts, the
   connection to the ingest included.
 
-  Returns a map with `status` and `ms`. Ms is the measurement in milliseconds.
+  Returns a map with `status` and `ms`. `ms` is the measurement in milliseconds.
   The `status` can be one of:
   * `:waiting_for_the_first_frame` - the streamer has started, but the first frame has not arrived yet
   * `:measured` - the first frame has arrived, and the time is measured
@@ -52,8 +52,19 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   end
 
   @impl true
-  def record({:first_frame_arrived, at}, %{first_frame_arrived_at: nil} = state) do
-    %{state | status: status_on_arrival(state, at), first_frame_arrived_at: at}
+  def record(
+        {:first_frame_arrived, first_frame_arrived_at},
+        %{first_frame_arrived_at: nil} = state
+      ) do
+    status =
+      case state do
+        %{status: :missed_first_frame} -> :missed_first_frame
+        %{first_frame_sent_at: nil} -> :no_streamer
+        %{first_frame_sent_at: sent} when first_frame_arrived_at >= sent -> :measured
+        _frame_older_than_the_stream -> :missed_first_frame
+      end
+
+    %{state | status: status, first_frame_arrived_at: first_frame_arrived_at}
   end
 
   @impl true
@@ -75,11 +86,6 @@ defmodule StreamDoctor.Metric.TimeToFirstFrame do
   def report(state) do
     result(state.status, nil)
   end
-
-  defp status_on_arrival(%{status: :missed_first_frame}, _at), do: :missed_first_frame
-  defp status_on_arrival(%{first_frame_sent_at: nil}, _at), do: :no_streamer
-  defp status_on_arrival(%{first_frame_sent_at: sent}, at) when at >= sent, do: :measured
-  defp status_on_arrival(_frame_older_than_the_stream, _at), do: :missed_first_frame
 
   defp result(status, ms) do
     %{status: status, ms: ms}
