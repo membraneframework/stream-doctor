@@ -50,7 +50,6 @@ defmodule StreamDoctor.HLS.Codecs do
   @spec from_media(:cmaf | :mpeg_ts, binary()) :: [track()] | :unknown
   def from_media(container, binary) do
     case tracks_by_id(container, binary) do
-      :unknown -> :unknown
       [] -> :unknown
       tracks -> tracks |> Enum.sort() |> Enum.map(fn {_id, track} -> track end)
     end
@@ -59,7 +58,7 @@ defmodule StreamDoctor.HLS.Codecs do
   defp tracks_by_id(:cmaf, init) do
     case CMAF.Engine.new() |> CMAF.Engine.feed!(init) |> CMAF.Engine.get_tracks_info() do
       {:ok, tracks} -> Enum.map(tracks, fn {id, format} -> {id, cmaf_track(format)} end)
-      {:error, :not_available_yet} -> :unknown
+      {:error, :not_available_yet} -> []
     end
   end
 
