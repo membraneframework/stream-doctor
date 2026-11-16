@@ -65,9 +65,11 @@ defmodule StreamDoctor.HLS.Description do
     media = media(url)
 
     tracks =
-      if stream.codecs,
-        do: Codecs.parse(stream.codecs),
-        else: read_tracks_from_container([media | audio_rendition(stream, base, items)])
+      if stream.codecs do
+        Codecs.parse(stream.codecs)
+      else
+        read_tracks_from_container([media | List.wrap(audio_rendition(stream, base, items))])
+      end
 
     %{
       id: index,
@@ -87,24 +89,24 @@ defmodule StreamDoctor.HLS.Description do
     rendition =
       Enum.find(items, &match?(%Tags.Media{type: :audio, group_id: ^group, uri: "" <> _}, &1))
 
-    if rendition, do: [media(resolve(base, rendition.uri))], else: []
+    rendition && media(resolve(base, rendition.uri))
   end
 
   defp read_tracks_from_container(medias) do
     tracks = Enum.map(medias, &media_tracks/1)
 
     # A partial list would pass for a stream that has no other tracks.
-    if [] in tracks, do: :unknown, else: Enum.concat(tracks)
+    if Enum.all?(tracks, &match?([_ | _], &1)), do: Enum.concat(tracks), else: :unknown
   end
 
   defp media_tracks(%{sample: nil}) do
-    []
+    nil
   end
 
   defp media_tracks(%{container: container, sample: url}) do
     case fetch(url) do
       {:ok, binary} -> Media.tracks(container, binary)
-      {:error, _reason} -> []
+      {:error, _reason} -> nil
     end
   end
 
