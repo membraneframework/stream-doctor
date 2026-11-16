@@ -6,7 +6,7 @@ defmodule StreamDoctor.Metric.Frames do
     * `missing` - the numbers that never arrived, as inclusive ranges
     * `duplicated` - the numbers that arrived more than once, with how many extra times each did
 
-  For example, if the viewer saw frames 110, 111, 112, 112, 116 the `video` report would be:
+  For example, if the viewer saw video frames 110, 111, 112, 112, 116 the `video` report would be:
       %{
         reordered: %{count: 1, max_depth: 1, permutations: [[111, 110, 112]]},
         missing: %{count: 3, gaps: [[113, 115]]},

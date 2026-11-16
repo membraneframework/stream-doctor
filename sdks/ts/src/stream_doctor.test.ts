@@ -14,7 +14,6 @@ const viewers = new Map<string, object>();
 let requests: { method?: string; path?: string; body: unknown }[] = [];
 
 // Both gap shapes and a repeat run, so the tuple types are exercised rather than assumed.
-// The tracks differ, so a report that carried one track's faults under both keys would fail.
 const frames = {
   video: {
     reordered: { count: 1, max_depth: 2, permutations: [[13, 11, 12, 14]] },
