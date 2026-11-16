@@ -64,6 +64,11 @@ defmodule StreamDoctor.HLS.Description do
     url = resolve(base, stream.uri)
     media = media(url)
 
+    tracks =
+      if stream.codecs,
+        do: Codecs.parse(stream.codecs),
+        else: read_tracks([media, audio_rendition(stream, base, items)])
+
     %{
       id: index,
       uri: url,
@@ -73,17 +78,9 @@ defmodule StreamDoctor.HLS.Description do
       frame_rate: stream.frame_rate,
       name: stream.name,
       codecs: stream.codecs,
-      tracks: tracks(stream, media, base, items),
+      tracks: tracks,
       container: media.container
     }
-  end
-
-  defp tracks(%{codecs: nil} = stream, media, base, items) do
-    read_tracks([media, audio_rendition(stream, base, items)])
-  end
-
-  defp tracks(stream, _media, _base, _items) do
-    Codecs.parse(stream.codecs)
   end
 
   defp audio_rendition(%{audio: group}, base, items) do
