@@ -7,11 +7,16 @@ defmodule StreamDoctor.Server do
 
   alias StreamDoctor.Collector
   alias StreamDoctor.HLS.Description
+  alias StreamDoctor.HLS.Watcher
   alias StreamDoctor.Metric
   alias StreamDoctor.OptionsParser.Publisher
 
-  @hls_timeout 120_000
-  @metric_specs [{Metric.AvDrift, []}, {Metric.TimeToFirstFrame, []}, {Metric.Frames, []}]
+  @metric_specs [
+    {Metric.AvDrift, []},
+    {Metric.TimeToFirstFrame, []},
+    {Metric.Frames, []},
+    {Metric.AvailabilityLatency, []}
+  ]
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -108,30 +113,21 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_call({:start_viewer, hls_url}, _from, state) do
     id = "viewer-#{state.next_id}"
-    server = self()
-
     {:ok, collector} = Collector.start_link(@metric_specs)
+
+    {:ok, watcher} = Watcher.start_link(url: hls_url, notify: {self(), id})
 
     if state.streamer != nil do
       Collector.record(collector, {:streamer_started, :missed})
     end
 
-    poller =
-      spawn_link(fn ->
-        try do
-          at = __MODULE__.HLS.await_first_segment(hls_url, @hls_timeout)
-          Collector.record(collector, {:first_frame_arrived, at})
-          send(server, {:playlist_ready, id})
-        rescue
-          e -> send(server, {:viewer_failed, id, Exception.message(e)})
-        end
-      end)
+    Process.monitor(watcher)
 
     viewer = %{
       id: id,
       hls_url: hls_url,
       pid: nil,
-      poller: poller,
+      watcher: watcher,
       status: :waiting_for_playlist,
       error: nil,
       playlist: nil,
@@ -149,7 +145,7 @@ defmodule StreamDoctor.Server do
         {:reply, {:error, :not_found}, state}
 
       viewer ->
-        Process.exit(viewer.poller, :kill)
+        Process.exit(viewer.watcher, :shutdown)
         viewer = terminate_pipeline(viewer)
         state = put_in(state.viewers[id], viewer)
         {:reply, {:ok, viewer_summary(viewer)}, state}
@@ -185,21 +181,20 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:playlist_ready, id}, state) do
+  def handle_info({:video_frame_sent, _frame_number, _at} = event, state) do
+    broadcast(state.viewers, event)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:hls, id, event}, state) do
     case state.viewers[id] do
-      %{status: :waiting_for_playlist} = viewer ->
-        pid =
-          StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url,
-            collector: viewer.collector
-          )
-
-        Process.monitor(pid)
-        describe_playlist(viewer)
-
-        {:noreply, put_in(state.viewers[id], %{viewer | pid: pid, status: :receiving})}
-
-      _stopped_or_missing ->
+      nil ->
         {:noreply, state}
+
+      viewer ->
+        Collector.record(viewer.collector, event)
+        {:noreply, put_in(state.viewers[id], start_receiving(viewer, event))}
     end
   end
 
@@ -212,27 +207,32 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:viewer_failed, id, reason}, state) do
-    case state.viewers[id] do
-      %{status: :waiting_for_playlist} = viewer ->
-        {:noreply, put_in(state.viewers[id], %{viewer | status: :failed, error: reason})}
-
-      _stopped_or_missing ->
-        {:noreply, state}
-    end
-  end
-
-  @impl true
   def handle_info({:DOWN, _ref, :process, pid, reason}, state) do
-    error = if reason == :normal, do: nil, else: inspect(reason)
+    case Enum.find(state.viewers, fn {_id, viewer} -> viewer.watcher == pid end) do
+      {id, viewer} ->
+        {:noreply, put_in(state.viewers[id], watch_stopped(viewer, reason))}
 
-    {:noreply, mark_down_pid(state, pid, error)}
+      nil ->
+        {:noreply,
+         mark_down_pid(state, pid, if(reason == :normal, do: nil, else: inspect(reason)))}
+    end
   end
 
   @impl true
   def handle_info({:EXIT, _pid, _reason}, state) do
     {:noreply, state}
   end
+
+  defp start_receiving(%{status: :waiting_for_playlist} = viewer, {:first_frame_arrived, _at}) do
+    pid = StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url, collector: viewer.collector)
+
+    Process.monitor(pid)
+    describe_playlist(viewer)
+
+    %{viewer | pid: pid, status: :receiving}
+  end
+
+  defp start_receiving(viewer, _event), do: viewer
 
   defp describe_playlist(viewer) do
     server = self()
@@ -252,14 +252,34 @@ defmodule StreamDoctor.Server do
     end
   end
 
+  defp watch_stopped(%{status: status} = viewer, _already_over)
+       when status in [:stopped, :ended, :failed] do
+    viewer
+  end
+
+  defp watch_stopped(%{status: :waiting_for_playlist} = viewer, reason) do
+    %{viewer | status: :failed, error: watch_error(reason)}
+  end
+
+  defp watch_stopped(%{status: :receiving} = viewer, reason) do
+    %{viewer | error: watch_error(reason)}
+  end
+
+  defp watch_error({:shutdown, reason}) when is_binary(reason), do: reason
+  defp watch_error(reason), do: inspect(reason)
+
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
     %{state | streamer: mark_down(streamer, error)}
   end
 
   defp mark_down_pid(state, pid, error) do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
-      {id, viewer} -> put_in(state.viewers[id], mark_down(viewer, error))
-      nil -> state
+      {id, viewer} ->
+        Process.exit(viewer.watcher, :shutdown)
+        put_in(state.viewers[id], mark_down(viewer, error))
+
+      nil ->
+        state
     end
   end
 

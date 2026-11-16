@@ -118,11 +118,19 @@ export interface FrameFaults {
   duplicated: { count: number | null; repeats: FrameRepeat[] };
 }
 
+/** How long a frame takes to become downloadable. */
+export interface AvailabilityLatency {
+  status: "waiting" | "measured";
+  ms: number | null;
+  latest_samples: number[];
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
   time_to_first_frame?: TimeToFirstFrame;
   frames?: FrameFaults;
+  availability_latency?: AvailabilityLatency;
   error?: string;
 }
 
