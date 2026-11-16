@@ -106,6 +106,20 @@ defmodule StreamDoctor.HLS.DescriptionTest do
              Description.variants(@base)
   end
 
+  test "an unreadable audio rendition leaves the tracks unknown" do
+    serve(
+      """
+      #EXTM3U
+      #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="en",DEFAULT=YES,URI="audio/index.m3u8"
+      #EXT-X-STREAM-INF:BANDWIDTH=100,AUDIO="aud"
+      low/index.m3u8
+      """,
+      %{"low/index.m3u8" => @media_ts, "low/seg0.ts" => "video.ts"}
+    )
+
+    assert {:ok, [%{tracks: :unknown}]} = Description.variants(@base)
+  end
+
   test "an unreadable cmaf init section leaves the tracks unknown" do
     serve(@media_cmaf, %{"init.mp4" => "#EXTM3U"})
 

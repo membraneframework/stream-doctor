@@ -55,7 +55,7 @@ defmodule StreamDoctor.HLS.Description do
     Map.merge(@undeclared, %{
       id: 0,
       uri: url,
-      tracks: read_tracks([media]),
+      tracks: read_tracks_from_container([media]),
       container: media.container
     })
   end
@@ -67,7 +67,7 @@ defmodule StreamDoctor.HLS.Description do
     tracks =
       if stream.codecs,
         do: Codecs.parse(stream.codecs),
-        else: read_tracks([media, audio_rendition(stream, base, items)])
+        else: read_tracks_from_container([media | audio_rendition(stream, base, items)])
 
     %{
       id: index,
@@ -87,14 +87,14 @@ defmodule StreamDoctor.HLS.Description do
     rendition =
       Enum.find(items, &match?(%Tags.Media{type: :audio, group_id: ^group, uri: "" <> _}, &1))
 
-    media(rendition && resolve(base, rendition.uri))
+    if rendition, do: [media(resolve(base, rendition.uri))], else: []
   end
 
-  defp read_tracks(medias) do
-    case Enum.flat_map(medias, &media_tracks/1) do
-      [] -> :unknown
-      tracks -> tracks
-    end
+  defp read_tracks_from_container(medias) do
+    tracks = Enum.map(medias, &media_tracks/1)
+
+    # A partial list would pass for a stream that has no other tracks.
+    if [] in tracks, do: :unknown, else: Enum.concat(tracks)
   end
 
   defp media_tracks(%{sample: nil}) do
@@ -137,7 +137,7 @@ defmodule StreamDoctor.HLS.Description do
 
   # The newest entry is the one a live playlist is least likely to have expired already.
   defp last(timeline, tag) do
-    timeline |> Enum.reverse() |> Enum.find(&is_struct(&1, tag))
+    Enum.reduce(timeline, nil, fn item, last -> if is_struct(item, tag), do: item, else: last end)
   end
 
   defp resolution(nil) do
