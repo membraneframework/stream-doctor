@@ -101,17 +101,17 @@ defmodule StreamDoctor.HLS.Description do
     tracks = Enum.map(medias, &media_tracks/1)
 
     # A partial list would pass for a stream that has no other tracks.
-    if Enum.all?(tracks, &match?([_ | _], &1)), do: Enum.concat(tracks), else: :unknown
+    if :unknown in tracks, do: :unknown, else: Enum.concat(tracks)
   end
 
   defp media_tracks(%{sample: nil}) do
-    nil
+    :unknown
   end
 
   defp media_tracks(%{container: container, sample: url}) do
     case fetch(url) do
       {:ok, binary} -> Codecs.from_media(container, binary)
-      {:error, _reason} -> nil
+      {:error, _reason} -> :unknown
     end
   end
 

@@ -47,12 +47,12 @@ defmodule StreamDoctor.HLS.Codecs do
     |> Enum.map(&track(String.trim(&1)))
   end
 
-  @spec from_media(:cmaf | :mpeg_ts, binary()) :: [track()]
+  @spec from_media(:cmaf | :mpeg_ts, binary()) :: [track()] | :unknown
   def from_media(container, binary) do
-    container
-    |> tracks_by_id(binary)
-    |> Enum.sort()
-    |> Enum.map(fn {_id, track} -> track end)
+    case tracks_by_id(container, binary) do
+      [] -> :unknown
+      tracks -> tracks |> Enum.sort() |> Enum.map(fn {_id, track} -> track end)
+    end
   end
 
   defp tracks_by_id(:cmaf, init) do
