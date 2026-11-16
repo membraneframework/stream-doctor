@@ -37,25 +37,37 @@ defmodule StreamDoctor.HLS.Codecs do
     |> Enum.map(&track(String.trim(&1)))
   end
 
+  @spec h264(binary()) :: track()
+  def h264(<<profile_idc, constraints, level_idc>>) do
+    %{
+      type: :video,
+      codec: :h264,
+      profile: h264_profile(profile_idc, constraints),
+      level: h264_level(level_idc, profile_idc, constraints)
+    }
+  end
+
+  def h264(_params) do
+    %{type: :video, codec: :h264, profile: nil, level: nil}
+  end
+
+  @spec aac(Membrane.AAC.profile()) :: track()
+  def aac(profile), do: %{type: :audio, codec: :aac, profile: profile, level: nil}
+
+  @spec unknown(String.t()) :: track()
+  def unknown(raw), do: %{type: :unknown, raw: raw}
+
   defp track("avc1." <> params) do
     case Base.decode16(params, case: :mixed) do
-      {:ok, <<profile_idc, constraints, level_idc>>} ->
-        %{
-          type: :video,
-          codec: :h264,
-          profile: h264_profile(profile_idc, constraints),
-          level: h264_level(level_idc, profile_idc, constraints)
-        }
-
-      _ ->
-        %{type: :video, codec: :h264, profile: nil, level: nil}
+      {:ok, params} -> h264(params)
+      :error -> h264(<<>>)
     end
   end
 
   defp track("mp4a.40." <> aot = raw) do
     case Integer.parse(aot) do
       {id, ""} when id in @aac_object_types ->
-        %{type: :audio, codec: :aac, profile: Membrane.AAC.aot_id_to_profile(id), level: nil}
+        aac(Membrane.AAC.aot_id_to_profile(id))
 
       _ ->
         unknown(raw)
@@ -63,8 +75,6 @@ defmodule StreamDoctor.HLS.Codecs do
   end
 
   defp track(raw), do: unknown(raw)
-
-  defp unknown(raw), do: %{type: :unknown, raw: raw}
 
   defp h264_profile(profile_idc, constraints) do
     Enum.find_value(@h264_profiles, fn {idc, sets, profile} ->
