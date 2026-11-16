@@ -13,6 +13,13 @@ let streamerPolls = 0;
 const viewers = new Map<string, object>();
 let requests: { method?: string; path?: string; body: unknown }[] = [];
 
+// Both gap shapes and a repeat run, so the tuple types are exercised rather than assumed.
+const frames = {
+  reordered: { count: 1, max_depth: 2, permutations: [[13, 11, 12, 14]] },
+  missing: { count: 8, gaps: [[3, 9], [20]] },
+  duplicated: { count: 2, repeats: [[5, 2]] },
+};
+
 const routes: Record<string, (body: any) => object> = {
   "GET /status": () => ({ streamer: null, viewers: [] }),
   "POST /streamer": () => {
@@ -33,6 +40,7 @@ const routes: Record<string, (body: any) => object> = {
       metrics: {
         av_drift: { drift_ms: 12 },
         time_to_first_frame: { status: "measured", ms: 1_800 },
+        frames,
       },
       playlist: {
         variants: [
@@ -170,12 +178,14 @@ test("watch creates a viewer whose metrics and stop go through the API", async (
   assert.deepEqual(await viewer.metrics(), {
     av_drift: { drift_ms: 12 },
     time_to_first_frame: { status: "measured", ms: 1_800 },
+    frames,
   } as object);
   const done = await viewer.waitUntilDone({ intervalMs: 1 });
   assert.equal(done.hls_url, "http://cdn/index.m3u8");
   assert.deepEqual(await viewer.stop(), {
     av_drift: { drift_ms: 12 },
     time_to_first_frame: { status: "measured", ms: 1_800 },
+    frames,
   });
   await assert.rejects(viewer.status(), /HTTP 404/);
 });
