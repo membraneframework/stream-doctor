@@ -120,8 +120,6 @@ export interface FrameFaults {
 
 export interface TrackFrameFaults {
   video: FrameFaults;
-  /** Over the audio marker's symbols. A displacement larger than half the symbol counter's
-   * range is reported as one the other way. */
   audio: FrameFaults;
 }
 
