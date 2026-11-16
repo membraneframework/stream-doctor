@@ -100,9 +100,29 @@ export interface AvDrift {
   latest_samples: number[];
 }
 
+/** Time from the streamer starting to the first segment appearing; needs `watch()` before `publish()`. */
+export interface TimeToFirstFrame {
+  status: "waiting" | "measured" | "missed_first_frame" | "no_streamer";
+  ms: number | null;
+}
+
+/** One frame number, or an inclusive run of them. */
+export type FrameGap = [number] | [number, number];
+
+/** A frame number and how many extra times it arrived. */
+export type FrameRepeat = [number, number];
+
+export interface FrameFaults {
+  reordered: { count: number | null; max_depth: number | null; permutations: number[][] };
+  missing: { count: number | null; gaps: FrameGap[] };
+  duplicated: { count: number | null; repeats: FrameRepeat[] };
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
+  time_to_first_frame?: TimeToFirstFrame;
+  frames?: FrameFaults;
   error?: string;
 }
 

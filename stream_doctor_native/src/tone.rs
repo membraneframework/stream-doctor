@@ -20,10 +20,12 @@ use std::{
 
 const SYMBOL_MS: u32 = 30;
 
-const DATA_BITS: u32 = 7;
+const DATA_BITS: u32 = 12;
 const MAX_SYMBOL: u32 = 1 << DATA_BITS;
 
-const FREQS: [u32; 9] = [500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500];
+const FREQS: [u32; 14] = [
+    500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000,
+];
 
 const AMPLITUDE: f64 = 3000.0;
 const SOURCE_GAIN: f64 = 0.5;
@@ -257,7 +259,7 @@ mod tests {
     #[test]
     fn decode_round_trip() {
         let tone = Tone::new(48_000);
-        for symbol in [0, 1, 42, 127] {
+        for symbol in [0, 1, 42, MAX_SYMBOL - 1] {
             let mut samples = vec![0u8; tone.symbol_bytes() as usize];
             tone.encode(S16leMut(&mut samples), symbol);
             assert_eq!(tone.decode(S16le(&samples)), Ok(symbol));
