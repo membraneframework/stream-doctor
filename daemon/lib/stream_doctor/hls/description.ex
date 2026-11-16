@@ -4,7 +4,7 @@ defmodule StreamDoctor.HLS.Description do
   """
 
   alias ExM3U8.Tags
-  alias StreamDoctor.HLS.{Codecs, Media}
+  alias StreamDoctor.HLS.Codecs
 
   @receive_timeout 5_000
   @undeclared %{
@@ -65,10 +65,15 @@ defmodule StreamDoctor.HLS.Description do
     media = media(url)
 
     tracks =
-      if stream.codecs do
-        Codecs.parse(stream.codecs)
-      else
-        read_tracks_from_container([media | List.wrap(audio_rendition(stream, base, items))])
+      cond do
+        stream.codecs ->
+          Codecs.parse(stream.codecs)
+
+        rendition = audio_rendition(stream, base, items) ->
+          read_tracks_from_container([media, rendition])
+
+        true ->
+          read_tracks_from_container([media])
       end
 
     %{
@@ -105,7 +110,7 @@ defmodule StreamDoctor.HLS.Description do
 
   defp media_tracks(%{container: container, sample: url}) do
     case fetch(url) do
-      {:ok, binary} -> Media.tracks(container, binary)
+      {:ok, binary} -> Codecs.from_media(container, binary)
       {:error, _reason} -> nil
     end
   end

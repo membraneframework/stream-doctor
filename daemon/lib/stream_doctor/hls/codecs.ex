@@ -1,7 +1,17 @@
 defmodule StreamDoctor.HLS.Codecs do
   @moduledoc """
-  Reads the tracks an HLS variant declares in its `CODECS` attribute.
+  Reads the tracks of an HLS variant, from its `CODECS` attribute or from the media itself.
   """
+
+  alias Membrane.{AAC, H264}
+  alias Membrane.MP4.Demuxer.CMAF
+  alias MPEG.TS.Demuxer
+
+  # The spec of `MPEG.TS.Demuxer.demux/2` rejects the struct its own `new/0` returns.
+  @dialyzer {:nowarn_function, tracks_by_id: 2, ts_track: 2}
+
+  # The three bytes after the SPS header are profile_idc, the constraint flags and level_idc.
+  @sps ~r/\x00\x00\x01[\x27\x47\x67](.{3})/s
 
   @type track ::
           %{type: :video, codec: :h264, profile: atom() | nil, level: String.t() | nil}
@@ -37,25 +47,59 @@ defmodule StreamDoctor.HLS.Codecs do
     |> Enum.map(&track(String.trim(&1)))
   end
 
-  @spec h264(binary()) :: track()
-  def h264(<<profile_idc, constraints, level_idc>>) do
-    %{
-      type: :video,
-      codec: :h264,
-      profile: h264_profile(profile_idc, constraints),
-      level: h264_level(level_idc, profile_idc, constraints)
-    }
+  @spec from_media(:cmaf | :mpeg_ts, binary()) :: [track()]
+  def from_media(container, binary) do
+    container
+    |> tracks_by_id(binary)
+    |> Enum.sort()
+    |> Enum.map(fn {_id, track} -> track end)
   end
 
-  def h264(_params) do
-    %{type: :video, codec: :h264, profile: nil, level: nil}
+  defp tracks_by_id(:cmaf, init) do
+    case CMAF.Engine.new() |> CMAF.Engine.feed!(init) |> CMAF.Engine.get_tracks_info() do
+      {:ok, tracks} -> Enum.map(tracks, fn {id, format} -> {id, cmaf_track(format)} end)
+      {:error, :not_available_yet} -> []
+    end
   end
 
-  @spec aac(Membrane.AAC.profile()) :: track()
-  def aac(profile), do: %{type: :audio, codec: :aac, profile: profile, level: nil}
+  defp tracks_by_id(:mpeg_ts, segment) do
+    demuxer = Demuxer.new()
+    {packets, demuxer} = Demuxer.demux(demuxer, segment)
+    {flushed, demuxer} = Demuxer.flush(demuxer)
+    packets = packets ++ flushed
 
-  @spec unknown(String.t()) :: track()
-  def unknown(raw), do: %{type: :unknown, raw: raw}
+    for {pid, %{stream_type: type}} <- demuxer.streams, type != :METADATA_IN_PES do
+      payloads = for %{pid: ^pid, payload: %{data: data}} <- packets, do: data
+      {pid, ts_track(type, payloads)}
+    end
+  end
+
+  defp cmaf_track(%H264{stream_structure: {_avc, <<1, params::binary-size(3), _rest::binary>>}}) do
+    h264(params)
+  end
+
+  defp cmaf_track(%AAC{config: {:esds, esds}}) do
+    aac(AAC.Parser.Esds.parse_esds(esds).profile)
+  end
+
+  defp cmaf_track(%format{}) do
+    unknown(inspect(format))
+  end
+
+  defp ts_track(:H264_AVC, payloads) do
+    payloads
+    |> Enum.find_value(<<>>, fn data -> Regex.run(@sps, data, capture: :all_but_first) end)
+    |> IO.iodata_to_binary()
+    |> h264()
+  end
+
+  defp ts_track(:AAC_ADTS, [<<0xFFF::12, _flags::4, profile::2, _rest::bits>> | _payloads]) do
+    aac(AAC.aot_id_to_profile(profile + 1))
+  end
+
+  defp ts_track(type, _payloads) do
+    unknown(type |> inspect() |> String.trim_leading(":"))
+  end
 
   defp track("avc1." <> params) do
     case Base.decode16(params, case: :mixed) do
@@ -75,6 +119,23 @@ defmodule StreamDoctor.HLS.Codecs do
   end
 
   defp track(raw), do: unknown(raw)
+
+  defp h264(<<profile_idc, constraints, level_idc>>) do
+    %{
+      type: :video,
+      codec: :h264,
+      profile: h264_profile(profile_idc, constraints),
+      level: h264_level(level_idc, profile_idc, constraints)
+    }
+  end
+
+  defp h264(_params) do
+    %{type: :video, codec: :h264, profile: nil, level: nil}
+  end
+
+  defp aac(profile), do: %{type: :audio, codec: :aac, profile: profile, level: nil}
+
+  defp unknown(raw), do: %{type: :unknown, raw: raw}
 
   defp h264_profile(profile_idc, constraints) do
     Enum.find_value(@h264_profiles, fn {idc, sets, profile} ->
