@@ -96,10 +96,6 @@ defmodule StreamDoctor.Metric.Frames do
     }
   end
 
-  defp advance_cursors(track, number) do
-    %{track | previous: number, highest: max(number, track.highest || number)}
-  end
-
   defp count_descent(%{previous: previous} = track, number)
        when previous != nil and number < previous do
     %{track | reordered: record_descent(track.reordered, previous - number)}
@@ -107,6 +103,10 @@ defmodule StreamDoctor.Metric.Frames do
 
   defp count_descent(track, _number) do
     track
+  end
+
+  defp record_descent(reordered, depth) do
+    %{reordered | count: reordered.count + 1, max_depth: max(depth, reordered.max_depth || 0)}
   end
 
   defp count_missing_and_duplicated(%{join: join} = track, number)
@@ -148,16 +148,20 @@ defmodule StreamDoctor.Metric.Frames do
     %{track | seen: MapSet.filter(track.seen, &(&1 > horizon))}
   end
 
-  defp duplicate(track, number) do
-    %{track | duplicated: record_repeat(track.duplicated, number)}
-  end
-
-  defp record_descent(reordered, depth) do
-    %{reordered | count: reordered.count + 1, max_depth: max(depth, reordered.max_depth || 0)}
-  end
-
   defp record_loss(missing, number) do
     %{missing | count: missing.count + 1, gaps: extend_gap(missing.gaps, number)}
+  end
+
+  defp extend_gap(gaps, number) do
+    case List.last(gaps) do
+      [from] when number == from + 1 -> List.replace_at(gaps, -1, [from, number])
+      [from, to] when number == to + 1 -> List.replace_at(gaps, -1, [from, number])
+      _other -> keep_last(gaps, [number])
+    end
+  end
+
+  defp duplicate(track, number) do
+    %{track | duplicated: record_repeat(track.duplicated, number)}
   end
 
   defp record_repeat(duplicated, number) do
@@ -168,14 +172,6 @@ defmodule StreamDoctor.Metric.Frames do
     case List.last(repeats) do
       [^number, times] -> List.replace_at(repeats, -1, [number, times + 1])
       _other -> keep_last(repeats, [number, 1])
-    end
-  end
-
-  defp extend_gap(gaps, number) do
-    case List.last(gaps) do
-      [from] when number == from + 1 -> List.replace_at(gaps, -1, [from, number])
-      [from, to] when number == to + 1 -> List.replace_at(gaps, -1, [from, number])
-      _other -> keep_last(gaps, [number])
     end
   end
 
@@ -220,6 +216,10 @@ defmodule StreamDoctor.Metric.Frames do
 
   defp permutations_so_far(track) do
     keep_last(track.reordered.permutations, Enum.reverse(track.open_permutation))
+  end
+
+  defp advance_cursors(track, number) do
+    %{track | previous: number, highest: max(number, track.highest || number)}
   end
 
   defp keep_last(kept, entry), do: Enum.take(kept ++ [entry], -@evidence)
