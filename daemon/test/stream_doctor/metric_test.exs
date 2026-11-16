@@ -81,7 +81,9 @@ defmodule StreamDoctor.MetricTest do
       Enum.map(numbers, &{:video_frame_received, rem(&1, max), milliseconds(0)})
     end
 
-    defp order(events), do: Metric.Frames.report(run(Metric.Frames, [], events))
+    defp report(events), do: Metric.Frames.report(run(Metric.Frames, [], events))
+
+    defp order(events), do: report(events).video
 
     test "frames arriving in order report no fault" do
       assert %{
@@ -275,6 +277,71 @@ defmodule StreamDoctor.MetricTest do
                missing: %{count: 0},
                duplicated: %{count: 0}
              } = order(events)
+    end
+  end
+
+  describe "Frames, audio track" do
+    defp symbols(numbers) do
+      max = StreamDoctor.Probe.Audio.Tone.max_symbol()
+      Enum.map(numbers, &{:audio_symbol_received, rem(&1, max), milliseconds(0)})
+    end
+
+    defp symbol_order(events), do: report(events).audio
+
+    test "symbols arriving in order report no fault" do
+      assert %{
+               reordered: %{count: 0, max_depth: nil, permutations: []},
+               missing: %{count: 0, gaps: []},
+               duplicated: %{count: 0, repeats: []}
+             } = symbol_order(symbols(0..99))
+    end
+
+    test "the symbol counter wrapping is unwrapped, not read as loss" do
+      max = StreamDoctor.Probe.Audio.Tone.max_symbol()
+
+      assert %{reordered: %{count: 0}, missing: %{count: 0}} =
+               symbol_order(symbols((max - 50)..(max + 50)))
+    end
+
+    test "a symbol that never arrived is reported missing" do
+      assert %{missing: %{count: 1, gaps: [[12]]}} = symbol_order(symbols([10, 11, 13, 14]))
+    end
+
+    test "a symbol arriving twice is reported duplicated" do
+      assert %{duplicated: %{count: 1, repeats: [[5, 1]]}} = symbol_order(symbols([5, 6, 5]))
+    end
+
+    test "video and lifecycle events leave the report alone" do
+      events = [
+        {:audio_symbol_received, 1, milliseconds(0)},
+        {:video_frame_received, 9, nil},
+        {:streamer_started, :missed},
+        {:first_frame_arrived, 1},
+        {:audio_symbol_received, 2, milliseconds(30)}
+      ]
+
+      assert %{
+               reordered: %{count: 0},
+               missing: %{count: 0},
+               duplicated: %{count: 0}
+             } = symbol_order(events)
+    end
+
+    test "nothing is reported before the first symbol" do
+      assert %{
+               reordered: %{count: nil, max_depth: nil, permutations: []},
+               missing: %{count: nil, gaps: []},
+               duplicated: %{count: nil, repeats: []}
+             } = symbol_order([])
+    end
+
+    test "each track keeps its own counters in one fold" do
+      events = frames([10, 12, 11, 13]) ++ symbols([20, 22])
+
+      assert %{
+               video: %{reordered: %{count: 1}, missing: %{count: 0}},
+               audio: %{reordered: %{count: 0}, missing: %{count: 1, gaps: [[21]]}}
+             } = report(events)
     end
   end
 

@@ -97,9 +97,10 @@ expect(metrics.time_to_first_frame.status).toBe("measured");
 
 expect(Math.abs(metrics.av_drift.drift_ms)).toBeLessThan(50);
 expect(metrics.time_to_first_frame.ms).toBeLessThan(5000);
-expect(metrics.frames.reordered.count).toBe(0);
-expect(metrics.frames.missing.count).toBe(0);
-expect(metrics.frames.duplicated.count).toBe(0);
+expect(metrics.frames.video.reordered.count).toBe(0);
+expect(metrics.frames.video.missing.count).toBe(0);
+expect(metrics.frames.video.duplicated.count).toBe(0);
+expect(metrics.frames.audio.missing.count).toBe(0);
 ```
 
 Watching before publishing is what lets `time_to_first_frame` be measured: the

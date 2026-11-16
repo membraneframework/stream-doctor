@@ -118,6 +118,13 @@ export interface FrameFaults {
   duplicated: { count: number | null; repeats: FrameRepeat[] };
 }
 
+export interface TrackFrameFaults {
+  video: FrameFaults;
+  /** Over the audio marker's symbols. A displacement larger than half the symbol counter's
+   * range is reported as one the other way. */
+  audio: FrameFaults;
+}
+
 /** How long a frame takes to become downloadable. */
 export interface AvailabilityLatency {
   status: "waiting" | "measured";
@@ -129,7 +136,7 @@ export interface AvailabilityLatency {
 export interface Metrics {
   av_drift?: AvDrift;
   time_to_first_frame?: TimeToFirstFrame;
-  frames?: FrameFaults;
+  frames?: TrackFrameFaults;
   availability_latency?: AvailabilityLatency;
   error?: string;
 }
