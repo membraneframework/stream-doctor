@@ -42,9 +42,9 @@ defmodule StreamDoctor.MetricTest do
     defp drift(events), do: Metric.AvDrift.report(run(Metric.AvDrift, [], events)).drift_ms
 
     test "in-sync tracks report 0 drift (crossing the audio wrap point)" do
-      # 10 s of stream; the audio counter wraps at 3.84 s
-      assert drift(av_events(10)) == 0
-      report = Metric.AvDrift.report(run(Metric.AvDrift, [], av_events(10)))
+      # 130 s of stream; the audio counter wraps at 122.9 s
+      assert drift(av_events(130)) == 0
+      report = Metric.AvDrift.report(run(Metric.AvDrift, [], av_events(130)))
       assert report.frame_duration_ms == 40
     end
 
