@@ -50,6 +50,7 @@ defmodule StreamDoctor.HLS.Codecs do
   @spec from_media(:cmaf | :mpeg_ts, binary()) :: [track()] | :unknown
   def from_media(container, binary) do
     case tracks_by_id(container, binary) do
+      :unknown -> :unknown
       [] -> :unknown
       tracks -> tracks |> Enum.sort() |> Enum.map(fn {_id, track} -> track end)
     end
@@ -58,7 +59,7 @@ defmodule StreamDoctor.HLS.Codecs do
   defp tracks_by_id(:cmaf, init) do
     case CMAF.Engine.new() |> CMAF.Engine.feed!(init) |> CMAF.Engine.get_tracks_info() do
       {:ok, tracks} -> Enum.map(tracks, fn {id, format} -> {id, cmaf_track(format)} end)
-      {:error, :not_available_yet} -> []
+      {:error, :not_available_yet} -> :unknown
     end
   end
 
@@ -87,10 +88,10 @@ defmodule StreamDoctor.HLS.Codecs do
   end
 
   defp ts_track(:H264_AVC, payloads) do
-    payloads
-    |> Enum.find_value(<<>>, fn data -> Regex.run(@sps, data, capture: :all_but_first) end)
-    |> IO.iodata_to_binary()
-    |> h264()
+    case Enum.find_value(payloads, &Regex.run(@sps, &1, capture: :all_but_first)) do
+      [params] -> h264(params)
+      nil -> h264(nil)
+    end
   end
 
   defp ts_track(:AAC_ADTS, [<<0xFFF::12, _flags::4, profile::2, _rest::bits>> | _payloads]) do
@@ -104,7 +105,7 @@ defmodule StreamDoctor.HLS.Codecs do
   defp track("avc1." <> params) do
     case Base.decode16(params, case: :mixed) do
       {:ok, params} -> h264(params)
-      :error -> h264(<<>>)
+      :error -> h264(nil)
     end
   end
 
