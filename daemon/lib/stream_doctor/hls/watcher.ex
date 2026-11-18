@@ -7,7 +7,9 @@ defmodule StreamDoctor.HLS.Watcher do
 
   @timeout 120_000
   @poll_interval 200
-  @sync_interval 200
+  @probe_percent 1
+  @back_off_percent 5
+  @recent_segments 3
 
   @doc """
   Polls `url` until a media playlist lists a segment, descending into a master's first variant,
@@ -27,7 +29,10 @@ defmodule StreamDoctor.HLS.Watcher do
       url: opts.url,
       entry: opts.url,
       deadline: Metric.now_ms() + Map.get(opts, :timeout, @timeout),
-      notify: opts.notify
+      notify: opts.notify,
+      half_target_ms: nil,
+      due: nil,
+      missed_at: nil
     }
 
     {:ok, state, {:continue, :poll}}
@@ -45,14 +50,16 @@ defmodule StreamDoctor.HLS.Watcher do
 
   @impl true
   def handle_info(:reload, state) do
-    at = Metric.now_ms()
+    asked_at = Metric.now_ms()
 
-    case classify(state.url) do
-      {:segments, playlist} when playlist != state.playlist ->
-        advance_timeline(state, playlist, at)
-
-      _unchanged_or_unusable ->
-        {:noreply, state |> after_unchanged_reload(at) |> schedule_reload()}
+    with {:segments, playlist} <- classify(state.url),
+         newest when newest >= state.due <- newest(playlist) do
+      notify(state, {:segment_available, newest, Metric.now_ms()})
+      {:noreply, aim_at_next(state, playlist, asked_at)}
+    else
+      _due_segment_not_listed ->
+        reload_at(asked_at + state.half_target_ms)
+        {:noreply, %{state | missed_at: asked_at}}
     end
   end
 
@@ -60,11 +67,18 @@ defmodule StreamDoctor.HLS.Watcher do
     at = Metric.now_ms()
 
     case classify(state.url) do
-      {:segments, playlist} -> start_watch(state, playlist, at)
-      {:variant, url} when url == state.url -> retry(state, "playlist has no segments yet")
-      {:variant, url} -> {:noreply, %{state | url: url}, {:continue, :poll}}
-      :no_segments -> retry(state, "playlist has no segments yet")
-      {:error, reason} -> retry(state, reason)
+      {:segments, playlist} ->
+        notify(state, {:first_frame_arrived, at})
+        {:noreply, aim_at_next(state, playlist, at)}
+
+      {:variant, url} when url != state.url ->
+        {:noreply, %{state | url: url}, {:continue, :poll}}
+
+      {:error, reason} ->
+        retry(state, reason)
+
+      _no_segments ->
+        retry(state, "playlist has no segments yet")
     end
   end
 
@@ -80,79 +94,53 @@ defmodule StreamDoctor.HLS.Watcher do
     end
   end
 
-  defp start_watch(state, playlist, at) do
-    notify(state, {:first_frame_arrived, at})
-
-    state
-    |> Map.merge(%{
-      playlist: playlist,
-      newest: newest(playlist),
-      loaded_at: at,
-      phase: :syncing,
-      sync_until: at + 2 * target_duration_ms(playlist)
-    })
-    |> schedule_reload()
-    |> then(&{:noreply, &1})
-  end
-
-  defp advance_timeline(state, playlist, at) do
+  defp aim_at_next(state, playlist, asked_at) do
+    segment_ms = shortest_recent_segment_ms(playlist)
     newest = newest(playlist)
+    half_target_ms = playlist.info.target_duration * 500
 
-    if newest > state.newest, do: notify(state, {:segment_available, newest, at})
+    {appeared_at, percent, segment} =
+      case state.missed_at do
+        nil -> {asked_at, -@probe_percent, newest}
+        missed_at -> {missed_at, @back_off_percent, state.due}
+      end
 
-    state = %{
+    margin = div(segment_ms * percent, 100)
+    earliest_reload = asked_at + half_target_ms
+    segments_ahead = max(ceil((earliest_reload - appeared_at - margin) / segment_ms), 1)
+
+    reload_at(appeared_at + segments_ahead * segment_ms + margin)
+
+    %{
       state
-      | playlist: playlist,
-        newest: max(newest, state.newest),
-        loaded_at: at,
-        phase: :changed
+      | half_target_ms: half_target_ms,
+        due: max(segment + segments_ahead, newest + 1),
+        missed_at: nil
     }
-
-    {:noreply, schedule_reload(state)}
-  end
-
-  defp after_unchanged_reload(%{phase: :syncing, sync_until: sync_until} = state, at)
-       when at < sync_until do
-    %{state | loaded_at: at}
-  end
-
-  defp after_unchanged_reload(state, at) do
-    %{state | loaded_at: at, phase: :idle}
   end
 
   defp notify(%{notify: {pid, tag}}, event) do
     send(pid, {:hls, tag, event})
   end
 
-  defp schedule_reload(state) do
-    Process.send_after(
-      self(),
-      :reload,
-      max(state.loaded_at + reload_delay(state) - Metric.now_ms(), 0)
-    )
-
-    state
+  defp reload_at(at) do
+    Process.send_after(self(), :reload, max(at - Metric.now_ms(), 0))
   end
 
-  defp reload_delay(%{phase: :syncing}) do
-    @sync_interval
-  end
-
-  defp reload_delay(%{phase: :changed} = state) do
-    target_duration_ms(state.playlist)
-  end
-
-  defp reload_delay(%{phase: :idle} = state) do
-    div(target_duration_ms(state.playlist), 2)
-  end
-
-  defp target_duration_ms(playlist) do
-    playlist.info.target_duration * 1_000
+  defp shortest_recent_segment_ms(playlist) do
+    playlist
+    |> segments()
+    |> Enum.take(-@recent_segments)
+    |> Enum.map(&round(&1.duration * 1_000))
+    |> Enum.min()
   end
 
   defp newest(playlist) do
-    playlist.info.media_sequence +
-      Enum.count(playlist.timeline, &match?(%ExM3U8.Tags.Segment{}, &1)) - 1
+    playlist.info.media_sequence + length(segments(playlist)) - 1
+  end
+
+  defp segments(playlist) do
+    Enum.filter(playlist.timeline, &match?(%ExM3U8.Tags.Segment{}, &1))
   end
 
   defp classify(url) do

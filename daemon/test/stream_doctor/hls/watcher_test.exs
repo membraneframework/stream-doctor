@@ -203,7 +203,7 @@ defmodule StreamDoctor.HLS.WatcherTest do
     watch(@base)
 
     assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
-    assert_receive {:hls, _watcher, {:segment_available, 2, _at}}, 1_000
+    assert_receive {:hls, _watcher, {:segment_available, 2, _at}}, 2_000
     refute_receive {:hls, _watcher, {:segment_available, _number, _at}}, 300
   end
 
@@ -260,7 +260,7 @@ defmodule StreamDoctor.HLS.WatcherTest do
 
     watch(@base, 500)
 
-    assert_receive {:hls, _watcher, {:segment_available, 1, _at}}, 1_000
+    assert_receive {:hls, _watcher, {:segment_available, 1, _at}}, 2_000
   end
 
   test "a playlist whose first load already dropped segments is watched from there" do
@@ -272,30 +272,92 @@ defmodule StreamDoctor.HLS.WatcherTest do
     watch(@base)
 
     assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
-    assert_receive {:hls, _watcher, {:segment_available, 4, _at}}, 1_000
+    assert_receive {:hls, _watcher, {:segment_available, 4, _at}}, 2_000
   end
 
-  test "a segment is caught at the polling interval, then reloads follow the target duration" do
+  test "a new segment is stamped when the answer arrived, so it is never reported early" do
     script =
       serve([
+        fn _path -> {:ok, media(1, 0, [1.0])} end,
+        fn _path ->
+          Process.sleep(@slow_response)
+          {:ok, media(1, 0, [1.0, 1.0])}
+        end
+      ])
+
+    watch(@base)
+
+    assert_receive {:hls, _watcher, {:segment_available, 1, at}}, 2_000
+    assert [_first, {_path, asked_at}] = asked(script)
+    assert at - asked_at >= @slow_response
+  end
+
+  test "reloads come just before the next segment is due and back off past a miss" do
+    script =
+      serve([
+        fn _path -> {:ok, media(1, 0, [1.0])} end,
         fn _path -> {:ok, media(1, 0, [1.0])} end,
         fn _path -> {:ok, media(1, 0, [1.0, 1.0])} end
       ])
 
     watch(@base, 2_000)
 
-    assert_receive {:hls, _watcher, {:segment_available, _number, _at}}, 1_000
-    Process.sleep(1_800)
+    assert_receive {:hls, _watcher, {:segment_available, 1, _at}}, 3_000
+    Process.sleep(800)
 
-    assert [sync, after_change, after_no_change] =
+    assert [before_due, after_miss, past_miss] =
              script |> gaps() |> Enum.take(3) |> Enum.map(fn [from, to] -> to - from end)
 
-    assert sync in 150..400
-    assert after_change in 950..1_200
-    assert after_no_change in 450..700
+    assert before_due in 950..1_100
+    assert after_miss in 450..600
+    assert past_miss in 500..650
   end
 
-  test "a playlist that never changes stops being polled at the sync interval" do
+  test "a reload that half the target duration holds past the next segment aims for a later one" do
+    script =
+      serve([
+        fn _path -> {:ok, media(4, 0, [1.0])} end,
+        fn _path -> {:ok, media(4, 0, [1.0, 1.0, 1.0, 1.0])} end
+      ])
+
+    watch(@base, 2_000)
+
+    assert_receive {:hls, _watcher, {:segment_available, 3, _at}}, 4_000
+    assert [[from, to] | _rest] = gaps(script)
+    assert (to - from) in 2_950..3_100
+  end
+
+  test "a reload that finds the segment it aimed for still missing reports nothing" do
+    script =
+      serve([
+        fn _path -> {:ok, media(4, 0, [1.0])} end,
+        fn _path -> {:ok, media(4, 0, [1.0, 1.0, 1.0])} end,
+        fn _path -> {:ok, media(4, 0, [1.0, 1.0, 1.0, 1.0, 1.0])} end
+      ])
+
+    watch(@base, 2_000)
+
+    assert_receive {:hls, _watcher, {:segment_available, number, _at}}, 6_000
+    assert number == 4
+    assert [_aimed, [from, to] | _rest] = gaps(script)
+    assert (to - from) in 1_950..2_100
+  end
+
+  test "a single long segment does not push the next reload back" do
+    script =
+      serve([
+        fn _path -> {:ok, media(2, 0, [1.2, 1.2, 2.0])} end,
+        fn _path -> {:ok, media(2, 0, [1.2, 1.2, 2.0, 1.2])} end
+      ])
+
+    watch(@base, 2_000)
+
+    assert_receive {:hls, _watcher, {:segment_available, 3, _at}}, 3_000
+    assert [[from, to] | _rest] = gaps(script)
+    assert (to - from) in 1_150..1_300
+  end
+
+  test "a playlist that never changes is reloaded every half target duration" do
     script = serve([fn _path -> {:ok, media(1, 0, [1.0])} end])
 
     watch(@base, 2_000)
