@@ -155,7 +155,7 @@ export interface Resolution {
   height: number;
 }
 
-/** One variant of an HLS stream. Every field is declared by the packager, not measured, except `tracks` when no CODECS is declared. */
+/** One variant of an HLS stream, as declared by the packager. */
 export interface Variant {
   id: number;
   uri: string;
