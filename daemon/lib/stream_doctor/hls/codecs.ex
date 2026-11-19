@@ -60,6 +60,8 @@ defmodule StreamDoctor.HLS.Codecs do
       {:ok, tracks} -> Enum.map(tracks, fn {id, format} -> {id, cmaf_track(format)} end)
       {:error, _reason} -> []
     end
+  rescue
+    RuntimeError -> []
   end
 
   defp tracks_by_id(:mpeg_ts, segment) do
