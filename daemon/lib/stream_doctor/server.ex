@@ -17,6 +17,8 @@ defmodule StreamDoctor.Server do
     {Metric.Frames, []},
     {Metric.AvailabilityLatency, []}
   ]
+  @receiver_restarts 5
+  @receiver_restart_delay 1_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -131,6 +133,7 @@ defmodule StreamDoctor.Server do
       status: :waiting_for_playlist,
       error: nil,
       playlist: nil,
+      receiver_restarts_left: @receiver_restarts,
       collector: collector
     }
 
@@ -199,6 +202,17 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
+  def handle_info({:restart_receiver, id}, state) do
+    case state.viewers[id] do
+      %{status: :receiving, pid: nil} = viewer ->
+        {:noreply, put_in(state.viewers[id].pid, start_receiver(viewer))}
+
+      _stopped_or_missing ->
+        {:noreply, state}
+    end
+  end
+
+  @impl true
   def handle_info({:playlist_description, id, playlist}, state) do
     case state.viewers[id] do
       nil -> {:noreply, state}
@@ -224,15 +238,18 @@ defmodule StreamDoctor.Server do
   end
 
   defp start_receiving(%{status: :waiting_for_playlist} = viewer, {:first_frame_arrived, _at}) do
-    pid = StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url, collector: viewer.collector)
-
-    Process.monitor(pid)
     describe_playlist(viewer)
 
-    %{viewer | pid: pid, status: :receiving}
+    %{viewer | pid: start_receiver(viewer), status: :receiving}
   end
 
   defp start_receiving(viewer, _event), do: viewer
+
+  defp start_receiver(viewer) do
+    pid = StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url, collector: viewer.collector)
+    Process.monitor(pid)
+    pid
+  end
 
   defp describe_playlist(viewer) do
     server = self()
@@ -274,6 +291,14 @@ defmodule StreamDoctor.Server do
 
   defp mark_down_pid(state, pid, error) do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
+      # A CDN can answer 404 for a playlist it has just served, and the HLS source crashes on that.
+      {id, %{status: :receiving, receiver_restarts_left: left}} when error != nil and left > 0 ->
+        Process.send_after(self(), {:restart_receiver, id}, @receiver_restart_delay)
+
+        state
+        |> put_in([:viewers, id, :pid], nil)
+        |> put_in([:viewers, id, :receiver_restarts_left], left - 1)
+
       {id, viewer} ->
         Process.exit(viewer.watcher, :shutdown)
         put_in(state.viewers[id], mark_down(viewer, error))
