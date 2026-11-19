@@ -63,4 +63,8 @@ defmodule StreamDoctor.HLS.CodecsTest do
   test "an absent CODECS attribute leaves the tracks unknown" do
     assert :unknown == Codecs.parse(nil)
   end
+
+  test "a media segment served as the cmaf init section leaves the tracks unknown" do
+    assert :unknown == Codecs.from_media(:cmaf, <<16::32, "styp", "msdh", 0::32>>)
+  end
 end
