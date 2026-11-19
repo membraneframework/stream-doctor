@@ -15,8 +15,9 @@ defmodule StreamDoctor.SenderPipeline.Egress.RTMP do
 
   @spec link(%{optional(kind()) => Membrane.ChildrenSpec.t()}, String.t(), pid()) ::
           Membrane.ChildrenSpec.t()
-  def link(track_builders, rtmp_url, notify) do
-    [sink(rtmp_url, Map.keys(track_builders))] ++ Enum.map(track_builders, &track(&1, notify))
+  def link(track_builders, rtmp_url, pid_to_notify) do
+    [sink(rtmp_url, Map.keys(track_builders))] ++
+      Enum.map(track_builders, &track(&1, pid_to_notify))
   end
 
   defp sink(rtmp_url, kinds) do
@@ -28,30 +29,26 @@ defmodule StreamDoctor.SenderPipeline.Egress.RTMP do
     })
   end
 
-  defp track({:video, builder}, notify) do
+  defp track({:video, builder}, pid_to_notify) do
     builder
     |> child(:video_parser, %Membrane.H264.Parser{output_stream_structure: :avc1})
     |> child({:realtimer, :video}, Membrane.Realtimer)
-    |> child(:video_send_stamp, send_stamp(notify))
+    |> child(:video_send_stamp, send_stamp(pid_to_notify))
     |> via_in(Pad.ref(:video, 0))
     |> get_child(:rtmp_sink)
   end
 
-  defp track({:audio, builder}, _notify) do
+  defp track({:audio, builder}, _pid_to_notify) do
     builder
     |> child({:realtimer, :audio}, Membrane.Realtimer)
     |> via_in(Pad.ref(:audio, 0))
     |> get_child(:rtmp_sink)
   end
 
-  defp send_stamp(notify) do
-    sent = :counters.new(1, [])
-
-    %Membrane.Debug.Filter{
-      handle_buffer: fn _buffer ->
-        number = rem(:counters.get(sent, 1), Bar.max_frame())
-        :counters.add(sent, 1, 1)
-        send(notify, {:video_frame_sent, number, Metric.now_ms()})
+  defp send_stamp(pid_to_notify) do
+    %StreamDoctor.BufferTap{
+      on_buffer: fn _buffer, index ->
+        send(pid_to_notify, {:video_frame_sent, rem(index, Bar.max_frame()), Metric.now_ms()})
       end
     }
   end

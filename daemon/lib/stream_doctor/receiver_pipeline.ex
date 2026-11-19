@@ -70,8 +70,8 @@ defmodule StreamDoctor.ReceiverPipeline do
   defp track_spec({:video_output, _format}, state) do
     get_child(:hls_source)
     |> via_out(:video_output)
-    |> child(:segment_tap, %Membrane.Debug.Filter{
-      handle_buffer: &report_segment(&1, state.collector)
+    |> child(:segment_tap, %StreamDoctor.BufferTap{
+      on_buffer: fn buffer, _index -> report_segment(buffer, state.collector) end
     })
     |> child(:video_parser, %H264.Parser{
       output_alignment: :au,
