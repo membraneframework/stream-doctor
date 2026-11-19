@@ -100,7 +100,6 @@ defmodule StreamDoctor.HLS.Description do
   defp read_tracks_from_container(medias) do
     tracks = Enum.map(medias, &media_tracks/1)
 
-    # A partial list would pass for a stream that has no other tracks.
     if :unknown in tracks, do: :unknown, else: Enum.concat(tracks)
   end
 
