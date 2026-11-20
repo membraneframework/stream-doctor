@@ -10,6 +10,7 @@ defmodule StreamDoctor.Server do
   alias StreamDoctor.HLS.Watcher
   alias StreamDoctor.Metric
   alias StreamDoctor.OptionsParser.Publisher
+  alias StreamDoctor.Restarter
 
   @metric_specs [
     {Metric.AvDrift, []},
@@ -69,7 +70,7 @@ defmodule StreamDoctor.Server do
          {:ok, parsed} <- parse_input(input) do
       started_at = Metric.now_ms()
       sender = {StreamDoctor.SenderPipeline, input: parsed, rtmp_url: rtmp_url, on_live: self()}
-      {:ok, _supervisor, pid} = start_child(sender)
+      pid = sender |> start_child() |> Restarter.child()
 
       Process.monitor(pid)
       broadcast(state.viewers, {:streamer_started, {:watching, started_at}})
@@ -113,8 +114,8 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_call({:start_viewer, hls_url}, _from, state) do
     id = "viewer-#{state.next_id}"
-    {:ok, collector} = start_child({Collector, @metric_specs})
-    {:ok, watcher} = start_child({Watcher, url: hls_url, notify: {self(), id}})
+    collector = {Collector, @metric_specs} |> start_child() |> Restarter.child()
+    watcher = start_child({Watcher, url: hls_url, notify: {self(), id}})
 
     if state.streamer != nil do
       Collector.record(collector, {:streamer_started, :missed})
@@ -220,13 +221,14 @@ defmodule StreamDoctor.Server do
     describe_playlist(viewer)
 
     # A CDN can answer 404 for a playlist it has just served, and the HLS source crashes on that.
-    receiver = [
-      child: {StreamDoctor.ReceiverPipeline, url: viewer.hls_url, collector: viewer.collector},
+    receiver = {StreamDoctor.ReceiverPipeline, url: viewer.hls_url, collector: viewer.collector}
+
+    restarts = [
       max_restarts: Application.fetch_env!(:stream_doctor, :receiver_restarts),
       delay_ms: Application.fetch_env!(:stream_doctor, :receiver_restart_delay_ms)
     ]
 
-    {:ok, pid} = start_child({StreamDoctor.Restarter, receiver})
+    pid = start_child(receiver, restarts)
     Process.monitor(pid)
 
     %{viewer | pid: pid, status: :receiving}
@@ -234,9 +236,10 @@ defmodule StreamDoctor.Server do
 
   defp start_receiving(viewer, _event), do: viewer
 
-  defp start_child(spec) do
-    spec = Supervisor.child_spec(spec, restart: :temporary)
-    DynamicSupervisor.start_child(StreamDoctor.WorkerSupervisor, spec)
+  defp start_child(spec, restarts \\ []) do
+    restarter = {Restarter, [child: spec] ++ restarts}
+    {:ok, pid} = DynamicSupervisor.start_child(StreamDoctor.WorkerSupervisor, restarter)
+    pid
   end
 
   defp stop_child(pid) do
@@ -250,7 +253,7 @@ defmodule StreamDoctor.Server do
       send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
     end
 
-    {:ok, _pid} = start_child({Task, describe})
+    start_child({Task, describe})
   end
 
   defp playlist_description(hls_url) do
