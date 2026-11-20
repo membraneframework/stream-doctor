@@ -10,6 +10,7 @@ defmodule StreamDoctor.HLS.Watcher do
   @probe_percent 1
   @back_off_percent 5
   @recent_segments 3
+  @min_gap_ms 200
 
   @doc """
   Polls `url` until a media playlist lists a segment, descending into a master's first variant,
@@ -30,7 +31,7 @@ defmodule StreamDoctor.HLS.Watcher do
       entry: opts.url,
       deadline: Metric.now_ms() + Map.get(opts, :timeout, @timeout),
       notify: opts.notify,
-      half_target_ms: nil,
+      gap_ms: nil,
       due: nil,
       missed_at: nil
     }
@@ -58,7 +59,7 @@ defmodule StreamDoctor.HLS.Watcher do
       {:noreply, aim_at_next(state, playlist, asked_at)}
     else
       _due_segment_not_listed ->
-        reload_at(asked_at + state.half_target_ms)
+        reload_at(asked_at + state.gap_ms)
         {:noreply, %{state | missed_at: asked_at}}
     end
   end
@@ -96,27 +97,16 @@ defmodule StreamDoctor.HLS.Watcher do
 
   defp aim_at_next(state, playlist, asked_at) do
     segment_ms = shortest_recent_segment_ms(playlist)
-    newest = newest(playlist)
-    half_target_ms = playlist.info.target_duration * 500
+    gap_ms = max(div(segment_ms, 2), @min_gap_ms)
 
-    {appeared_at, percent, segment} =
+    {appeared_at, percent} =
       case state.missed_at do
-        nil -> {asked_at, -@probe_percent, newest}
-        missed_at -> {missed_at, @back_off_percent, state.due}
+        nil -> {asked_at, -@probe_percent}
+        missed_at -> {missed_at, @back_off_percent}
       end
 
-    margin = div(segment_ms * percent, 100)
-    earliest_reload = asked_at + half_target_ms
-    segments_ahead = max(ceil((earliest_reload - appeared_at - margin) / segment_ms), 1)
-
-    reload_at(appeared_at + segments_ahead * segment_ms + margin)
-
-    %{
-      state
-      | half_target_ms: half_target_ms,
-        due: max(segment + segments_ahead, newest + 1),
-        missed_at: nil
-    }
+    reload_at(max(appeared_at + segment_ms + div(segment_ms * percent, 100), asked_at + gap_ms))
+    %{state | gap_ms: gap_ms, due: newest(playlist) + 1, missed_at: nil}
   end
 
   defp notify(%{notify: {pid, tag}}, event) do

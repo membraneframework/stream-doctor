@@ -313,34 +313,34 @@ defmodule StreamDoctor.HLS.WatcherTest do
     assert past_miss in 500..650
   end
 
-  test "a reload that half the target duration holds past the next segment aims for a later one" do
+  test "a target duration far above the segment length does not hold reloads back" do
     script =
       serve([
-        fn _path -> {:ok, media(4, 0, [1.0])} end,
-        fn _path -> {:ok, media(4, 0, [1.0, 1.0, 1.0, 1.0])} end
+        fn _path -> {:ok, media(6, 0, [1.0])} end,
+        fn _path -> {:ok, media(6, 0, [1.0, 1.0])} end
       ])
 
     watch(@base, 2_000)
 
-    assert_receive {:hls, _watcher, {:segment_available, 3, _at}}, 4_000
+    assert_receive {:hls, _watcher, {:segment_available, 1, _at}}, 2_000
     assert [[from, to] | _rest] = gaps(script)
-    assert (to - from) in 2_950..3_100
+    assert (to - from) in 950..1_100
   end
 
-  test "a reload that finds the segment it aimed for still missing reports nothing" do
+  test "reloads stay 200 ms apart however short the segments are" do
     script =
       serve([
-        fn _path -> {:ok, media(4, 0, [1.0])} end,
-        fn _path -> {:ok, media(4, 0, [1.0, 1.0, 1.0])} end,
-        fn _path -> {:ok, media(4, 0, [1.0, 1.0, 1.0, 1.0, 1.0])} end
+        fn _path -> {:ok, media(1, 0, [0.0])} end,
+        fn _path -> {:ok, media(1, 0, [0.0, 0.1])} end,
+        fn _path -> {:ok, media(1, 0, [0.0, 0.1, 0.1])} end
       ])
 
     watch(@base, 2_000)
 
-    assert_receive {:hls, _watcher, {:segment_available, number, _at}}, 6_000
-    assert number == 4
-    assert [_aimed, [from, to] | _rest] = gaps(script)
-    assert (to - from) in 1_950..2_100
+    assert_receive {:hls, _watcher, {:segment_available, 2, _at}}, 2_000
+    Process.sleep(500)
+
+    for [from, to] <- gaps(script), do: assert((to - from) in 190..300)
   end
 
   test "a single long segment does not push the next reload back" do
@@ -357,8 +357,8 @@ defmodule StreamDoctor.HLS.WatcherTest do
     assert (to - from) in 1_150..1_300
   end
 
-  test "a playlist that never changes is reloaded every half target duration" do
-    script = serve([fn _path -> {:ok, media(1, 0, [1.0])} end])
+  test "a playlist that never changes is reloaded every half segment" do
+    script = serve([fn _path -> {:ok, media(6, 0, [1.0])} end])
 
     watch(@base, 2_000)
 
