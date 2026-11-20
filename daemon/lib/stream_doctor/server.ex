@@ -130,7 +130,6 @@ defmodule StreamDoctor.Server do
       status: :waiting_for_playlist,
       error: nil,
       playlist: nil,
-      receiver_restarts_left: Application.fetch_env!(:stream_doctor, :receiver_restarts),
       collector: collector
     }
 
@@ -145,10 +144,9 @@ defmodule StreamDoctor.Server do
         {:reply, {:error, :not_found}, state}
 
       viewer ->
-        stop_child(viewer.watcher)
-        viewer = terminate_pipeline(viewer)
-        state = put_in(state.viewers[id], viewer)
-        {:reply, {:ok, viewer_summary(viewer)}, state}
+        for pid <- [viewer.watcher, viewer.pid], pid != nil, do: stop_child(pid)
+        state = put_in(state.viewers[id].status, :stopped)
+        {:reply, {:ok, viewer_summary(state.viewers[id])}, state}
     end
   end
 
@@ -199,17 +197,6 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
-  def handle_info({:restart_receiver, id}, state) do
-    case state.viewers[id] do
-      %{status: :receiving, pid: nil} = viewer ->
-        {:noreply, put_in(state.viewers[id].pid, start_receiver(viewer))}
-
-      _stopped_or_missing ->
-        {:noreply, state}
-    end
-  end
-
-  @impl true
   def handle_info({:playlist_description, id, playlist}, state) do
     case state.viewers[id] do
       nil -> {:noreply, state}
@@ -232,17 +219,20 @@ defmodule StreamDoctor.Server do
   defp start_receiving(%{status: :waiting_for_playlist} = viewer, {:first_frame_arrived, _at}) do
     describe_playlist(viewer)
 
-    %{viewer | pid: start_receiver(viewer), status: :receiving}
+    # A CDN can answer 404 for a playlist it has just served, and the HLS source crashes on that.
+    receiver = [
+      child: {StreamDoctor.ReceiverPipeline, url: viewer.hls_url, collector: viewer.collector},
+      max_restarts: Application.fetch_env!(:stream_doctor, :receiver_restarts),
+      delay_ms: Application.fetch_env!(:stream_doctor, :receiver_restart_delay_ms)
+    ]
+
+    {:ok, pid} = start_child({StreamDoctor.Restarter, receiver})
+    Process.monitor(pid)
+
+    %{viewer | pid: pid, status: :receiving}
   end
 
   defp start_receiving(viewer, _event), do: viewer
-
-  defp start_receiver(viewer) do
-    receiver = {StreamDoctor.ReceiverPipeline, url: viewer.hls_url, collector: viewer.collector}
-    {:ok, _supervisor, pid} = start_child(receiver)
-    Process.monitor(pid)
-    pid
-  end
 
   defp start_child(spec) do
     spec = Supervisor.child_spec(spec, restart: :temporary)
@@ -292,15 +282,6 @@ defmodule StreamDoctor.Server do
 
   defp mark_down_pid(state, pid, error) do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
-      # A CDN can answer 404 for a playlist it has just served, and the HLS source crashes on that.
-      {id, %{status: :receiving, receiver_restarts_left: left}} when error != nil and left > 0 ->
-        delay = Application.fetch_env!(:stream_doctor, :receiver_restart_delay_ms)
-        Process.send_after(self(), {:restart_receiver, id}, delay)
-
-        state
-        |> put_in([:viewers, id, :pid], nil)
-        |> put_in([:viewers, id, :receiver_restarts_left], left - 1)
-
       {id, viewer} ->
         stop_child(viewer.watcher)
         put_in(state.viewers[id], mark_down(viewer, error))
