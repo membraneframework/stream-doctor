@@ -32,7 +32,10 @@ defmodule StreamDoctor.CollectorTest do
     assert %{
              av_drift: %{drift_ms: 0},
              time_to_first_frame: %{status: :measured, ms: 1_200},
-             frames: %{reordered: %{count: 0}, missing: %{count: 0}, duplicated: %{count: 0}},
+             frames: %{
+               video: %{reordered: %{count: 0}, missing: %{count: 0}, duplicated: %{count: 0}},
+               audio: %{reordered: %{count: 0}, missing: %{count: 0}, duplicated: %{count: 0}}
+             },
              availability_latency: %{status: :measured, ms: 420}
            } = Collector.report(collector)
   end
