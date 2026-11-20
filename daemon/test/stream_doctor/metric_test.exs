@@ -344,4 +344,84 @@ defmodule StreamDoctor.MetricTest do
       end
     end
   end
+
+  describe "AvailabilityLatency" do
+    defp latency(events) do
+      Metric.AvailabilityLatency.report(run(Metric.AvailabilityLatency, [], events))
+    end
+
+    defp frame(number, segment, sent_at) do
+      pts = milliseconds(number * 40)
+
+      [
+        {:video_frame_sent, number, sent_at},
+        {:video_chunk_received, segment, pts},
+        {:video_frame_received, number, pts}
+      ]
+    end
+
+    test "a segment is measured from when its frame was sent to when it was listed" do
+      listed = {:segment_available, 37, 3000}
+      measured = %{status: :measured, ms: 500, latest_samples: [500]}
+
+      assert latency(frame(60, 37, 2500) ++ [listed]) == measured
+      assert latency([listed | frame(60, 37, 2500)]) == measured
+    end
+
+    test "each segment is measured on the last of its frames to be sent" do
+      events =
+        frame(58, 37, 2420) ++
+          [{:segment_available, 37, 3000}] ++
+          frame(60, 37, 2500) ++
+          frame(59, 37, 2460) ++
+          frame(120, 38, 4500) ++ [{:segment_available, 38, 5100}]
+
+      assert %{ms: 600, latest_samples: [600, 500]} = latency(events)
+    end
+
+    test "a frame is matched to its segment by PTS, not by the order of arrival" do
+      events = [
+        {:video_frame_sent, 60, 2500},
+        {:video_frame_sent, 61, 2540},
+        {:video_chunk_received, 37, milliseconds(2400)},
+        {:video_chunk_received, 38, milliseconds(2440)},
+        {:video_frame_received, 61, milliseconds(2440)},
+        {:video_frame_received, 60, milliseconds(2400)},
+        {:segment_available, 37, 3000}
+      ]
+
+      assert %{latest_samples: [500]} = latency(events)
+    end
+
+    test "a segment that was only listed or only decoded yields no sample" do
+      events = [{:segment_available, 36, 3000} | frame(60, 37, 2500)]
+
+      assert latency(events) == %{status: :waiting, ms: nil, latest_samples: []}
+    end
+
+    test "a frame sent before the viewer attached yields no sample" do
+      [_sent | received] = frame(60, 37, 2500)
+
+      assert %{status: :waiting} = latency(received ++ [{:segment_available, 37, 3000}])
+    end
+
+    test "a restarted streamer is measured on its own frames" do
+      events =
+        frame(60, 37, 2500) ++
+          [{:segment_available, 37, 3000}] ++
+          frame(60, 52, 42_500) ++ [{:segment_available, 52, 43_200}]
+
+      assert %{latest_samples: [700, 500]} = latency(events)
+    end
+
+    test "only the newest samples are kept" do
+      segments =
+        Enum.flat_map(1..60, &(frame(&1, &1, &1 * 1000) ++ [{:segment_available, &1, &1 * 1001}]))
+
+      report = latency(segments)
+
+      assert report.latest_samples == Enum.to_list(60..51//-1)
+      assert report.ms == 36
+    end
+  end
 end

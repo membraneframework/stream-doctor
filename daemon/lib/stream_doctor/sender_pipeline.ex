@@ -3,7 +3,7 @@ defmodule StreamDoctor.SenderPipeline do
   Streams an input via RTMP.
 
   Options: `:input`, `:rtmp_url`, `:on_live` (pid that gets `{:streamer_live, pipeline_pid}` once
-  the first video frame reaches the sink).
+  the first video frame reaches the sink, and `{:video_frame_sent, frame_number, at_ms}` for each).
   """
 
   use Membrane.Pipeline
@@ -77,7 +77,7 @@ defmodule StreamDoctor.SenderPipeline do
   end
 
   defp stream(track_builders, config, state) do
-    spec = track_builders |> Processing.tracks(config) |> RTMP.link(state.rtmp_url)
+    spec = track_builders |> Processing.tracks(config) |> RTMP.link(state.rtmp_url, state.on_live)
 
     {[spec: spec], %{state | awaiting_tracks: track_builders |> Map.keys() |> MapSet.new()}}
   end
