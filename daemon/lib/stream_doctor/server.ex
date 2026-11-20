@@ -220,7 +220,6 @@ defmodule StreamDoctor.Server do
   defp start_receiving(%{status: :waiting_for_playlist} = viewer, {:first_frame_arrived, _at}) do
     describe_playlist(viewer)
 
-    # A CDN can answer 404 for a playlist it has just served, and the HLS source crashes on that.
     receiver = {StreamDoctor.ReceiverPipeline, url: viewer.hls_url, collector: viewer.collector}
 
     restarts = [
