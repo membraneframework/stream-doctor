@@ -15,9 +15,16 @@ let requests: { method?: string; path?: string; body: unknown }[] = [];
 
 // Both gap shapes and a repeat run, so the tuple types are exercised rather than assumed.
 const frames = {
-  reordered: { count: 1, max_depth: 2, permutations: [[13, 11, 12, 14]] },
-  missing: { count: 8, gaps: [[3, 9], [20]] },
-  duplicated: { count: 2, repeats: [[5, 2]] },
+  video: {
+    reordered: { count: 1, max_depth: 2, permutations: [[13, 11, 12, 14]] },
+    missing: { count: 8, gaps: [[3, 9], [20]] },
+    duplicated: { count: 2, repeats: [[5, 2]] },
+  },
+  audio: {
+    reordered: { count: 0, max_depth: null, permutations: [] },
+    missing: { count: 1, gaps: [[12]] },
+    duplicated: { count: 0, repeats: [] },
+  },
 };
 
 const routes: Record<string, (body: any) => object> = {
