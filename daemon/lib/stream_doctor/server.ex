@@ -60,7 +60,6 @@ defmodule StreamDoctor.Server do
 
   @impl true
   def init(_opts) do
-    Process.flag(:trap_exit, true)
     {:ok, %{streamer: nil, viewers: %{}, next_id: 1}}
   end
 
@@ -69,7 +68,8 @@ defmodule StreamDoctor.Server do
     with :ok <- idle(state),
          {:ok, parsed} <- parse_input(input) do
       started_at = Metric.now_ms()
-      pid = StreamDoctor.SenderPipeline.start_link(parsed, rtmp_url, on_live: self())
+      sender = {StreamDoctor.SenderPipeline, input: parsed, rtmp_url: rtmp_url, on_live: self()}
+      {:ok, _supervisor, pid} = start_child(sender)
 
       Process.monitor(pid)
       broadcast(state.viewers, {:streamer_started, {:watching, started_at}})
@@ -113,9 +113,8 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_call({:start_viewer, hls_url}, _from, state) do
     id = "viewer-#{state.next_id}"
-    {:ok, collector} = Collector.start_link(@metric_specs)
-
-    {:ok, watcher} = Watcher.start_link(url: hls_url, notify: {self(), id})
+    {:ok, collector} = start_child({Collector, @metric_specs})
+    {:ok, watcher} = start_child({Watcher, url: hls_url, notify: {self(), id}})
 
     if state.streamer != nil do
       Collector.record(collector, {:streamer_started, :missed})
@@ -146,7 +145,7 @@ defmodule StreamDoctor.Server do
         {:reply, {:error, :not_found}, state}
 
       viewer ->
-        Process.exit(viewer.watcher, :shutdown)
+        stop_child(viewer.watcher)
         viewer = terminate_pipeline(viewer)
         state = put_in(state.viewers[id], viewer)
         {:reply, {:ok, viewer_summary(viewer)}, state}
@@ -230,11 +229,6 @@ defmodule StreamDoctor.Server do
     end
   end
 
-  @impl true
-  def handle_info({:EXIT, _pid, _reason}, state) do
-    {:noreply, state}
-  end
-
   defp start_receiving(%{status: :waiting_for_playlist} = viewer, {:first_frame_arrived, _at}) do
     describe_playlist(viewer)
 
@@ -244,20 +238,29 @@ defmodule StreamDoctor.Server do
   defp start_receiving(viewer, _event), do: viewer
 
   defp start_receiver(viewer) do
-    pid = StreamDoctor.ReceiverPipeline.start_link(viewer.hls_url, collector: viewer.collector)
+    receiver = {StreamDoctor.ReceiverPipeline, url: viewer.hls_url, collector: viewer.collector}
+    {:ok, _supervisor, pid} = start_child(receiver)
     Process.monitor(pid)
     pid
+  end
+
+  defp start_child(spec) do
+    spec = Supervisor.child_spec(spec, restart: :temporary)
+    DynamicSupervisor.start_child(StreamDoctor.WorkerSupervisor, spec)
+  end
+
+  defp stop_child(pid) do
+    DynamicSupervisor.terminate_child(StreamDoctor.WorkerSupervisor, pid)
   end
 
   defp describe_playlist(viewer) do
     server = self()
 
-    pid =
-      spawn(fn ->
-        send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
-      end)
+    describe = fn ->
+      send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
+    end
 
-    Process.monitor(pid)
+    {:ok, _pid} = start_child({Task, describe})
   end
 
   defp playlist_description(hls_url) do
@@ -299,7 +302,7 @@ defmodule StreamDoctor.Server do
         |> put_in([:viewers, id, :receiver_restarts_left], left - 1)
 
       {id, viewer} ->
-        Process.exit(viewer.watcher, :shutdown)
+        stop_child(viewer.watcher)
         put_in(state.viewers[id], mark_down(viewer, error))
 
       nil ->

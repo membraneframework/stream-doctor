@@ -13,9 +13,10 @@ defmodule StreamDoctor.Application do
     children =
       [
         StreamDoctor.Server,
+        {DynamicSupervisor, name: StreamDoctor.WorkerSupervisor},
         {Bandit, plug: StreamDoctor.Api, port: port}
       ] ++ StreamDoctor.StdinWatcher.child_specs()
 
-    Supervisor.start_link(children, strategy: :one_for_one, name: StreamDoctor.Supervisor)
+    Supervisor.start_link(children, strategy: :rest_for_one, name: StreamDoctor.Supervisor)
   end
 end

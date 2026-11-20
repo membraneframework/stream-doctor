@@ -9,10 +9,9 @@ defmodule StreamDoctor.ReceiverPipeline do
 
   alias Membrane.{AAC, H264, HTTPAdaptiveStream, RawAudio}
 
-  @spec start_link(String.t(), keyword()) :: pid()
-  def start_link(url, opts \\ []) do
-    {:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(__MODULE__, [url: url] ++ opts)
-    pipeline
+  @spec start_link(keyword()) :: Membrane.Pipeline.on_start()
+  def start_link(opts) do
+    Membrane.Pipeline.start_link(__MODULE__, opts)
   end
 
   @impl true
