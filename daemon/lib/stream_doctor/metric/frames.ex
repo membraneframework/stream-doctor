@@ -111,25 +111,25 @@ defmodule StreamDoctor.Metric.Frames do
 
   defp count_missing_and_duplicated(%{join: join} = track, number)
        when join == nil or (number < join and join - number <= @settle_lag) do
-    see(%{track | join: number}, number)
+    mark_seen(%{track | join: number}, number)
   end
 
   defp count_missing_and_duplicated(%{highest: highest} = track, number)
        when number > highest do
     track
     |> settle(horizon(number))
-    |> see(number)
+    |> mark_seen(number)
   end
 
   defp count_missing_and_duplicated(track, number) do
-    if settled?(track, number), do: duplicate(track, number), else: see(track, number)
+    if settled?(track, number), do: duplicate(track, number), else: mark_seen(track, number)
   end
 
   defp settled?(track, number) do
     MapSet.member?(track.seen, number) or number <= horizon(track.highest)
   end
 
-  defp see(track, number) do
+  defp mark_seen(track, number) do
     %{track | seen: MapSet.put(track.seen, number)}
   end
 
