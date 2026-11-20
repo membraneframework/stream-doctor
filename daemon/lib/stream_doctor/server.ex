@@ -17,8 +17,6 @@ defmodule StreamDoctor.Server do
     {Metric.Frames, []},
     {Metric.AvailabilityLatency, []}
   ]
-  @receiver_restarts 5
-  @receiver_restart_delay 1_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -133,7 +131,7 @@ defmodule StreamDoctor.Server do
       status: :waiting_for_playlist,
       error: nil,
       playlist: nil,
-      receiver_restarts_left: @receiver_restarts,
+      receiver_restarts_left: Application.fetch_env!(:stream_doctor, :receiver_restarts),
       collector: collector
     }
 
@@ -293,7 +291,8 @@ defmodule StreamDoctor.Server do
     case Enum.find(state.viewers, fn {_id, viewer} -> viewer.pid == pid end) do
       # A CDN can answer 404 for a playlist it has just served, and the HLS source crashes on that.
       {id, %{status: :receiving, receiver_restarts_left: left}} when error != nil and left > 0 ->
-        Process.send_after(self(), {:restart_receiver, id}, @receiver_restart_delay)
+        delay = Application.fetch_env!(:stream_doctor, :receiver_restart_delay_ms)
+        Process.send_after(self(), {:restart_receiver, id}, delay)
 
         state
         |> put_in([:viewers, id, :pid], nil)
