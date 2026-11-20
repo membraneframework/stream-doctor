@@ -20,25 +20,11 @@ defmodule StreamDoctor.Restarter do
     )
   end
 
-  @doc """
-  Returns the pid of the running child. For a child that starts under its own supervisor, like a
-  Membrane pipeline, it is the pid reported next to the supervisor's.
-  """
-  @spec child(pid()) :: pid()
-  def child(restarter) do
-    GenServer.call(restarter, :child)
-  end
-
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
     state = %{child: opts[:child], restarts_left: opts[:max_restarts], delay_ms: opts[:delay_ms]}
     {:ok, start(state)}
-  end
-
-  @impl true
-  def handle_call(:child, _from, state) do
-    {:reply, state.pid, state}
   end
 
   @impl true
@@ -62,8 +48,8 @@ defmodule StreamDoctor.Restarter do
     %{start: {module, function, args}} = Supervisor.child_spec(state.child, [])
 
     case apply(module, function, args) do
-      {:ok, pid} -> Map.put(state, :pid, pid)
-      {:ok, _supervisor, pid} -> Map.put(state, :pid, pid)
+      {:ok, _pid} -> state
+      {:ok, _supervisor, _pid} -> state
     end
   end
 end

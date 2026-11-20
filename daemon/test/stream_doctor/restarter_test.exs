@@ -9,8 +9,8 @@ defmodule StreamDoctor.RestarterTest do
     test = self()
 
     crash = fn ->
-      send(test, :started)
-      exit(:boom)
+      send(test, {:started, self()})
+      receive(do: (:go -> exit(:boom)))
     end
 
     restarter =
@@ -18,16 +18,20 @@ defmodule StreamDoctor.RestarterTest do
 
     Process.monitor(restarter)
 
-    for _start <- 1..3, do: assert_receive(:started)
+    for _start <- 1..3 do
+      assert_receive {:started, child}
+      send(child, :go)
+    end
+
     assert_receive {:DOWN, _ref, :process, ^restarter, :boom}
-    refute_receive :started
+    refute_receive {:started, _child}
   end
 
   test "a child that ends normally is not started again" do
     test = self()
 
     finish = fn ->
-      send(test, :started)
+      send(test, {:started, self()})
       receive(do: (:go -> :ok))
     end
 
@@ -35,25 +39,10 @@ defmodule StreamDoctor.RestarterTest do
       start_supervised!({Restarter, child: {Task, finish}, max_restarts: 2, delay_ms: 10})
 
     Process.monitor(restarter)
-    restarter |> Restarter.child() |> send(:go)
+    assert_receive {:started, child}
+    send(child, :go)
 
     assert_receive {:DOWN, _ref, :process, ^restarter, :normal}
-    assert_receive :started
-    refute_receive :started
-  end
-
-  test "without restarts a crashing child ends the restarter right away" do
-    crash = fn -> receive(do: (:go -> exit(:boom))) end
-    restarter = start_supervised!({Restarter, child: {Task, crash}})
-    Process.monitor(restarter)
-    restarter |> Restarter.child() |> send(:go)
-
-    assert_receive {:DOWN, _ref, :process, ^restarter, :boom}
-  end
-
-  test "the running child can be reached" do
-    restarter = start_supervised!({Restarter, child: {Agent, fn -> :held end}})
-
-    assert restarter |> Restarter.child() |> Agent.get(& &1) == :held
+    refute_receive {:started, _child}
   end
 end

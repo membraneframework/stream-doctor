@@ -70,7 +70,7 @@ defmodule StreamDoctor.Server do
          {:ok, parsed} <- parse_input(input) do
       started_at = Metric.now_ms()
       sender = {StreamDoctor.SenderPipeline, input: parsed, rtmp_url: rtmp_url, on_live: self()}
-      pid = sender |> start_child() |> Restarter.child()
+      {:ok, _supervisor, pid} = start_child(sender)
 
       Process.monitor(pid)
       broadcast(state.viewers, {:streamer_started, {:watching, started_at}})
@@ -114,8 +114,8 @@ defmodule StreamDoctor.Server do
   @impl true
   def handle_call({:start_viewer, hls_url}, _from, state) do
     id = "viewer-#{state.next_id}"
-    collector = {Collector, @metric_specs} |> start_child() |> Restarter.child()
-    watcher = start_child({Watcher, url: hls_url, notify: {self(), id}})
+    {:ok, collector} = start_child({Collector, @metric_specs})
+    {:ok, watcher} = start_child({Watcher, url: hls_url, notify: {self(), id}})
 
     if state.streamer != nil do
       Collector.record(collector, {:streamer_started, :missed})
@@ -228,7 +228,7 @@ defmodule StreamDoctor.Server do
       delay_ms: Application.fetch_env!(:stream_doctor, :receiver_restart_delay_ms)
     ]
 
-    pid = start_child(receiver, restarts)
+    {:ok, pid} = start_child(receiver, restarts)
     Process.monitor(pid)
 
     %{viewer | pid: pid, status: :receiving}
@@ -236,10 +236,13 @@ defmodule StreamDoctor.Server do
 
   defp start_receiving(viewer, _event), do: viewer
 
-  defp start_child(spec, restarts \\ []) do
-    restarter = {Restarter, [child: spec] ++ restarts}
-    {:ok, pid} = DynamicSupervisor.start_child(StreamDoctor.WorkerSupervisor, restarter)
-    pid
+  defp start_child(spec) do
+    spec = Supervisor.child_spec(spec, restart: :temporary)
+    DynamicSupervisor.start_child(StreamDoctor.WorkerSupervisor, spec)
+  end
+
+  defp start_child(spec, restarts) do
+    start_child({Restarter, [child: spec] ++ restarts})
   end
 
   defp stop_child(pid) do
@@ -253,7 +256,7 @@ defmodule StreamDoctor.Server do
       send(server, {:playlist_description, viewer.id, playlist_description(viewer.hls_url)})
     end
 
-    start_child({Task, describe})
+    {:ok, _pid} = start_child({Task, describe})
   end
 
   defp playlist_description(hls_url) do
