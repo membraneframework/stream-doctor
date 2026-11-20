@@ -10,7 +10,8 @@ defmodule StreamDoctor.Application do
     Logger.info("Running stream-doctor v#{Application.spec(:stream_doctor, :vsn)}")
     port = Application.fetch_env!(:stream_doctor, :port)
 
-    # A temporary child stopped by rest_for_one is not started again, so the watcher goes first.
+    # With rest_for_one the order is crucial: the stdin watcher goes first so that it is not stopped
+    # when a child after it dies, because as a temporary child it would never be started again.
     children =
       StreamDoctor.StdinWatcher.child_specs() ++
         [
