@@ -228,7 +228,7 @@ defmodule StreamDoctor.Server do
       delay_ms: Application.fetch_env!(:stream_doctor, :receiver_restart_delay_ms)
     ]
 
-    {:ok, pid} = start_child(receiver, restarts)
+    {:ok, pid} = start_child_with_restarts(receiver, restarts)
     Process.monitor(pid)
 
     %{viewer | pid: pid, status: :receiving}
@@ -241,7 +241,7 @@ defmodule StreamDoctor.Server do
     DynamicSupervisor.start_child(StreamDoctor.WorkerSupervisor, spec)
   end
 
-  defp start_child(spec, restarts) do
+  defp start_child_with_restarts(spec, restarts) do
     start_child({Restarter, [child: spec] ++ restarts})
   end
 
