@@ -165,7 +165,7 @@ it directly, it listens on port 4040 (`PORT` to change it) and speaks JSON:
   `DELETE /viewers/:id`,
 * `GET /status`.
 
-Metrics collected by a viewer are returned under `metrics`.
+Metrics collected by a viewer or the streamer are returned under `metrics`.
 
 ## Copyright and License
 
