@@ -12,7 +12,9 @@ mix deps.get
 mix run --no-halt
 ```
 
-This starts the daemon on port 4040 (`PORT` to change it). Connect with
+This starts the daemon on port 4040 (`PORT` to change it). A receiver that
+crashes is started again up to 5 times, 1000 ms apart (`RECEIVER_RESTARTS` and
+`RECEIVER_RESTART_DELAY_MS` to change it). Connect with
 `session({ daemonUrl: "http://localhost:4040" })` from the TypeScript SDK,
 so no binary is needed for development.
 
