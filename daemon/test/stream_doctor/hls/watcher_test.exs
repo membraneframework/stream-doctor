@@ -68,6 +68,7 @@ defmodule StreamDoctor.HLS.WatcherTest do
 
       case response.(conn.request_path) do
         {:ok, body} -> Req.Test.text(conn, body)
+        {:error, :timeout} -> Req.Test.transport_error(conn, :timeout)
         {:error, status} -> Plug.Conn.send_resp(conn, status, "")
       end
     end)
@@ -261,6 +262,35 @@ defmodule StreamDoctor.HLS.WatcherTest do
     watch(@base, 500)
 
     assert_receive {:hls, _watcher, {:segment_available, 1, _at}}, 2_000
+  end
+
+  test "every reload is reported with its status and how long the answer took" do
+    serve([
+      fn _path -> {:ok, media(1, 0, [0.2])} end,
+      fn _path -> {:error, 503} end,
+      fn _path -> {:error, :timeout} end,
+      fn _path ->
+        Process.sleep(@slow_response)
+        {:ok, media(1, 0, [0.2, 0.2])}
+      end
+    ])
+
+    watch(@base)
+
+    assert_receive {:hls, _watcher, {:first_frame_arrived, _at}}, 1_000
+    assert_receive {:hls, _watcher, {:playlist_requested, 503, _took_ms}}, 1_000
+    assert_receive {:hls, _watcher, {:playlist_requested, :timeout, _took_ms}}, 1_000
+    assert_receive {:hls, _watcher, {:playlist_requested, 200, took_ms}}, 1_000
+    assert took_ms >= @slow_response
+  end
+
+  test "the requests made before the playlist listed a segment are not reported" do
+    serve([fn _path -> {:error, 404} end])
+
+    ref = watch(@base, 300)
+
+    assert_stopped(ref, "not available")
+    refute_received {:hls, _watcher, {:playlist_requested, _status, _took_ms}}
   end
 
   test "a playlist whose first load already dropped segments is watched from there" do

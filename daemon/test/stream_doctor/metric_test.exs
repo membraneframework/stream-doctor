@@ -494,6 +494,69 @@ defmodule StreamDoctor.MetricTest do
     end
   end
 
+  describe "PlaylistRequests" do
+    defp requests(events) do
+      Metric.PlaylistRequests.report(run(Metric.PlaylistRequests, [], events))
+    end
+
+    test "nothing is reported before the first reload" do
+      assert requests([]) == %{
+               requests: 0,
+               failed: 0,
+               timeouts: 0,
+               statuses: %{},
+               ms: nil,
+               latest_samples: []
+             }
+    end
+
+    test "answers are counted per status and anything but a 200 has failed" do
+      events = [
+        {:playlist_requested, 200, 10},
+        {:playlist_requested, 404, 30},
+        {:playlist_requested, 200, 20}
+      ]
+
+      assert requests(events) == %{
+               requests: 3,
+               failed: 1,
+               timeouts: 0,
+               statuses: %{200 => 2, 404 => 1},
+               ms: 20,
+               latest_samples: [20, 30, 10]
+             }
+    end
+
+    test "a timeout and a connection error fail without a status or a time" do
+      events = [
+        {:playlist_requested, 200, 10},
+        {:playlist_requested, :timeout, 5000},
+        {:playlist_requested, :error, 1}
+      ]
+
+      assert requests(events) == %{
+               requests: 3,
+               failed: 2,
+               timeouts: 1,
+               statuses: %{200 => 1},
+               ms: 10,
+               latest_samples: [10]
+             }
+    end
+
+    test "only the newest samples are kept" do
+      report = requests(Enum.map(1..60, &{:playlist_requested, 200, &1}))
+
+      assert report.requests == 60
+      assert report.latest_samples == Enum.to_list(60..51//-1)
+      assert report.ms == 36
+    end
+
+    test "the report encodes to JSON" do
+      assert JSON.encode!(requests([{:playlist_requested, 200, 10}])) =~ ~s("200":1)
+    end
+  end
+
   describe "RtmpPublish" do
     defp publish(events) do
       Metric.RtmpPublish.report(run(Metric.RtmpPublish, [], events))

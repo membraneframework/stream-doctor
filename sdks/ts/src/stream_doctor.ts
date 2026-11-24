@@ -137,12 +137,23 @@ export interface AvailabilityLatency {
   latest_samples: number[];
 }
 
+/** How the media playlist reloads were answered, counted once the playlist lists a segment. */
+export interface PlaylistRequests {
+  requests: number;
+  failed: number;
+  timeouts: number;
+  statuses: Record<string, number>;
+  ms: number | null;
+  latest_samples: number[];
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
   time_to_first_frame?: TimeToFirstFrame;
   frames?: TrackFrameFaults;
   availability_latency?: AvailabilityLatency;
+  playlist_requests?: PlaylistRequests;
   error?: string;
 }
 
