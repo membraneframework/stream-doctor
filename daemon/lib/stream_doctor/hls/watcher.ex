@@ -15,6 +15,7 @@ defmodule StreamDoctor.HLS.Watcher do
   @doc """
   Polls `url` until a media playlist lists a segment, descending into a master's first variant,
   then keeps reloading that playlist, sending each event to `notify`'s pid as `{:hls, tag, event}`.
+  Every reload is reported as `{:playlist_requested, status, took_ms}`.
 
   A playlist that never appears ends the watch with `{:shutdown, why}`.
   """
@@ -52,8 +53,11 @@ defmodule StreamDoctor.HLS.Watcher do
   @impl true
   def handle_info(:reload, state) do
     asked_at = Metric.now_ms()
+    {status, response} = fetch(state.url)
+    notify(state, {:playlist_requested, status, Metric.now_ms() - asked_at})
 
-    with {:segments, playlist} <- classify(state.url),
+    with {:ok, body} <- response,
+         {:segments, playlist} <- classify_body(body, state.url),
          newest when newest >= state.due <- newest(playlist) do
       notify(state, {:segment_available, newest, Metric.now_ms()})
       {:noreply, aim_at_next(state, playlist, asked_at)}
@@ -134,12 +138,17 @@ defmodule StreamDoctor.HLS.Watcher do
   end
 
   defp classify(url) do
-    with {:ok, body} <- fetch(url) do
-      cond do
-        body =~ "#EXTINF" -> media(body)
-        body =~ "#EXT-X-STREAM-INF" -> variant(body, url)
-        true -> :no_segments
-      end
+    case fetch(url) do
+      {_status, {:ok, body}} -> classify_body(body, url)
+      {_status, error} -> error
+    end
+  end
+
+  defp classify_body(body, url) do
+    cond do
+      body =~ "#EXTINF" -> media(body)
+      body =~ "#EXT-X-STREAM-INF" -> variant(body, url)
+      true -> :no_segments
     end
   end
 
@@ -162,13 +171,16 @@ defmodule StreamDoctor.HLS.Watcher do
   defp fetch(url) do
     case Req.get(url, retry: false, receive_timeout: 5_000) do
       {:ok, %Req.Response{status: 200, body: body}} when is_binary(body) ->
-        {:ok, body}
+        {200, {:ok, body}}
 
       {:ok, %Req.Response{status: status}} ->
-        {:error, "HTTP #{status}"}
+        {status, {:error, "HTTP #{status}"}}
+
+      {:error, %Req.TransportError{reason: :timeout} = error} ->
+        {:timeout, {:error, Exception.message(error)}}
 
       {:error, error} ->
-        {:error, Exception.message(error)}
+        {:error, {:error, Exception.message(error)}}
     end
   end
 end
