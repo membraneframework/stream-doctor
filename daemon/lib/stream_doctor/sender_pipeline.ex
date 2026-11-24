@@ -2,8 +2,10 @@ defmodule StreamDoctor.SenderPipeline do
   @moduledoc """
   Streams an input via RTMP.
 
-  Options: `:input`, `:rtmp_url`, `:on_live` (pid that gets `{:streamer_live, pipeline_pid}` once
-  the first video frame reaches the sink, and `{:video_frame_sent, frame_number, at_ms}` for each).
+  Options: `:input`, `:rtmp_url`, `:on_live` (pid that gets
+  `{:streamer_connected, pipeline_pid, at_ms}` once the ingest accepts the publish,
+  `{:streamer_live, pipeline_pid}` once the first video frame reaches the sink, and
+  `{:video_frame_sent, frame_number, at_ms}` for each).
   """
 
   use Membrane.Pipeline
@@ -46,6 +48,20 @@ defmodule StreamDoctor.SenderPipeline do
 
   @impl true
   def handle_child_notification(_notification, _child, _ctx, state) do
+    {[], state}
+  end
+
+  @impl true
+  def handle_child_setup_completed(:rtmp_sink, _ctx, state) do
+    if state.on_live do
+      send(state.on_live, {:streamer_connected, self(), StreamDoctor.Metric.now_ms()})
+    end
+
+    {[], state}
+  end
+
+  @impl true
+  def handle_child_setup_completed(_child, _ctx, state) do
     {[], state}
   end
 

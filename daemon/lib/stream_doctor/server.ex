@@ -74,8 +74,12 @@ defmodule StreamDoctor.Server do
       Process.monitor(pid)
       broadcast(state.viewers, {:streamer_started, {:watching, started_at}})
 
+      {:ok, collector} = Collector.start_link([{Metric.RtmpPublish, []}])
+      Collector.record(collector, {:streamer_started, {:watching, started_at}})
+
       streamer = %{
         pid: pid,
+        collector: collector,
         input: Publisher.summary(parsed),
         rtmp_url: rtmp_url,
         status: :streaming,
@@ -181,6 +185,17 @@ defmodule StreamDoctor.Server do
   end
 
   @impl true
+  def handle_info({:streamer_connected, pid, at}, %{streamer: %{pid: pid}} = state) do
+    Collector.record(state.streamer.collector, {:streamer_connected, at})
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:streamer_connected, _stale_pid, _at}, state) do
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:video_frame_sent, _frame_number, _at} = event, state) do
     broadcast(state.viewers, event)
     {:noreply, state}
@@ -269,6 +284,7 @@ defmodule StreamDoctor.Server do
   defp watch_error(reason), do: inspect(reason)
 
   defp mark_down_pid(%{streamer: %{pid: pid} = streamer} = state, pid, error) do
+    if error, do: Collector.record(streamer.collector, :streamer_failed)
     %{state | streamer: mark_down(streamer, error)}
   end
 
@@ -318,7 +334,9 @@ defmodule StreamDoctor.Server do
   end
 
   defp streamer_summary(streamer) do
-    Map.take(streamer, [:input, :rtmp_url, :status, :error, :live])
+    streamer
+    |> Map.take([:input, :rtmp_url, :status, :error, :live])
+    |> Map.put(:metrics, safe_report(streamer.collector))
   end
 
   defp viewer_summary(viewer) do
