@@ -15,7 +15,8 @@ defmodule StreamDoctor.HLS.Watcher do
   @doc """
   Polls `url` until a media playlist lists a segment, descending into a master's first variant,
   then keeps reloading that playlist, sending each event to `notify`'s pid as `{:hls, tag, event}`.
-  Every reload is reported as `{:playlist_requested, status, took_ms}`.
+  Every reload is reported as `{:playlist_requested, status, took_ms}` and, like the first load,
+  as `{:playlist_read, at_ms, listing}`.
 
   A playlist that never appears ends the watch with `{:shutdown, why}`.
   """
@@ -56,15 +57,15 @@ defmodule StreamDoctor.HLS.Watcher do
     {status, response} = fetch(state.url)
     notify(state, {:playlist_requested, status, Metric.now_ms() - asked_at})
 
-    with {:ok, body} <- response,
-         {:segments, playlist} <- classify_body(body, state.url),
-         newest when newest >= state.due <- newest(playlist) do
-      notify(state, {:segment_available, newest, Metric.now_ms()})
+    playlist = read(response, state.url)
+    notify(state, {:playlist_read, Metric.now_ms(), listing(playlist)})
+
+    if playlist != nil and newest(playlist) >= state.due do
+      notify(state, {:segment_available, newest(playlist), Metric.now_ms()})
       {:noreply, aim_at_next(state, playlist, asked_at)}
     else
-      _due_segment_not_listed ->
-        reload_at(asked_at + state.gap_ms)
-        {:noreply, %{state | missed_at: asked_at}}
+      reload_at(asked_at + state.gap_ms)
+      {:noreply, %{state | missed_at: asked_at}}
     end
   end
 
@@ -74,6 +75,7 @@ defmodule StreamDoctor.HLS.Watcher do
     case classify(state.url) do
       {:segments, playlist} ->
         notify(state, {:first_frame_arrived, at})
+        notify(state, {:playlist_read, Metric.now_ms(), listing(playlist)})
         {:noreply, aim_at_next(state, playlist, at)}
 
       {:variant, url} when url != state.url ->
@@ -142,6 +144,27 @@ defmodule StreamDoctor.HLS.Watcher do
       {_status, {:ok, body}} -> classify_body(body, url)
       {_status, error} -> error
     end
+  end
+
+  defp read(response, url) do
+    with {:ok, body} <- response,
+         {:segments, playlist} <- classify_body(body, url) do
+      playlist
+    else
+      _unreadable -> nil
+    end
+  end
+
+  defp listing(nil) do
+    :unreadable
+  end
+
+  defp listing(%{info: %{end_list?: true}}) do
+    :ended
+  end
+
+  defp listing(playlist) do
+    {newest(playlist), playlist.info.target_duration * 1_000}
   end
 
   defp classify_body(body, url) do

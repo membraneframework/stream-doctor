@@ -284,6 +284,23 @@ defmodule StreamDoctor.HLS.WatcherTest do
     assert took_ms >= @slow_response
   end
 
+  test "every read is reported with the newest segment and the target duration" do
+    serve([
+      fn _path -> {:ok, media(2, 0, [0.2])} end,
+      fn _path -> {:error, 503} end,
+      fn _path -> {:ok, media(2, 0, [0.2, 0.2])} end,
+      fn _path -> {:ok, media(2, 0, [0.2, 0.2]) <> "#EXT-X-ENDLIST\n"} end
+    ])
+
+    watch(@base)
+
+    assert_receive {:hls, _watcher, {:playlist_read, first_at, {0, 2_000}}}, 1_000
+    assert_receive {:hls, _watcher, {:playlist_read, _at, :unreadable}}, 1_000
+    assert_receive {:hls, _watcher, {:playlist_read, at, {1, 2_000}}}, 1_000
+    assert_receive {:hls, _watcher, {:playlist_read, _at, :ended}}, 1_000
+    assert at > first_at
+  end
+
   test "the requests made before the playlist listed a segment are not reported" do
     serve([fn _path -> {:error, 404} end])
 
