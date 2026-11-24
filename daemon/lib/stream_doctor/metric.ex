@@ -16,6 +16,10 @@ defmodule StreamDoctor.Metric do
           | {:first_frame_arrived, at_ms :: integer()}
           | {:video_frame_sent, frame_number :: non_neg_integer(), at_ms :: integer()}
           | {:segment_available, sequence_number :: non_neg_integer(), at_ms :: integer()}
+          | {:playlist_read, at_ms :: integer(),
+             {newest_sequence_number :: non_neg_integer(), target_duration_ms :: pos_integer()}
+             | :ended
+             | :unreadable}
           | {:playlist_requested, status :: pos_integer() | :timeout | :error,
              took_ms :: non_neg_integer()}
           | {:video_chunk_received, sequence_number :: non_neg_integer(),

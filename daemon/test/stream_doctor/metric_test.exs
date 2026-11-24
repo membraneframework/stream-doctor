@@ -557,6 +557,75 @@ defmodule StreamDoctor.MetricTest do
     end
   end
 
+  describe "PlaylistAge" do
+    defp age(events) do
+      Metric.PlaylistAge.report(run(Metric.PlaylistAge, [], events))
+    end
+
+    defp read(at, listing) do
+      {:playlist_read, at, listing}
+    end
+
+    test "nothing is reported before the playlist is read" do
+      assert age([]) == %{
+               target_duration_ms: nil,
+               age_ms: nil,
+               max_age_ms: nil,
+               stale: 0,
+               latest_samples: []
+             }
+    end
+
+    test "a playlist updated on time is never stale" do
+      events = [read(0, {5, 2000}), read(1900, {5, 2000}), read(2100, {6, 2000})]
+
+      assert age(events ++ [read(3000, {6, 2000})]) == %{
+               target_duration_ms: 2000,
+               age_ms: 900,
+               max_age_ms: 2100,
+               stale: 0,
+               latest_samples: [2100]
+             }
+    end
+
+    test "a playlist is stale past one and a half target durations, once per stall" do
+      events = [
+        read(0, {5, 2000}),
+        read(3000, {5, 2000}),
+        read(3001, {5, 2000}),
+        read(4000, {5, 2000})
+      ]
+
+      assert %{stale: 1, age_ms: 4000, max_age_ms: 4000, latest_samples: []} = age(events)
+
+      assert %{stale: 2, age_ms: 3500, max_age_ms: 4500, latest_samples: [4500]} =
+               age(events ++ [read(4500, {6, 2000}), read(8000, {6, 2000})])
+    end
+
+    test "a stall nobody read the playlist during is counted when the segment shows up" do
+      assert %{stale: 1, age_ms: 0, latest_samples: [9000]} =
+               age([read(0, {5, 2000}), read(9000, {6, 2000})])
+    end
+
+    test "an unreadable playlist keeps ageing" do
+      events = [read(0, {5, 2000}), read(3500, :unreadable)]
+
+      assert %{stale: 1, age_ms: 3500} = age(events)
+    end
+
+    test "an ended playlist stops ageing" do
+      events = [read(0, {5, 2000}), read(1000, :ended), read(60_000, :ended)]
+
+      assert %{stale: 0, age_ms: 0, max_age_ms: 0} = age(events)
+    end
+
+    test "only the newest samples are kept" do
+      events = Enum.map(0..20, &read(&1 * &1, {&1, 2000}))
+
+      assert age(events).latest_samples == Enum.map(20..11//-1, &(2 * &1 - 1))
+    end
+  end
+
   describe "RtmpPublish" do
     defp publish(events) do
       Metric.RtmpPublish.report(run(Metric.RtmpPublish, [], events))

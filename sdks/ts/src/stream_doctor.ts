@@ -147,6 +147,15 @@ export interface PlaylistRequests {
   latest_samples: number[];
 }
 
+/** How long the media playlist goes without a new segment; `stale` counts ages past 1.5 target durations. */
+export interface PlaylistAge {
+  target_duration_ms: number | null;
+  age_ms: number | null;
+  max_age_ms: number | null;
+  stale: number;
+  latest_samples: number[];
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
@@ -154,6 +163,7 @@ export interface Metrics {
   frames?: TrackFrameFaults;
   availability_latency?: AvailabilityLatency;
   playlist_requests?: PlaylistRequests;
+  playlist_age?: PlaylistAge;
   error?: string;
 }
 
