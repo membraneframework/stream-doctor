@@ -562,8 +562,12 @@ defmodule StreamDoctor.MetricTest do
       Metric.PlaylistAge.report(run(Metric.PlaylistAge, [], events))
     end
 
-    defp read(at, listing) do
-      {:playlist_read, at, listing}
+    defp read(at, {newest, target_duration_ms}) do
+      {:playlist_read, at, %{newest: newest, target_duration_ms: target_duration_ms}}
+    end
+
+    defp read(at, state) do
+      {:playlist_read, at, state}
     end
 
     test "nothing is reported before the playlist is read" do
@@ -623,6 +627,73 @@ defmodule StreamDoctor.MetricTest do
       events = Enum.map(0..20, &read(&1 * &1, {&1, 2000}))
 
       assert age(events).latest_samples == Enum.map(20..11//-1, &(2 * &1 - 1))
+    end
+  end
+
+  describe "MediaSequence" do
+    defp sequence(events) do
+      Metric.MediaSequence.report(run(Metric.MediaSequence, [], events))
+    end
+
+    defp listed(numbers, name \\ "seg") do
+      listing = %{
+        media_sequence: Enum.min(numbers),
+        newest: Enum.max(numbers),
+        target_duration_ms: 2000,
+        uris: Map.new(numbers, &{&1, "#{name}#{&1}.ts"})
+      }
+
+      {:playlist_read, 0, listing}
+    end
+
+    @clean %{regressed: 0, skipped: 0, replaced: 0, withdrawn: 0, latest_faults: []}
+
+    test "a sliding window that keeps its segments reports no fault" do
+      assert sequence([listed(3..5), listed(3..6), listed(4..6), listed(5..7)]) == @clean
+    end
+
+    test "a window that jumps to the segment right after the newest skips nothing" do
+      assert sequence([listed(3..5), listed(6..8)]) == @clean
+    end
+
+    test "segments the window moved past unseen are skipped" do
+      assert sequence([listed(3..5), listed(9..11)]) ==
+               %{@clean | skipped: 3, latest_faults: [%{fault: :skipped, from: 6, to: 8}]}
+    end
+
+    test "a media sequence that went down has regressed, and is compared from there" do
+      assert sequence([listed(7..9), listed(0..2), listed(1..3)]) ==
+               %{@clean | regressed: 1, latest_faults: [%{fault: :regressed, from: 7, to: 0}]}
+    end
+
+    test "a segment whose URI changed under its number was replaced" do
+      events = [listed(3..5), {:playlist_read, 0, put_in(elem(listed(3..6), 2).uris[4], "x.ts")}]
+
+      assert sequence(events) ==
+               %{@clean | replaced: 1, latest_faults: [%{fault: :replaced, from: 4, to: 4}]}
+    end
+
+    test "segments gone from the end of the playlist were withdrawn" do
+      assert sequence([listed(3..7), listed(3..5)]) ==
+               %{@clean | withdrawn: 2, latest_faults: [%{fault: :withdrawn, from: 6, to: 7}]}
+    end
+
+    test "an unreadable or ended playlist is not compared" do
+      events = [listed(3..5), {:playlist_read, 0, :unreadable}, {:playlist_read, 0, :ended}]
+
+      assert sequence(events ++ [listed(4..6)]) == @clean
+    end
+
+    test "only the newest faults are kept, newest first" do
+      report = sequence(Enum.map(0..12, &listed([&1 * 3])))
+
+      assert report.skipped == 24
+      assert length(report.latest_faults) == 10
+      assert hd(report.latest_faults) == %{fault: :skipped, from: 34, to: 35}
+    end
+
+    test "the report encodes to JSON" do
+      assert JSON.encode!(sequence([listed(3..5), listed(9..11)])) =~ ~s("fault":"skipped")
     end
   end
 

@@ -156,6 +156,22 @@ export interface PlaylistAge {
   latest_samples: number[];
 }
 
+/** A media sequence fault and the sequence numbers it spans. */
+export interface MediaSequenceFault {
+  fault: "regressed" | "skipped" | "replaced" | "withdrawn";
+  from: number;
+  to: number;
+}
+
+/** Whether the media playlist only moved forward, counted per kind of fault. */
+export interface MediaSequence {
+  regressed: number;
+  skipped: number;
+  replaced: number;
+  withdrawn: number;
+  latest_faults: MediaSequenceFault[];
+}
+
 /** Metrics collected by a viewer. */
 export interface Metrics {
   av_drift?: AvDrift;
@@ -164,6 +180,7 @@ export interface Metrics {
   availability_latency?: AvailabilityLatency;
   playlist_requests?: PlaylistRequests;
   playlist_age?: PlaylistAge;
+  media_sequence?: MediaSequence;
   error?: string;
 }
 

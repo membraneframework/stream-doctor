@@ -17,7 +17,12 @@ defmodule StreamDoctor.Metric do
           | {:video_frame_sent, frame_number :: non_neg_integer(), at_ms :: integer()}
           | {:segment_available, sequence_number :: non_neg_integer(), at_ms :: integer()}
           | {:playlist_read, at_ms :: integer(),
-             {newest_sequence_number :: non_neg_integer(), target_duration_ms :: pos_integer()}
+             %{
+               media_sequence: non_neg_integer(),
+               newest: non_neg_integer(),
+               target_duration_ms: pos_integer(),
+               uris: %{(sequence_number :: non_neg_integer()) => String.t()}
+             }
              | :ended
              | :unreadable}
           | {:playlist_requested, status :: pos_integer() | :timeout | :error,

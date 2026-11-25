@@ -46,8 +46,15 @@ defmodule StreamDoctor.Metric.PlaylistAge do
   end
 
   @impl true
-  def record({:playlist_read, at, {newest, target_ms}}, %{changed_at: nil} = state) do
-    %{state | target_ms: target_ms, newest: newest, changed_at: at, age_ms: 0, max_age_ms: 0}
+  def record({:playlist_read, at, %{} = listing}, %{changed_at: nil} = state) do
+    %{
+      state
+      | target_ms: listing.target_duration_ms,
+        newest: listing.newest,
+        changed_at: at,
+        age_ms: 0,
+        max_age_ms: 0
+    }
   end
 
   @impl true
@@ -56,9 +63,9 @@ defmodule StreamDoctor.Metric.PlaylistAge do
   end
 
   @impl true
-  def record({:playlist_read, at, {newest, target_ms}}, %{newest: listed} = state)
+  def record({:playlist_read, at, %{newest: newest} = listing}, %{newest: listed} = state)
       when newest != listed do
-    state = age(%{state | target_ms: target_ms}, at)
+    state = age(%{state | target_ms: listing.target_duration_ms}, at)
 
     %{
       state

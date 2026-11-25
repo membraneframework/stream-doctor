@@ -17,7 +17,8 @@ defmodule StreamDoctor.Server do
     {Metric.Frames, []},
     {Metric.AvailabilityLatency, []},
     {Metric.PlaylistRequests, []},
-    {Metric.PlaylistAge, []}
+    {Metric.PlaylistAge, []},
+    {Metric.MediaSequence, []}
   ]
 
   def start_link(opts \\ []) do

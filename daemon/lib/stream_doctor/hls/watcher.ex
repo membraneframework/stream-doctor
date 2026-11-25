@@ -164,7 +164,20 @@ defmodule StreamDoctor.HLS.Watcher do
   end
 
   defp listing(playlist) do
-    {newest(playlist), playlist.info.target_duration * 1_000}
+    first = playlist.info.media_sequence
+
+    uris =
+      playlist
+      |> segments()
+      |> Enum.with_index(first)
+      |> Map.new(fn {segment, number} -> {number, segment.uri} end)
+
+    %{
+      media_sequence: first,
+      newest: newest(playlist),
+      target_duration_ms: playlist.info.target_duration * 1_000,
+      uris: uris
+    }
   end
 
   defp classify_body(body, url) do
