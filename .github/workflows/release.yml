@@ -129,6 +129,13 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not match package.json version $version"
             exit 1
           }
+          # A prerelease goes under its own dist-tag, so that `latest` stays
+          # on the newest stable version.
+          case "$version" in
+            *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*} ;;
+            *) dist_tag=latest ;;
+          esac
+          echo "DIST_TAG=$dist_tag" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@v4
         with:
@@ -151,7 +158,7 @@ jobs:
             if npm view "@stream-doctor/$platform@$version" version >/dev/null 2>&1; then
               echo "@stream-doctor/$platform@$version is already published, skipping"
             else
-              (cd "$dir" && npm pkg set version="$version" && npm publish --provenance --access public)
+              (cd "$dir" && npm pkg set version="$version" && npm publish --provenance --access public --tag "$DIST_TAG")
             fi
             npm pkg set "optionalDependencies.@stream-doctor/$platform=$version"
           done
@@ -162,5 +169,5 @@ jobs:
           if npm view "stream-doctor@$version" version >/dev/null 2>&1; then
             echo "stream-doctor@$version is already published, skipping"
           else
-            npm publish --provenance --access public
+            npm publish --provenance --access public --tag "$DIST_TAG"
           fi

@@ -51,6 +51,13 @@ Requires Node 20+.
 npm install stream-doctor
 ```
 
+The upcoming 0.2.0 is available as an alpha. Its API differs from 0.1.0 and
+may still change before the final 0.2.0.
+
+```sh
+npm install stream-doctor@alpha
+```
+
 This installs the TypeScript SDK. The SDK talks to the daemon, which does the
 actual streaming and measuring, so you also need to make sure it is available.
 There are three ways to do that.
