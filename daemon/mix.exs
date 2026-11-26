@@ -29,13 +29,7 @@ defmodule StreamDoctor.MixProject do
   defp releases do
     [
       stream_doctor: [
-        steps: [
-          :assemble,
-          &bundle_openssl/1,
-          &__MODULE__.Symlinks.run/1,
-          &musl_stub/1,
-          &Burrito.wrap/1
-        ],
+        steps: [:assemble, &__MODULE__.Symlinks.run/1, &musl_stub/1, &Burrito.wrap/1],
         burrito: [
           targets: burrito_targets(),
           plugin: "rel/burrito_plugin/symlinks.zig"
@@ -50,32 +44,6 @@ defmodule StreamDoctor.MixProject do
   # are never used; an empty file only lets the Zig build go through.
   defp musl_stub(release) do
     File.write!("deps/burrito/src/musl-runtime.so", "")
-    release
-  end
-
-  # The precompiled ffmpeg's libsrt loads OpenSSL 3 by @rpath, but the archive does not ship it.
-  defp bundle_openssl(release) do
-    if match?({:unix, :darwin}, :os.type()) do
-      {prefix, 0} = System.cmd("brew", ["--prefix", "openssl@3"])
-
-      [dest] =
-        Path.wildcard(
-          Path.join(release.path, "lib/bundlex-*/priv/shared/precompiled/*ffmpeg*/lib")
-        )
-
-      for lib <- ["libssl.3.dylib", "libcrypto.3.dylib"] do
-        File.cp!(Path.join([String.trim(prefix), "lib", lib]), Path.join(dest, lib))
-        File.chmod!(Path.join(dest, lib), 0o644)
-      end
-
-      ssl = Path.join(dest, "libssl.3.dylib")
-      {linked, 0} = System.cmd("otool", ["-L", ssl])
-      [crypto] = Regex.run(~r/\S+libcrypto\.3\.dylib/, linked)
-      change = ["-change", crypto, "@loader_path/libcrypto.3.dylib", ssl]
-      {_, 0} = System.cmd("install_name_tool", change)
-      {_, 0} = System.cmd("codesign", ["--force", "--sign", "-", ssl])
-    end
-
     release
   end
 
