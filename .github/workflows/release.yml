@@ -81,7 +81,9 @@ jobs:
       - name: Pack the host ERTS
         run: rel/pack_host_erts.sh
 
-      - run: mix release --overwrite
+      # The Rust NIF lands in priv/, outside the cache, so a restored _build
+      # would otherwise skip building it.
+      - run: mix release --overwrite --force
 
       - name: Smoke test
         run: |
