@@ -66,7 +66,15 @@ There are three ways to do that.
 
 On macOS (Apple Silicon), Linux (x86_64) and Linux (arm64) the daemon binary
 is downloaded automatically along with the package, as an optional dependency
-on `@stream-doctor/<platform>`. Nothing else is needed.
+on `@stream-doctor/<platform>`.
+
+On macOS the daemon also needs OpenSSL 3 from Homebrew, linked into
+Homebrew's `lib` directory:
+
+```sh
+brew install openssl@3
+ln -sf "$(brew --prefix openssl@3)"/lib/lib{ssl,crypto}.3.dylib "$(brew --prefix)/lib/"
+```
 
 ### Running the daemon from source
 

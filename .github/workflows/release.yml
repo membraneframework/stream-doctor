@@ -58,7 +58,11 @@ jobs:
 
       - name: Install Erlang and Elixir
         if: runner.os == 'macOS'
-        run: brew install erlang elixir xz
+        run: |
+          brew install erlang elixir xz openssl@3
+          # Homebrew keeps openssl@3 out of its lib directory, which is where
+          # the precompiled ffmpeg's libsrt looks for it.
+          ln -sf "$(brew --prefix openssl@3)"/lib/lib{ssl,crypto}.3.dylib "$(brew --prefix)/lib/"
 
       - uses: mlugg/setup-zig@v2
         with:
@@ -81,7 +85,9 @@ jobs:
       - name: Pack the host ERTS
         run: rel/pack_host_erts.sh
 
-      - run: mix release --overwrite
+      # The Rust NIF lands in priv/, outside the cache, so a restored _build
+      # would otherwise skip building it.
+      - run: mix release --overwrite --force
 
       - name: Smoke test
         run: |
