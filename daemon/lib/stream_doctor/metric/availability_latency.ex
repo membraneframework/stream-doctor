@@ -71,7 +71,12 @@ defmodule StreamDoctor.Metric.AvailabilityLatency do
   def report(state) do
     samples = Enum.map(state.samples, fn {_segment, ms} -> ms end)
     status = if samples == [], do: :waiting, else: :measured
-    %{status: status, ms: median(samples), latest_samples: Enum.take(samples, @evidence)}
+
+    %{
+      status: status,
+      ms: StreamDoctor.Metric.median(samples),
+      latest_samples: Enum.take(samples, @evidence)
+    }
   end
 
   defp sample(state, segment) do
@@ -82,14 +87,5 @@ defmodule StreamDoctor.Metric.AvailabilityLatency do
     else
       :error -> state
     end
-  end
-
-  defp median([]) do
-    nil
-  end
-
-  defp median(samples) do
-    sorted = Enum.sort(samples)
-    Enum.at(sorted, div(length(sorted), 2))
   end
 end

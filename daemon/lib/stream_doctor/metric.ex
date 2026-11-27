@@ -16,6 +16,8 @@ defmodule StreamDoctor.Metric do
           | {:first_frame_arrived, at_ms :: integer()}
           | {:video_frame_sent, frame_number :: non_neg_integer(), at_ms :: integer()}
           | {:segment_available, sequence_number :: non_neg_integer(), at_ms :: integer()}
+          | {:playlist_requested, status :: pos_integer() | :timeout | :error,
+             took_ms :: non_neg_integer()}
           | {:video_chunk_received, sequence_number :: non_neg_integer(),
              pts :: Membrane.Time.t()}
 
@@ -39,6 +41,17 @@ defmodule StreamDoctor.Metric do
       candidate > last + div(max, 2) -> candidate - max
       true -> candidate
     end
+  end
+
+  @doc "Upper median of `samples`, nil when there are none."
+  @spec median([number()]) :: number() | nil
+  def median([]) do
+    nil
+  end
+
+  def median(samples) do
+    sorted = Enum.sort(samples)
+    Enum.at(sorted, div(length(sorted), 2))
   end
 
   @doc "Key under which `report/1` results appear in summaries."
