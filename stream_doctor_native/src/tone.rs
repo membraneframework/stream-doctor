@@ -33,8 +33,6 @@ const SOURCE_GAIN: f64 = 0.5;
 
 const GUARD_OFFSET: u32 = 250;
 const LOCAL_CONTRAST: f64 = 8.0;
-// AAC smears a healthy tone into its guard bins and leaks up to 3% of a neighbouring symbol's tone,
-// so data tones are told apart by their level alone.
 const REF_FLOOR: f64 = 0.05;
 
 const MIN_SCORE: u32 = 10;
