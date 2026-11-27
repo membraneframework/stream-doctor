@@ -4,9 +4,10 @@
 //! bit. The symbol number wraps at `MAX_SYMBOL`.
 //!
 //! The decoder runs a Goertzel filter over the inner two thirds of the window, which makes it
-//! tolerant to a few ms of misalignment. A tone counts as on when its power clearly beats the
-//! guard bins `GUARD_OFFSET` Hz on either side of it. Comparing against the neighbours rather than
-//! an absolute level is what lets the marker survive the spectral tilt that codecs add.
+//! tolerant to a few ms of misalignment. A tone counts as on when its power is above `REF_FLOOR`
+//! of the reference tone's. The floor is that low because codecs make high tones quieter than low
+//! ones. The reference tone itself has to clearly beat the guard bins `GUARD_OFFSET` Hz on either
+//! side of it, so that ordinary audio is not taken for a marker.
 //!
 //! Buffers are mono, signed 16-bit little-endian PCM passed as raw bytes. Lengths and offsets in
 //! the API are counted in bytes.
@@ -32,7 +33,7 @@ const SOURCE_GAIN: f64 = 0.5;
 
 const GUARD_OFFSET: u32 = 250;
 const LOCAL_CONTRAST: f64 = 8.0;
-const REF_FLOOR: f64 = 0.01;
+const REF_FLOOR: f64 = 0.05;
 
 const MIN_SCORE: u32 = 10;
 const SCAN_SYMBOLS: u32 = 6;
@@ -189,19 +190,16 @@ impl Tone {
             .map(|bytes| i16::from_le_bytes(*bytes))
             .collect();
         let power = |freq| goertzel_power(&samples, freq, self.sample_rate);
-        let local_noise = |freq: u32| power(freq - GUARD_OFFSET).max(power(freq + GUARD_OFFSET));
 
         let ref_power = power(FREQS[0]);
-        if ref_power < LOCAL_CONTRAST * local_noise(FREQS[0]).max(1.0e-9) {
+        let ref_noise = power(FREQS[0] - GUARD_OFFSET).max(power(FREQS[0] + GUARD_OFFSET));
+        if ref_power < LOCAL_CONTRAST * ref_noise.max(1.0e-9) {
             return Err(DecodingError::MarkersNotFound);
         }
 
         let bits: BitVec<u8, Msb0> = FREQS[1..]
             .iter()
-            .map(|&freq| {
-                let tone_power = power(freq);
-                tone_power > f64::max(LOCAL_CONTRAST * local_noise(freq), REF_FLOOR * ref_power)
-            })
+            .map(|&freq| power(freq) > REF_FLOOR * ref_power)
             .collect();
         let (data_bits, parity) = bits.split_at(DATA_BITS as usize);
         let parity_bit = parity[0];
@@ -264,6 +262,22 @@ mod tests {
             tone.encode(S16leMut(&mut samples), symbol);
             assert_eq!(tone.decode(S16le(&samples)), Ok(symbol));
         }
+    }
+
+    #[test]
+    fn decode_survives_codec_smearing() {
+        let tone = Tone::new(48_000);
+        let mut samples = vec![0u8; tone.symbol_bytes() as usize];
+        tone.encode(S16leMut(&mut samples), 0b0000_1000_0000);
+        // Half of the 4000 Hz tone's amplitude in its guard bin and 15% of it leaked into 6000 Hz.
+        for (i, sample) in samples.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+            let sine = |freq: f64| f64::sin(2.0 * PI * freq * i as f64 / 48_000.0);
+            let smeared = f64::from(i16::from_le_bytes(*sample))
+                + 0.5 * AMPLITUDE * sine(4250.0)
+                + 0.15 * AMPLITUDE * sine(6000.0);
+            *sample = (smeared as i16).to_le_bytes();
+        }
+        assert_eq!(tone.decode(S16le(&samples)), Ok(0b0000_1000_0000));
     }
 
     #[test]
