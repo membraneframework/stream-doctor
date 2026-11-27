@@ -84,6 +84,12 @@ export interface ResolvedSyntheticSource {
 export type PublishInput =
   { file: string; synthetic?: never } | { file?: never; synthetic: SyntheticSource };
 
+/** Whether the ingest accepted the RTMP publish, and how long after the streamer started. */
+export interface RtmpPublish {
+  status: "connecting" | "connected" | "failed" | "dropped";
+  connect_ms: number | null;
+}
+
 /** State of the publisher, as reported by the daemon. */
 export interface StreamerStatus {
   input: { file: string } | { synthetic: ResolvedSyntheticSource };
@@ -91,6 +97,7 @@ export interface StreamerStatus {
   status: Status;
   error: string | null;
   live: boolean;
+  metrics: { rtmp_publish?: RtmpPublish; error?: string };
 }
 
 /** Audio/video drift measured by a viewer, in milliseconds. */

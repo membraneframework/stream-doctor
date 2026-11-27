@@ -11,6 +11,8 @@ defmodule StreamDoctor.Metric do
           | {:audio_symbol_received, symbol_number :: non_neg_integer(),
              pts :: Membrane.Time.t() | nil}
           | {:streamer_started, {:watching, at_ms :: integer()} | :missed}
+          | {:streamer_connected, at_ms :: integer()}
+          | :streamer_failed
           | {:first_frame_arrived, at_ms :: integer()}
           | {:video_frame_sent, frame_number :: non_neg_integer(), at_ms :: integer()}
           | {:segment_available, sequence_number :: non_neg_integer(), at_ms :: integer()}

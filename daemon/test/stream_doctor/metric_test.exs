@@ -493,4 +493,30 @@ defmodule StreamDoctor.MetricTest do
       assert report.ms == 36
     end
   end
+
+  describe "RtmpPublish" do
+    defp publish(events) do
+      Metric.RtmpPublish.report(run(Metric.RtmpPublish, [], events))
+    end
+
+    @started {:streamer_started, {:watching, 1000}}
+
+    test "a publish the ingest has not accepted yet is connecting" do
+      assert publish([@started]) == %{status: :connecting, connect_ms: nil}
+    end
+
+    test "an accepted publish reports how long the ingest took" do
+      assert publish([@started, {:streamer_connected, 1250}]) ==
+               %{status: :connected, connect_ms: 250}
+    end
+
+    test "a streamer failing before the ingest accepted it has failed" do
+      assert publish([@started, :streamer_failed]) == %{status: :failed, connect_ms: nil}
+    end
+
+    test "a streamer failing after the ingest accepted it was dropped" do
+      assert publish([@started, {:streamer_connected, 1250}, :streamer_failed]) ==
+               %{status: :dropped, connect_ms: 250}
+    end
+  end
 end
