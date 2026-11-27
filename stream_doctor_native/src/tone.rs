@@ -5,9 +5,9 @@
 //!
 //! The decoder runs a Goertzel filter over the inner two thirds of the window, which makes it
 //! tolerant to a few ms of misalignment. A tone counts as on when its power is above `REF_FLOOR`
-//! of the reference tone's, which leaves room for the spectral tilt that codecs add. The reference
-//! tone itself has to clearly beat the guard bins `GUARD_OFFSET` Hz on either side of it, so that
-//! ordinary audio is not taken for a marker.
+//! of the reference tone's. The floor is that low because codecs make high tones quieter than low
+//! ones. The reference tone itself has to clearly beat the guard bins `GUARD_OFFSET` Hz on either
+//! side of it, so that ordinary audio is not taken for a marker.
 //!
 //! Buffers are mono, signed 16-bit little-endian PCM passed as raw bytes. Lengths and offsets in
 //! the API are counted in bytes.
